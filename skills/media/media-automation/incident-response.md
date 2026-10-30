@@ -1,0 +1,84 @@
+# Media Automation: Respond (Incident Response)
+
+Use with the core playbook, [incident-response.md](../../../core/incident-response.md), which always
+applies. This file adds only media-automation-specific steps.
+
+An attacker with admin or API access to one of these apps usually holds the keys to the others, the
+indexer and usenet accounts, and often the media server's owner token. Several of the apps can run
+commands on the host through script hooks. Treat a compromise of one app as a possible compromise of the
+whole stack and of the host it runs on.
+
+## Triage and containment
+
+- **Indicators:** unknown Servarr Connect entries (especially Custom Script), unknown download clients or
+  indexers, a changed authentication method or bypass list, a new or changed API key nobody rotated,
+  qBittorrent or Transmission "run program" hooks nobody set, new SABnzbd or NZBGet scripts or categories
+  with scripts, unknown files in script folders, unexpected processes or high CPU in an app container,
+  outbound connections to unfamiliar hosts, downloads or requests nobody made, and logins from unknown
+  addresses in proxy or app logs.
+- **Contain at the edge first:** remove the public route (port forward, proxy host, tunnel) for the
+  affected apps, or stop the tunnel agent. This is reversible and doesn't destroy evidence.
+- **Stop the app if a script hook or unknown process is active:** stop (don't delete) the container or
+  service. Don't remove the container, its volumes, or its image yet; `docker compose down -v` style
+  commands destroy evidence.
+- **Pause downloaders** rather than deleting their queues, so the history of what was added survives.
+- **If the host may be compromised** (a hook ran, unknown processes, changed files outside the config
+  folder): isolate the host on the network, and assess it with the relevant operating-system skill.
+
+## Evidence to preserve (media-automation-specific)
+
+Collect before changing anything, and store copies off the host as secret material:
+
+- A copy of each affected app's config folder (Servarr `config.xml` and database, qBittorrent and
+  Transmission settings files, `sabnzbd.ini`, `nzbget.conf`, Prowlarr and Bazarr data), taken with the app
+  stopped where possible. Don't open them on the compromised host.
+- Each app's logs and log archive (Servarr apps keep rotated logs in the config folder), System → Events,
+  History, and the download clients' history and queue (screenshots or exports).
+- The list of Connect entries, download clients, indexers, notification connections, and script hooks,
+  with names, targets, and script paths (redact credentials).
+- Script and extension folders: file names, timestamps, owners, and hashes; copies of unknown scripts.
+- Container metadata: image name and digest, creation time, mounts, network mode, published ports, and
+  environment variable *names* (`docker inspect`, filtered or redacted).
+- Reverse-proxy, tunnel, and VPN-container logs covering the suspected period.
+- File listings with timestamps for the config, media, and download folders where unexpected files
+  appeared.
+
+## Scope checks specific to media automation
+
+- Every app whose API key or credentials were stored in the compromised app (use the trust graph from
+  Discover domain C), and every app that stored the compromised app's key.
+- The media server: request apps, Tautulli, and Bazarr often hold its owner token; check its admin users,
+  devices, and plugins (`media-servers` skill).
+- Indexer, tracker, and usenet accounts: logins, API usage, and account changes on the provider side.
+- Notification channels (webhook URLs, bot tokens), list-provider OAuth grants, VPN provider credentials.
+- Everything the app's user can write: shared media and download folders, other apps' config folders when
+  containers share a user ID, and NFS/SMB shares mounted into the containers.
+- The container host, other containers on the same networks, and the Docker socket if any container in
+  the stack mounts it.
+
+## Eradication and recovery
+
+- Rebuild affected apps from fresh, verified images or packages; don't reuse a container or install that
+  ran an attacker's hook.
+- Restore configuration only from a backup taken **before** the earliest plausible compromise. Compare it
+  with the compromised configuration so attacker-added hooks, clients, and indexers are not restored. If no
+  clean backup exists, reconfigure from scratch.
+- **Rotate every secret the stack held:** every app's API key and admin password, download-client
+  passwords, SABnzbd API and NZB keys, NZBGet control/restricted/add users, indexer API keys and passwords,
+  usenet provider passwords, subtitle provider logins, notification tokens, list-provider grants, VPN
+  provider credentials, and the media server's token (sign out all devices and change the account
+  password).
+- Remove all script hooks and re-add only reviewed ones from admin-only folders.
+- Before re-publishing anything: authentication enabled on every app with no broad bypass, admin apps not
+  internet-facing, current versions with applicable advisories fixed, folder permissions tightened, and
+  logs retained.
+
+## Quick checklist tailored for media automation
+
+Start with the core quick checklist, plus:
+
+- [ ] Remove public routes to the affected apps; stop (don't delete) any app with an unknown hook or process.
+- [ ] Copy config folders, logs, history, and script folders off the host before changing anything.
+- [ ] List Connect entries, download clients, indexers, and script hooks; screenshot anything unexpected.
+- [ ] Follow the trust graph: every app and account whose keys were stored in the affected apps.
+- [ ] Rebuild from fresh images and rotate every API key and stored credential.

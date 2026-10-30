@@ -1,0 +1,481 @@
+---
+name: cloudflare
+description: >-
+  Security assessment, hardening, remediation, and incident response for Cloudflare accounts and the sites
+  and services published through them: DNS zones, proxied sites, Cloudflare Tunnels (cloudflared), Zero
+  Trust Access policies, WAF and rate limiting, SSL/TLS modes, and origin lockdown. Use when auditing a
+  Cloudflare account or zone, reviewing what a tunnel publishes, checking Access policies in front of
+  self-hosted apps, or when a Cloudflare account, API token, or tunnel may have been compromised.
+license: CC-BY-4.0
+metadata:
+  version: "1.0"
+  last_reviewed: "2026-10-30"
+  applies_to: "Cloudflare dashboard, DNS, Zero Trust (Cloudflare One) Access and Tunnel, cloudflared releases within Cloudflare's one-year support window (verify the live dashboard; menu names change often)"
+  audience: "home, work, homelab, web"
+  finding_prefix: "CF"
+  modes: "discover, recommend, remediate, respond"
+---
+
+# Cloudflare Security
+
+Act as a careful, evidence-driven edge and identity security engineer. A Cloudflare account is the front
+door for everything it publishes: whoever controls the account controls DNS for the domain, can publish
+any internal service to the internet through a tunnel, and can turn off the Access policies that protect
+self-hosted apps. A single misconfigured hostname can put an unauthenticated admin UI on the internet.
+Identify, explain, prioritize, remediate (only when authorized), and verify weaknesses in the account, its
+zones, its tunnels and Access policies, and the origins behind them.
+
+## How to use this skill
+
+This skill holds only Cloudflare-specific guidance. It builds on the shared core, which always applies:
+
+| Core document | Covers |
+|---|---|
+| [modes-and-authorization.md](../../../core/modes-and-authorization.md) | The four modes, transitions, operation classes (R/C1/C2/C3), standing authorization |
+| [operating-principles.md](../../../core/operating-principles.md) | Principles, capability discovery, scope, communication, untrusted data |
+| [vulnerability-triage.md](../../../core/vulnerability-triage.md) | Lifecycle, CVE/KEV validation, P0–P4 priority scale |
+| [evidence-and-reporting.md](../../../core/evidence-and-reporting.md) | Evidence labels, statuses, finding template, report format, cadence |
+| [tool-use-contract.md](../../../core/tool-use-contract.md) | Rules for commands, APIs, MCP tools, and third-party integrations |
+| [reporting-protocol.md](../../../core/reporting-protocol.md) | Optional live progress reporting to a dashboard |
+| [incident-response.md](../../../core/incident-response.md) | The generic Respond playbook |
+
+Cloudflare-specific Respond steps are in [incident-response.md](incident-response.md). Vendor documentation
+and advisories are in [references.md](references.md).
+
+## Cloudflare-specific principles
+
+- **The account is the perimeter.** Cloudflare login, member roles, and API tokens are as sensitive as
+  root on the origin. Anyone who can edit DNS or tunnel routes can publish or redirect any service.
+  Assess identity (domain A) before anything else.
+- **Every public hostname is an exposure.** A tunnel has no inbound ports, but each public hostname routed
+  to it is reachable from the whole internet unless an Access application protects it. "It's behind a
+  tunnel" is not the same as "it requires login".
+- **Tunnel tokens and credentials are secrets.** Cloudflare's docs state that anyone with a remotely
+  managed tunnel's token can run the tunnel. The `cert.pem` written by `cloudflared tunnel login` and the
+  `<tunnel-UUID>.json` credentials file of a locally managed tunnel are also secrets. Never print, paste,
+  or upload them, and never echo a `cloudflared service install <token>` command line.
+- **Changes apply globally and fast.** DNS, proxy status, SSL/TLS mode, WAF rules, and Access policies
+  take effect across Cloudflare's network within seconds to minutes. Treat changes to anything users or
+  automation rely on as **C2**. Deleting a tunnel, zone, or DNS record, or removing an Access policy that
+  is the only control in front of an app, is **C3**.
+- **Two places hold configuration.** Remotely managed tunnels are configured in the dashboard or API.
+  Locally managed tunnels are configured in a `config.yml` on the host. Check which one applies before
+  reading or changing ingress rules; for a remotely managed tunnel, a local config file is not the source
+  of truth.
+- **Cloudflare is not the only path to the origin.** Proxying hides the origin address only if nothing
+  else reveals it and the origin refuses direct connections. Verify origin lockdown at the origin, not in
+  the dashboard.
+- **The dashboard changes often.** Product and menu names (for example "Zero Trust" versus "Cloudflare
+  One", and where Tunnels lives) have moved several times. Describe the setting, give the menu path you
+  expect, and tell the user to verify it in the current dashboard.
+
+## Deployment variants
+
+| Variant | How to recognize it | What changes |
+|---|---|---|
+| **DNS-only zone** | Cloudflare nameservers, but records are grey-cloud (DNS-only). | Cloudflare is just the DNS provider. Origins are directly exposed; WAF, SSL mode, and Access don't apply. Focus on account security, DNS hygiene, DNSSEC, and CAA. |
+| **Proxied site** (orange cloud) | A/AAAA/CNAME records proxied; responses carry `server: cloudflare` and `cf-ray`. | SSL/TLS mode, WAF, rate limiting, and origin lockdown all matter. The origin must still refuse direct traffic. |
+| **Remotely managed tunnel** | Tunnel created in the dashboard; `cloudflared` started with a token (`service install <token>` or `TUNNEL_TOKEN`). | Ingress rules and public hostnames live in the dashboard/API. The token is the credential; rotation is "Refresh token" plus reinstall. |
+| **Locally managed tunnel** | Created with `cloudflared tunnel create`; a `config.yml` with `tunnel:`, `credentials-file:`, and `ingress:`. | Ingress rules live on the host; the credentials JSON and `cert.pem` on disk are secrets. Validate rules with `cloudflared tunnel ingress validate`. |
+| **cloudflared in a container** | Official `cloudflare/cloudflared` image in Docker, Kubernetes, or a NAS container manager. | Metrics listen on all interfaces by default in containers. The token is often in an environment variable or compose file, visible to anyone who can inspect the container. Pinning and updating the image is the update path. |
+| **Private network routing (WARP to tunnel)** | Tunnel has CIDR routes (`cloudflared tunnel route ip`), users run the WARP client. | The tunnel acts like a VPN into private networks. Device enrollment rules, Gateway policies, and route scope matter as much as Access. |
+| **Multi-member or business account** | Several members, possibly SSO, Enterprise or paid plan features. | Roles, SSO enforcement, audit-log retention, and Logpush become central. Some features in this skill are plan-dependent; check before recommending. |
+| **Third-party integrations** | API tokens used by DDNS updaters, ACME DNS-01 clients, Terraform, reverse proxies, or hosting panels. | Each holds a credential that can edit DNS or more. Scope each token to one zone and the minimum permission. |
+
+## Detection
+
+Hints for recognizing this product during a network inventory (used by the `full-assessment` skill).
+Defaults can be changed, so confirm with the user before relying on a match.
+
+- **On hosts:** a `cloudflared` process, service (systemd unit, launchd job, or Windows service), or a
+  container from the `cloudflare/cloudflared` image. Outbound connections to Cloudflare on port 7844
+  (the tunnel's QUIC/HTTP2 edge port) with no matching inbound port.
+- **cloudflared metrics server:** vendor-documented default is `127.0.0.1` on the first free port in
+  20241–20245 (path `/metrics`) on a normal host, and `0.0.0.0` on that port range inside containers. A
+  `/metrics` endpoint answering on those ports from the LAN suggests a containerized or reconfigured
+  `cloudflared`.
+- **On public hostnames:** HTTP responses with a `server: cloudflare` header and a `cf-ray` header mean
+  the name is proxied. A redirect to `<team-name>.cloudflareaccess.com` means an Access application
+  protects it.
+- **In DNS:** the domain's NS records point at a pair of `*.ns.cloudflare.com` nameservers. Tunnel public
+  hostnames are proxied CNAMEs to `<tunnel-UUID>.cfargotunnel.com` (visible in the dashboard; the public
+  answer shows Cloudflare addresses because the record is proxied).
+- **On endpoints:** the Cloudflare WARP client installed indicates Zero Trust device enrollment and
+  possibly private network routing.
+
+---
+
+## Discover
+
+All operations in this mode are class **R** (read-only). Confirm scope and access first (core: operating
+principles). Mark anything you can't inspect **Not assessed**.
+
+### Access and baseline
+
+Prefer the dashboard (the user shares screenshots or reads values out) or a **dedicated read-only API
+token** the user creates for the assessment: scoped to the specific account and zones, with only read
+permissions (for example Zone Read, DNS Read, SSL and Certificates Read, Firewall Services or WAF Read,
+Access: Apps and Policies Read, Cloudflare Tunnel Read, Account Settings Read; exact permission names
+vary, so verify them in the token editor), a short expiry, and ideally a client IP filter. Ask the user
+to delete the token when the assessment ends. Never ask for the Global API Key or the user's password.
+
+Candidate read-only `cloudflared` commands on a host running a tunnel. `cloudflared tunnel list`,
+`tunnel info`, `tunnel ingress validate`, and `tunnel ingress rule` are **vendor-documented**; the others
+are **not yet verified** on every version. Check each exists first. Most `tunnel` subcommands need
+`cert.pem` from `tunnel login`, which a token-only (remotely managed) host usually doesn't have.
+
+```sh
+cloudflared --version                          # installed version (compare with current release)
+cloudflared tunnel list                        # tunnels, creation time, active connections
+cloudflared tunnel info <tunnel-name-or-UUID>  # active connectors and their versions
+cloudflared tunnel ingress validate            # locally managed: checks config.yml ingress rules
+cloudflared tunnel ingress rule https://app.example.com   # which ingress rule a URL matches
+cloudflared tunnel route ip list               # private network routes (not yet verified on all versions)
+curl -s http://127.0.0.1:20241/metrics | head  # metrics endpoint, if on the default port (not yet verified)
+ps aux | grep '[c]loudflared'                  # how it runs; REDACT any token in the arguments
+```
+
+Read-only API calls (all GET) cover most domains: list DNS records for each zone, zone settings
+(including `ssl`, `always_use_https`, `min_tls_version`), DNSSEC status, account members and roles,
+tunnels and their configurations (`/accounts/<account-id>/cfd_tunnel` and `.../configurations`), Access
+applications and policies, service tokens (metadata only), and audit logs. Verify each endpoint path in
+the current API reference before using it.
+
+**Never do these during Discover:**
+
+- Print, paste, upload, or log a tunnel token, `cert.pem`, a tunnel credentials JSON, a service token
+  secret, an API token, or the Global API Key. Don't run `cloudflared tunnel token`, don't call the API's
+  tunnel-token endpoint, and don't `cat` files in `~/.cloudflared/` or `/etc/cloudflared/` without
+  redacting credential fields first. When showing `ps` output, environment variables, systemd units, or
+  compose files, redact `--token`, `TUNNEL_TOKEN`, and similar values.
+- Run `cloudflared tunnel login` (creates a new account-level certificate), `tunnel create`, `route`,
+  `delete`, `cleanup`, `service install`/`uninstall`, or start a quick tunnel. These are changes, not
+  reads.
+- "Refresh token", roll a key, or revoke anything to see what happens.
+- Probe Access-protected apps with guessed credentials, request one-time PINs for addresses the user
+  doesn't own, or test origins with exploit scripts. Direct-to-origin connection tests (bypassing
+  Cloudflare) need explicit authorization and target only addresses the user owns.
+
+### Assessment domains
+
+Every domain must end with a status in the report (Pass / Finding / Not assessed / Not applicable /
+Accepted risk).
+
+#### A. Account identity, members, and API credentials
+
+- **Login protection** for every member: 2FA enabled, preferably with security keys (WebAuthn); at least
+  two factors registered; backup codes stored offline. Whether **2FA enforcement** is on for the account
+  (Super Administrators can require it for all members). Whether SSO is used, and if so, whether the IdP
+  account itself has strong MFA.
+- **The account email address.** Whoever controls that mailbox can reset the Cloudflare password. Check
+  it has strong MFA and isn't a shared or forwarded address.
+- **Members and roles:** list every member and role. Flag Super Administrators beyond one or two trusted
+  people, former collaborators, unknown addresses, and broad roles where a scoped one would do. Pending
+  invitations count too.
+- **Global API Key:** Cloudflare documents it as legacy, with access to all of the user's resources and
+  only one per user. Is it used anywhere (scripts, DDNS clients, ACME plugins, Terraform, hosting
+  panels)? Any use is a finding; recommend scoped API tokens.
+- **API tokens (user-owned and account-owned):** for each, its permissions, resources (all zones or
+  specific ones; all accounts or one), client IP filtering, TTL/expiry, last-used date if shown, and the
+  system that holds it. Typical over-scoping: a DDNS or ACME DNS-01 client with "Edit" on all zones, or a
+  token that can edit tunnels, Access, or members when it only needs DNS on one zone.
+- Where each credential is stored (password manager, CI secrets, a plaintext `.env` on a server).
+
+#### B. DNS records and zone hygiene
+
+- **Proxy status:** list every A, AAAA, and CNAME record and whether it's proxied. A DNS-only record that
+  serves web traffic exposes the origin address to anyone who queries it. Pay attention to records that
+  point at the *same* address as proxied records (for example `direct.`, `origin.`, `ftp.`, `mail.`,
+  `vpn.` names), because they reveal the proxied origin.
+- **Other origin leaks:** MX on the same host as the website, SPF/TXT records with origin addresses, and
+  historical DNS (an origin address used before Cloudflare is in public passive-DNS datasets). Cloudflare
+  recommends rotating origin addresses after onboarding for that reason.
+- **Dangling records:** CNAMEs to deprovisioned cloud resources, SaaS hostnames, storage buckets, or old
+  tunnels (a CNAME to a deleted tunnel's `cfargotunnel.com` name), and A records to addresses the user no
+  longer controls. Dangling records enable subdomain takeover.
+- **Wildcard records** (`*.example.com`): what they point to, and whether they make every name reachable.
+- **DNSSEC:** enabled in Cloudflare *and* the DS record published at the registrar. A DS record at the
+  registrar that doesn't match (for example after moving DNS providers) breaks resolution.
+- **CAA records:** present and limited to the certificate authorities actually in use. Cloudflare's own
+  edge certificates need their CAs allowed; verify the current list in the CAA documentation before
+  recommending values, or certificate renewals can fail.
+- **Registrar:** registrar account MFA and registrar lock, since whoever controls the registrar can move
+  the nameservers away from Cloudflare.
+- Records nobody can explain, and recent DNS changes in the audit log.
+
+#### C. Cloudflare Tunnels and cloudflared
+
+- **Inventory:** every tunnel in the account, its status, how many connectors, where each connector runs
+  (host, VM, container), and whether the user recognizes all of them. A healthy tunnel with an unknown
+  connector is a P0 indicator (someone else is running it).
+- **Public hostnames (published applications):** list each hostname, the origin service it maps to, and
+  whether an Access application protects it. Flag admin UIs, hypervisors, NAS and router management
+  pages, home-automation dashboards, SSH, RDP, databases, and anything with weak or no built-in
+  authentication published without Access.
+- **Ingress rules:** order (first match wins), path rules, wildcard hostnames, and the catch-all. The
+  catch-all should be `http_status:404`, not a real service; a catch-all pointing at an app publishes it
+  under any name routed to the tunnel.
+- **Origin request settings:** `noTLSVerify: true` disables certificate checks between `cloudflared` and
+  the origin (common with self-signed origins; acceptable on loopback, a finding across a network). Check
+  whether the Access JWT check is enabled at `cloudflared` (`access: required: true` with `teamName` and
+  `audTag`, shown in the dashboard as "Protect with Access"), which stops requests that didn't pass
+  through Access.
+- **What the connector can reach:** `cloudflared` can reach whatever its host can. A connector on a flat
+  LAN, or in a container with host networking, can be pointed at anything. Prefer a connector on a
+  segment that can reach only the published services.
+- **Private network routes:** CIDR routes and virtual networks, how broad they are, and what Gateway and
+  device enrollment rules govern who can use them.
+- **Version and lifecycle:** `cloudflared` version on every connector. Cloudflare supports versions
+  within one year of the most recent release. Check release notes for security fixes. How it updates
+  (package manager, container image tag, built-in autoupdate, or never). Windows installs don't update
+  automatically.
+- **Token and credential handling:** where the token or credentials file is stored, file permissions,
+  whether it sits in a compose file in a git repo or a world-readable unit file, and when it was last
+  rotated.
+- **Metrics endpoint:** reachable from where? In containers it listens on all interfaces by default.
+- Old or unused tunnels and quick tunnels (`trycloudflare.com`) that nobody remembers starting.
+
+#### D. Zero Trust Access
+
+- **Coverage:** every self-hosted app (each tunnel public hostname and any proxied admin path) should be
+  covered by an Access application. Compare the hostname list from domain C with Access applications.
+  Check the application domain and path match the published hostname exactly; an application on
+  `app.example.com/admin` doesn't protect `app.example.com/`.
+- **Policies:** for each application, action (Allow, Block, Bypass, Service Auth) and rules (Include =
+  OR, Require = AND, Exclude = NOT). Flag:
+  - **Allow** with **Everyone** included (anyone who can log in with any identity, or receive a one-time
+    PIN at any email address, gets in) or with a whole public email domain.
+  - **Bypass** on anything other than a narrow, intentional public path. Cloudflare documents that
+    Bypass enforces no Access controls and requests are not logged.
+  - IP-range Include rules that admit a whole ISP range or a broad range, especially as the only rule.
+  - Reusable policies shared by many applications, where widening one widens all.
+- **Identity providers and login methods:** which are enabled (Cloudflare identity provider, one-time
+  PIN, social, SAML/OIDC). One-time PIN is only as strong as the email account receiving the code.
+  Whether policies require MFA (for example via the IdP, or an authentication-method rule; verify the
+  current selector names).
+- **Session duration** per application and globally: long sessions on admin apps increase the impact of a
+  stolen cookie.
+- **Service tokens:** each token's purpose, which applications accept it (Service Auth policy), expiry,
+  and whether "Expiring Access Service Token" notifications are set. The secret is shown only once;
+  where is it stored?
+- **Device posture and WARP** (if used): device enrollment permissions, posture checks, and whether
+  personal devices can enroll.
+- **Origin-side enforcement:** whether the origin or `cloudflared` validates the Access JWT
+  (`Cf-Access-Jwt-Assertion`), so Access can't be bypassed by reaching the origin another way.
+
+#### E. SSL/TLS and edge certificates
+
+- **Encryption mode** per zone and any per-hostname overrides (Configuration Rules): Off, Flexible, Full,
+  Full (strict), Strict (SSL-Only Origin Pull), or Automatic. **Flexible** means Cloudflare-to-origin
+  traffic is unencrypted HTTP; **Full** encrypts but doesn't validate the origin certificate. Cloudflare
+  recommends Full or Full (strict). With Automatic, note which mode it has currently selected.
+- Origin certificate: public CA or Cloudflare Origin CA, expiry, and whether its private key is protected
+  on the origin.
+- **Always Use HTTPS**, HSTS (enabled deliberately, with care about `includeSubDomains` and preload),
+  minimum TLS version, and TLS 1.3.
+- Edge certificate coverage for every proxied hostname (multi-level subdomains may need an advanced or
+  custom certificate).
+
+#### F. WAF, rate limiting, and bot settings
+
+- WAF managed rules: which managed rulesets are enabled (availability depends on plan), and any rules in
+  log-only mode that should block.
+- **Custom rules:** what they allow or skip. A "skip" or allow rule for a broad IP range or a user agent
+  can disable protection for everyone matching it.
+- **Rate limiting** on login, password reset, and API endpoints (number of rules depends on plan).
+- Security level, Bot Fight Mode or bot management, and challenge settings as defense in depth, not as
+  the main control.
+- Page Rules, Configuration Rules, and Transform Rules that change security settings for specific paths
+  (for example turning off WAF or SSL for a path).
+- Workers and routes on the zone: Workers can rewrite requests and responses, so unknown Workers or
+  routes are a finding.
+
+#### G. Origin lockdown
+
+- **Can the origin be reached without Cloudflare?** For proxied sites: does the origin firewall accept
+  HTTP/HTTPS only from Cloudflare's published IP ranges (and only on the needed ports)? For tunneled
+  services: does the origin have *no* inbound port forward at all? A leftover port forward makes the
+  tunnel and Access irrelevant. Test from outside only with authorization and only against the user's
+  own addresses.
+- **Authenticated Origin Pulls** (mTLS from Cloudflare to the origin) for proxied, non-tunnel sites:
+  enabled, and with which certificate. The global Cloudflare certificate is shared across all Cloudflare
+  accounts, so it proves only that a request came through Cloudflare, not through *this* account; zone-
+  level or per-hostname with your own certificate is stronger. AOP doesn't apply to Tunnel hostnames.
+- Origin applications that trust `CF-Connecting-IP` or `X-Forwarded-For` from any source (they should
+  trust them only from Cloudflare or from `cloudflared`).
+- Whether the origin has its own authentication, so a Cloudflare misconfiguration isn't the only barrier.
+
+#### H. Logging, notifications, and change tracking
+
+- **Audit logs:** reviewed regularly? Cloudflare documents 18-month retention; Logpush (plan-dependent)
+  for longer or external storage. Look for recent member, token, DNS, tunnel, and Access changes.
+- **Access authentication logs** and Gateway logs (if used): reviewed, retained, exported?
+- **Notifications** (dashboard Notifications page): tunnel health, expiring service tokens, certificate
+  expiry, DDoS and security event alerts, and any available alert for new logins or API token changes
+  (verify what the current plan offers). Recipients should be monitored addresses.
+- `cloudflared` logs on the host: where they go and how long they're kept.
+- Infrastructure-as-code (Terraform) state or exports: the state file can contain secrets; who can read
+  it?
+
+---
+
+## Recommend
+
+No changes are made in this mode. For each finding, produce a recommendation using the core finding
+template, including **Dependencies / blast radius** and the **operation class**.
+
+### Dependency and blast-radius check (required)
+
+Cloudflare sits in front of everything it publishes, so list what depends on the setting first:
+
+- **Who and what uses each hostname:** users, mobile apps, webhooks, and integrations (some can't follow
+  an Access login redirect and need a service token or Service Auth policy).
+- **Automation holding credentials:** DDNS updaters, ACME DNS-01 clients, Terraform, CI pipelines, and
+  hosting panels that break when a token or key is rotated or narrowed.
+- **The agent's and user's own access:** whether the user reaches the dashboard, SSH, or admin UIs
+  through an Access application or tunnel being changed. Keep a second path.
+- **Origins:** whether each origin can present a valid certificate (before Full (strict)), and whether
+  its firewall changes affect other traffic.
+- **Mail and other non-web records:** MX, SPF, DKIM, DMARC, and verification TXT records that third
+  parties rely on.
+- **Registrar and DNSSEC:** DS records and nameserver delegation; mistakes take the whole domain offline.
+- **Tunnel replicas:** how many connectors a tunnel has (rotation without downtime needs at least two).
+
+### Recommendation guidance
+
+| Area | Typical recommendation | Consequences to explain |
+|---|---|---|
+| No 2FA / no enforcement | Enroll security keys (two factors per member), store backup codes offline, turn on 2FA enforcement. | Members without 2FA are blocked until they enroll; plan a break-glass path. |
+| Excess or stale members | Remove former members; reduce Super Administrators to one or two; use scoped roles. | Removed people lose access immediately; check they don't own integrations. |
+| Global API Key in use | Replace with API tokens scoped to one zone and the minimum permission, then roll the Global API Key. | Every integration using the key breaks at roll time; inventory them first. |
+| Over-scoped API tokens | Narrow to specific zones and permissions; add client IP filtering and expiry. | Integrations fail if under-scoped; test each after narrowing. |
+| DNS-only record exposing a proxied origin | Proxy it if it serves web traffic, or remove it; rotate the origin address if it's been exposed. | Non-HTTP services on that name stop working through a proxied record. |
+| Dangling records | Delete them. | None if truly unused; confirm nothing still resolves them. |
+| No DNSSEC / no CAA | Enable DNSSEC and publish the DS at the registrar; add CAA for the CAs in use, including Cloudflare's. | Wrong DS or CAA values break resolution or certificate issuance. |
+| Tunnel hostname without Access | Add an Access application with an Allow policy for named users or groups, MFA required; enable "Protect with Access" JWT validation on the route. | Users must log in; non-browser clients need service tokens or a separate hostname. |
+| Admin UI published at all | Prefer removing the public hostname and using WARP private routing or a VPN for admin access. | Admin access needs a client on each device. |
+| Catch-all routes to a service | Set the final ingress rule to `http_status:404`. | Requests to unlisted names stop reaching that service. |
+| `noTLSVerify` across a network | Give the origin a valid certificate (or Origin CA plus `originServerName`) and turn verification back on. | The tunnel route fails until the certificate matches. |
+| Connector on a flat LAN | Move `cloudflared` to a segment that can reach only the published services. | Network rules and routes must be planned; brief outage while moving. |
+| Old cloudflared | Update to a current release; pin container images to a version and update on a schedule. | Restart; brief interruption with a single connector. |
+| Exposed tunnel token | Refresh the token and reinstall on every connector (see Remediate). | Old token can't make new connections; each connector must be updated. |
+| Everyone or broad Allow policy | Replace with named users, groups, or an IdP group, plus MFA. | Anyone not listed loses access. |
+| Bypass policy on an app | Remove it, or narrow it to a specific public path. | Clients relying on the bypass must authenticate. |
+| Long Access sessions on admin apps | Shorten session duration. | Users re-authenticate more often. |
+| Service tokens without expiry tracking | Set an expiry, enable expiring-token notifications, store secrets in a secret manager. | Expired tokens break automation if notifications are ignored. |
+| Flexible or Full SSL mode | Install a valid origin certificate (Origin CA or public CA), then switch to Full (strict). | Origins without a valid certificate return 526 errors after the switch. |
+| Origin reachable directly | Allow only Cloudflare IP ranges at the origin firewall, or move to a tunnel and remove port forwards; add AOP with your own certificate. | Anything else reaching the origin directly (monitoring, other users) stops working. |
+| No rate limiting on login | Add a rate-limiting rule on login and API paths. | Legitimate bursts may be challenged; tune thresholds. |
+| Audit logs never reviewed | Schedule review; add notifications; use Logpush where the plan allows. | Needs someone to read them. |
+
+Geoblocking, hiding hostnames, and Bot Fight Mode are supplementary only. Never recommend them as the main
+fix for an unauthenticated published service.
+
+Group the plan: immediate containment (if any) → urgent fixes (account MFA, Global API Key, unprotected
+admin hostnames, exposed tokens) → high-priority hardening (SSL mode, origin lockdown, token scope,
+Access policies) → routine maintenance → optional defense in depth. Then ask for approval (core: modes
+and authorization).
+
+---
+
+## Remediate
+
+Apply only approved changes, one at a time, following the core rules. Cloudflare specifics:
+
+- **Before any change:** record the current state (screenshot or a redacted API export of the DNS
+  records, zone settings, tunnel configuration, or Access policy being changed). Export the zone's DNS
+  records (BIND-format export in the DNS page) before bulk DNS edits. For locally managed tunnels, back
+  up `config.yml` (not the credentials file) before editing.
+- **Use the dashboard, the documented API, or the user's Terraform.** If the account is managed by
+  Terraform, make changes there, or the next apply reverts them.
+- **Keep a way back in.** Don't change the Access application or tunnel that the user relies on to reach
+  the systems being changed without a second working path. Confirm the dashboard login (2FA and backup
+  codes) works before enabling 2FA enforcement or SSO.
+- **Access changes:** add the new Allow policy and test it with a real login (Access has a policy tester;
+  verify its current location) before removing the old policy or Bypass. Test from a private browser
+  window and from a non-matching identity to confirm denial.
+- **SSL/TLS mode:** confirm the origin presents a valid certificate for the hostname first (check the
+  certificate directly from a host that can reach the origin), then change the mode. Where possible,
+  change it for one hostname with a Configuration Rule before changing the zone.
+- **Token rotation (tunnel):** follow Cloudflare's documented procedure: Refresh token in the tunnel's
+  overview, then reinstall `cloudflared` with the new token on half the replicas, confirm the service,
+  wait, then do the rest. For a suspected compromise, also delete existing connections (documented API
+  call) so attacker-run connectors drop. Never display the new token; have the user paste it directly
+  into the service configuration or secret store.
+- **API token or key rotation:** create the replacement, update each integration, confirm it works, then
+  revoke the old one. For the Global API Key, inventory every user of it before rolling.
+- **DNS changes:** lower TTLs ahead of planned changes where the record is DNS-only; proxied records
+  update quickly. Delete dangling records only after confirming nothing serves them.
+- **DNSSEC:** enable in Cloudflare, then add the DS at the registrar. When disabling or moving providers,
+  remove the DS at the registrar first and wait for it to expire before turning DNSSEC off.
+- **Origin firewall changes:** add the Cloudflare-only allow rules before removing the broad rule; fetch
+  Cloudflare's current IP list from its published source at the time of the change (it changes).
+- **cloudflared updates:** update one replica at a time, using the same method it was installed with
+  (package manager, image tag, or binary).
+
+After each change, follow the core "after a change" steps: re-read the setting, confirm each affected
+hostname loads (and is denied for an unauthorized identity), check tunnel health in the dashboard, check
+integrations that use rotated credentials, and record before and after.
+
+### Hard stops (refer to a specialist or do manually; never automate)
+
+- Deleting a zone, removing the domain from Cloudflare, or changing nameservers at the registrar.
+- Turning off DNSSEC while a DS record is still published, or changing DS records at the registrar.
+- Rolling the Global API Key or removing members as an automated step; the user does these.
+- Deleting a tunnel, or deleting its connections, outside an approved incident action.
+- Disabling Access or removing the only Allow policy on an app "to test" or troubleshoot.
+- Running `cloudflared tunnel login` on a shared or untrusted host (it writes an account certificate).
+- Any change while the user's only path to the dashboard or the affected systems runs through the thing
+  being changed.
+
+---
+
+## Respond
+
+On any P0 indicator, switch to Respond immediately. Follow the core playbook plus the Cloudflare-specific
+steps in [incident-response.md](incident-response.md). P0 indicators include unknown members or API
+tokens, an unknown tunnel connector or tunnel, DNS or Access changes nobody made, and an exposed tunnel
+token or Global API Key.
+
+---
+
+## Worked example (invented)
+
+### CF-001: NAS admin UI published through a tunnel without Access
+
+**Confidence:** Confirmed
+**Priority:** P1. The storage admin login page is reachable by anyone on the internet, protected only by
+its own password; any authentication weakness or unpatched login vulnerability gives access to all
+stored data.
+**State:** Open
+**Component:** Cloudflare Tunnel public hostname `nas.example.com`, remotely managed tunnel, `cloudflared`
+in a container on `192.0.2.20`
+**Evidence:** Observed 2026-02-03 in the tunnel's public hostname list: `nas.example.com` routes to
+`https://192.0.2.30:5001` with "No TLS Verify" enabled. The Access applications list has no application
+covering `nas.example.com`. With approval, a request from `198.51.100.7` to `https://nas.example.com/`
+returned the NAS login page with `server: cloudflare` and a `cf-ray` header and no redirect to
+`<team-name>.cloudflareaccess.com`.
+**Expected secure state:** every self-hosted admin UI published through a tunnel is protected by an
+Access application that allows only named users with MFA, and `cloudflared` validates the Access JWT
+(Cloudflare Tunnel and Access documentation).
+**Exposure and prerequisites:** anyone on the internet who learns or guesses the hostname (certificate
+transparency logs and DNS records make it discoverable). No other prerequisites.
+**Dependencies / blast radius:** the user opens the NAS UI from a phone browser; a backup app on a laptop
+also uses this hostname and can't follow an interactive login.
+**Recommended remediation:** create an Access application for `nas.example.com` with an Allow policy for
+the user's identity and MFA required; give the backup app a service token with a Service Auth policy, or
+move it to the LAN or WARP path. Enable "Protect with Access" on the route. Separately, give the NAS a
+valid certificate so "No TLS Verify" can be turned off.
+**Operation class:** C2 (changes how every client reaches the NAS).
+**Approval required:** Yes.
+**Verification:** an unauthenticated request now redirects to the Access login; the user can log in;
+a non-allowed identity is denied; the backup app succeeds with the service token; Access logs show the
+logins.
+**Rollback:** remove the new Access application (not recommended; narrow the policy instead if access
+breaks).
+
+---
+
+## Version history
+
+- **1.0** (2026-10-30): Initial version.

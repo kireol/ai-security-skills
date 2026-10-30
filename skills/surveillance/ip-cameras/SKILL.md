@@ -1,0 +1,466 @@
+---
+name: ip-cameras
+description: >-
+  Security assessment, hardening, remediation, and incident response for network (IP) cameras and the
+  small DVRs/NVRs that ship with them, vendor-neutral with short notes for common vendor families
+  (Hikvision/Dahua-style OEMs, Reolink, TP-Link Tapo, Xiongmai/XMeye-style OEMs, Wyze and open firmware,
+  Amcrest, Ubiquiti). Use when auditing cameras, reviewing their firmware support, cloud/P2P and UPnP
+  features, accounts, RTSP/ONVIF access, network isolation and internet egress, or physical and privacy
+  settings, or when a camera may have been compromised or joined a botnet.
+license: CC-BY-4.0
+metadata:
+  version: "1.0"
+  last_reviewed: "2026-10-30"
+  applies_to: "Wired and Wi-Fi IP cameras, doorbells, and bundled DVR/NVR recorders from any vendor (verify each model's current firmware and support status)"
+  audience: "home, homelab, work"
+  finding_prefix: "CAM"
+  modes: "discover, recommend, remediate, respond"
+---
+
+# IP Camera Security
+
+Act as a careful, evidence-driven security engineer for network cameras. Cameras are small, rarely
+updated Linux computers with a lens and often a microphone, placed where they see private spaces, and
+frequently shipped with cloud relay features switched on. They are a favorite botnet target and a common
+first foothold into a network. Identify, explain, prioritize, remediate (only when authorized), and
+verify weaknesses in the cameras, how they reach the network and the internet, and what they record.
+
+## How to use this skill
+
+This skill holds only camera-specific guidance. It builds on the shared core, which always applies:
+
+| Core document | Covers |
+|---|---|
+| [modes-and-authorization.md](../../../core/modes-and-authorization.md) | The four modes, transitions, operation classes (R/C1/C2/C3), standing authorization |
+| [operating-principles.md](../../../core/operating-principles.md) | Principles, capability discovery, scope, communication, untrusted data |
+| [vulnerability-triage.md](../../../core/vulnerability-triage.md) | Lifecycle, CVE/KEV validation, P0–P4 priority scale |
+| [evidence-and-reporting.md](../../../core/evidence-and-reporting.md) | Evidence labels, statuses, finding template, report format, cadence |
+| [tool-use-contract.md](../../../core/tool-use-contract.md) | Rules for commands, APIs, MCP tools, and third-party integrations |
+| [reporting-protocol.md](../../../core/reporting-protocol.md) | Optional live progress reporting to a dashboard |
+| [incident-response.md](../../../core/incident-response.md) | The generic Respond playbook |
+
+Camera-specific Respond steps are in [incident-response.md](incident-response.md). Vendor documentation
+and advisories are in [references.md](references.md). NVR software that records the cameras is covered by
+its own skill (for example [frigate-nvr](../frigate-nvr/SKILL.md)); assess them together.
+
+## Camera-specific principles
+
+- **Never test passwords.** Don't try default credentials, guess, or brute-force any camera login,
+  including "just checking whether admin/admin works". Ask the user how each camera's admin password was
+  set. Many cameras lock accounts or the whole device after failed logins, and repeated tries can look
+  exactly like the botnet activity you're looking for.
+- **Scans can crash cameras.** Camera network stacks are fragile; aggressive scanning, OS detection, UDP
+  sweeps, or vulnerability scanner plugins have been reported to reboot or hang embedded devices, which
+  means lost recording. Identify cameras passively first (DHCP leases, the NVR's camera list, switch and
+  firewall tables), then use only light TCP connect checks on known ports, one camera at a time, with
+  the user's agreement.
+- **The network is the main control.** You often can't fix a camera's firmware, but you can control what
+  it can reach. A camera with no internet access and no path to the rest of the network is far less
+  dangerous even when its firmware is weak.
+- **Vendors rebrand.** Many brands sell cameras made by a few large OEMs, with the OEM's firmware under
+  another name. Identify the real OEM and firmware family (from the web UI, firmware file names, or the
+  vendor's own statements) and check that OEM's advisories too.
+- **The stream URL is a credential.** RTSP URLs commonly carry the username and password
+  (`rtsp://<user>:<password>@<camera>/...`), and some systems use an unguessable path as the only secret.
+  Wherever a stream URL is stored or logged, the camera's password is exposed.
+- **Cloud features usually come on by default.** P2P relay IDs, vendor cloud accounts, and UPnP are
+  often enabled out of the box and may survive a "local only" setup. Check them on the camera and confirm
+  with network evidence (egress logs), not just the setting.
+- **Firmware flashing and factory resets are the user's job.** They can brick a camera, wipe its
+  configuration and recordings, or (for open firmware) void support. The agent never performs them.
+
+## Deployment variants
+
+| Variant | How to recognize it | What changes |
+|---|---|---|
+| **Standalone wired (PoE) camera** | Ethernet, a local web UI, RTSP and ONVIF. | Fully controllable on the network; usually recorded by separate NVR software. |
+| **Camera behind a bundled NVR/DVR** | Cameras on the recorder's own PoE ports or a private subnet. | The recorder is the real exposure: its web UI, mobile-app ports, P2P, and stored camera passwords. Assess it with the same domains. Cameras on the recorder's built-in PoE ports may be hidden from the main network. |
+| **Cloud-first Wi-Fi camera or doorbell** | Set up only through a phone app; little or no local UI; a battery model or a doorbell. | Security depends mostly on the vendor's cloud account (password, MFA, shared users) and on firmware the vendor pushes. Local RTSP may be absent. Blocking internet access may make the camera stop working. |
+| **Managed ecosystem camera** (adopted by a vendor console) | Adopted by the vendor's controller or console; the camera has no separate UI in normal use. | Settings, firmware, and streams are managed on the console; assess the console and its remote-access account. |
+| **Camera on open firmware** | Firmware from an open project instead of the vendor (for example Thingino for some Ingenic-based cameras). | Vendor support no longer applies; the project's update cadence and defaults (SSH, telnet, web UI) apply instead. |
+| **Analog or HD-over-coax camera** | Coax to a DVR; no IP address. | Only the DVR is on the network. Assess the DVR. |
+
+## Detection
+
+Hints for recognizing this product during a network inventory (used by the `full-assessment` skill).
+Defaults can be changed, so confirm with the user before relying on a match.
+
+- RTSP on TCP 554 (some vendors and models use another port). An `OPTIONS` or `DESCRIBE` reply with a
+  vendor-specific `Server` header is a strong hint.
+- ONVIF: devices answer WS-Discovery probes on UDP 3702 (multicast) and expose the ONVIF device service
+  over HTTP, usually on port 80 and sometimes on a vendor port (for example TP-Link Tapo uses 2020).
+- SSDP/UPnP announcements on UDP 1900 with camera or NVR device descriptions.
+- Web UI on 80/443 with a vendor-branded login page; many embedded web servers identify the OEM in page
+  titles, script names, or the `Server` header.
+- Vendor management ports, from vendor or OEM documentation: Hikvision-family devices use TCP 8000 for
+  the SDK/client software port and UDP 37020 for SADP discovery; Dahua-family devices use TCP 37777;
+  Xiongmai-family devices use TCP 34567 (DVRIP/"NetSurveillance"). An open TCP 23 (telnet) or 9527 on
+  a cheap camera is a red flag (9527 is a debug port reported on some OEM firmware; not yet verified for
+  any specific model).
+- MAC vendors (OUI) often name the camera maker (for example Hikvision, Dahua, TP-Link, Ubiquiti), but
+  many Wi-Fi cameras show the Wi-Fi module's maker instead, and rebranded cameras show the OEM, not the
+  brand on the box.
+- Behavior: steady outbound connections to vendor cloud or P2P servers (often UDP to many destinations),
+  and long-lived RTSP sessions from an NVR.
+
+---
+
+## Discover
+
+All operations in this mode are class **R** (read-only). Confirm scope and access first (core: operating
+principles). Mark anything you can't inspect **Not assessed**.
+
+### Access and baseline
+
+Build the inventory from sources that don't touch the cameras: the NVR's camera list, the router or
+firewall's DHCP leases and ARP table, switch MAC tables, the vendor app's device list (the user reads it
+out), and firewall or DNS logs for camera egress. Then, with the user's agreement and one camera at a
+time, use light read-only checks. Candidate checks, each **not yet verified** against every camera:
+
+```sh
+# TCP connect check of a short list of known ports, one host, no OS or version detection:
+nmap -sT -Pn --max-retries 1 --scan-delay 200ms -p 23,80,443,554,2020,8000,8554,9527,34567,37777 <camera-ip>
+curl -skI https://<camera-ip>/          # web UI headers (no login, no credentials)
+curl -sI http://<camera-ip>/            # does plain HTTP answer, or redirect to HTTPS?
+```
+
+- Read camera settings through the camera's own web UI or vendor app with the user logged in, or by
+  screenshots the user provides. Prefer that over any API.
+- **Never:** try default or guessed passwords, run brute-force or credential-spraying tools, run exploit
+  or proof-of-concept scripts (including "check" scripts for known CVEs that send the exploit), use
+  vulnerability scanner plugins against cameras, run UDP sweeps, OS detection, or full port ranges, flash
+  firmware (vendor or open), factory-reset a device, enable telnet or debug services, use vendor password
+  recovery tools, or print or upload configuration backups or NVR configuration files that contain
+  camera passwords.
+- If a check leaves a camera unresponsive, stop all checks on that model and tell the user; it may need a
+  power cycle and its recording may have a gap.
+
+### Assessment domains
+
+Every domain must end with a status in the report (Pass / Finding / Not assessed / Not applicable /
+Accepted risk).
+
+#### A. Inventory, firmware, and vendor support
+
+- Every camera and recorder: brand, model, hardware revision, real OEM if rebranded, firmware version,
+  and where it's installed (the user describes it; don't record locations in shared reports).
+- Firmware currency: compare with the vendor's download or release page for that exact model and
+  hardware revision. Cameras often ship old firmware and rarely auto-update.
+- Vendor support status: is the model end-of-life? Does the vendor publish security advisories and a
+  support period? (Under the UK's product security regime, vendors state a minimum security-update period
+  for consumer connectable products; check whether the vendor publishes one.) An end-of-life camera with
+  known vulnerabilities is a lifecycle finding (core triage).
+- Known exploited vulnerabilities: check CISA KEV and the vendor's (and OEM's) advisories for the model.
+  Validate per core triage; don't assume a CVE applies because the brand matches.
+- Auto-update settings, and whether the camera can reach the update server (blocked egress also blocks
+  updates; plan manual updates).
+- For work environments: procurement or legal restrictions on specific vendors (for example US
+  restrictions on certain manufacturers' video surveillance equipment); check the organization's policy.
+
+#### B. Accounts and authentication
+
+- Admin password: ask how it was set. Unique per camera? Changed from any default or setup-sticker value?
+  Stored in a password manager? Never test it.
+- Additional users on the camera: who they are, their rights, and whether any are left over from an
+  installer or previous owner.
+- A dedicated low-privilege account for NVR streaming, where the camera supports it, instead of the
+  admin account.
+- Separate protocol accounts: some cameras keep separate users for ONVIF or RTSP (for example Tapo's
+  "camera account", separate from the cloud account). Check each list.
+- RTSP and HTTP authentication mode: digest rather than basic where the camera offers the choice; no
+  anonymous RTSP or snapshot access (some cameras offer an "anonymous visit" or unauthenticated snapshot
+  URL; check the settings).
+- Cloud account (for cloud-first cameras): strong unique password, MFA on, shared users reviewed, and no
+  old phones or tablets still logged in.
+- Lockout and login-failure settings, if offered.
+
+#### C. Local network services
+
+- Web UI: HTTPS available and preferred; plain HTTP disabled or redirected where the camera allows.
+  Self-signed certificates are normal; note them.
+- RTSP and ONVIF: enabled only if an NVR or app uses them. ONVIF user list and authentication checked.
+- Vendor SDK/management ports (8000, 37777, 34567, and similar): needed by the vendor's own apps or NVR?
+  If nothing uses them, they're unnecessary attack surface.
+- **Telnet, SSH, and debug services** (TCP 23, 22, or vendor debug ports): should be off. An open telnet
+  port on a camera is a P1 finding by default; on some OEM firmware it has been a botnet entry point.
+- FTP, SMTP, or cloud-upload targets configured on the camera: they store credentials for other systems
+  (an FTP server, an email account) on a weak device.
+- SNMP (community strings), multicast streaming, Bonjour/mDNS, and anything else listening.
+- IPv6: whether the camera has a global IPv6 address that might be reachable from outside.
+
+#### D. Cloud, P2P relay, and remote access
+
+- **P2P relay / cloud ID** (vendor names include UID, P2P, Hik-Connect, Easy4IP, XMEye, and similar):
+  enabled? It lets the vendor's servers broker remote connections to the camera, often through NAT,
+  regardless of firewall port forwards. Disable it if the user doesn't use the vendor app remotely.
+- **UPnP** on the camera, and on the router: a camera can open its own port forwards. Check the router's
+  current UPnP mappings for camera addresses.
+- Port forwards or DMZ settings on the router that point at cameras or recorders: critical findings.
+- Dynamic DNS clients on the camera, and their credentials.
+- How the user actually watches remotely: vendor app (via cloud), VPN to home, NVR software's own remote
+  access. The safest common pattern is VPN to the network and local access to the NVR, with camera P2P off.
+- Network evidence: firewall or DNS logs showing camera traffic to the internet even with cloud
+  features "off".
+
+#### E. Network isolation and egress
+
+- Cameras on their own VLAN or network segment, separate from user devices and servers.
+- Rules: cameras may talk only to the NVR (and NTP and DNS if needed); the NVR (or specific admin hosts)
+  may reach cameras; cameras may not reach other cameras' neighbors, the user LAN, servers, or the router's
+  admin interface.
+- **Internet egress blocked** for cameras that don't need the vendor cloud, and limited to the vendor's
+  documented endpoints for those that do. Check both IPv4 and IPv6, and DNS (a camera that can't resolve
+  names still tries hard-coded addresses).
+- Wi-Fi cameras: on an IoT SSID mapped to the camera VLAN, with client isolation; WPA2 or WPA3; not on the
+  main SSID.
+- Outdoor cameras: anyone who unplugs an outdoor camera gets an Ethernet port. Check whether that switch
+  port only reaches the camera VLAN (port VLAN assignment, port security, or 802.1X where the switch
+  supports it).
+- Static addresses or DHCP reservations for every camera, so firewall rules and the NVR keep pointing at
+  the right device. Unknown devices on the camera VLAN are a finding.
+- The NVR host's own position: if it has an interface on the camera VLAN, it must not route between that
+  VLAN and others.
+
+#### F. Credentials in stream URLs and integrations
+
+- Every system that stores camera credentials: NVR software, home automation platforms, media players,
+  mobile apps, scripts. List them (without printing the credentials) so password changes reach them all.
+- Stream URLs with embedded passwords in logs, dashboards, shared configuration snippets, screenshots, or
+  support tickets.
+- Shared passwords: one camera password used on all cameras, or reused from another system.
+- Special characters in passwords that some systems require to be URL-encoded; note this before rotating
+  so streams don't break.
+
+#### G. Time and logging
+
+- NTP configured, pointing at a local time source or an allowed internet one; correct time zone. Wrong
+  time makes recordings and logs useless as evidence and can break TLS.
+- Camera logs: whether the camera keeps a login and configuration-change log, how long, and whether it
+  can send syslog to a central server.
+- Alerts for camera offline or tampering (video loss, scene change), usually on the NVR.
+
+#### H. Physical security, local storage, and privacy
+
+- Reset button reachable without tools (an attacker can reset an accessible camera to defaults).
+- SD card or local storage: what it records, whether it's encrypted (rarely), and whether a thief who
+  takes the card or camera gets the footage. Whether SD recording duplicates what the NVR already keeps.
+- Mounting height, tamper-resistant housing, and protected cable runs for cameras within reach.
+- **Audio:** whether audio recording is on, and whether it's needed. Recording conversations has stricter
+  legal rules than video in many places; the user should confirm what's allowed where they are.
+- **Privacy masks and field of view:** cameras pointing at neighbors' property, public areas, or private
+  rooms; privacy masks set where needed; indoor cameras with a privacy or shutter mode when people are home.
+- Two-way audio, speakers, and PTZ control: who can use them remotely.
+- Notices and consent where the law or workplace policy requires them (the user's responsibility; the
+  agent only flags the question).
+
+---
+
+## Recommend
+
+No changes are made in this mode. For each finding, produce a recommendation using the core finding
+template, including **Dependencies / blast radius** and the **operation class**.
+
+### Dependency and blast-radius check (required)
+
+List what depends on the setting before recommending a change:
+
+- **NVR and recording:** which NVR records the camera, with which account, protocol, and stream URL.
+- **Integrations:** home automation, doorbell chimes, motion-triggered automations, and apps that use the
+  camera directly.
+- **Remote viewing:** whether household members or staff rely on the vendor app's cloud or P2P access.
+- **Firmware updates:** blocking egress stops automatic updates; someone must update manually.
+- **Firewall rules and aliases** that match camera addresses (keep addresses stable when moving VLANs).
+- **Power and PoE:** reboots during changes cause recording gaps.
+
+### Recommendation guidance
+
+| Area | Typical recommendation | Consequences to explain |
+|---|---|---|
+| Camera reachable from the internet (port forward, DMZ, UPnP) | Remove the forward or mapping; watch remotely through a VPN to the NVR. | Remote viewing needs the VPN first; test it before removing. |
+| P2P / cloud relay on and unused | Disable it on the camera; block the camera's internet egress. | The vendor app's remote viewing stops; local viewing and the NVR keep working. |
+| UPnP on | Disable on the camera and the router (or restrict it on the router). | Other devices that relied on UPnP lose automatic port mapping. |
+| Weak, shared, or unknown admin password | The user sets a unique strong password on each camera, then updates every consumer. | Streams break until updated; some cameras lock after failed logins from stale clients. |
+| NVR uses the admin account | Create a viewing-only account for the NVR. | PTZ, two-way audio, or event subscriptions may need extra rights. |
+| Telnet/SSH/debug open | Disable in settings; if it can't be disabled, isolate the camera fully or replace it. | Some open firmware uses SSH for maintenance; keep it key-only and limited to an admin host. |
+| Flat network | Move cameras to a camera VLAN with rules allowing only the NVR. | C2 project; the NVR needs an interface or route to the VLAN; DHCP reservations move. |
+| Unrestricted egress | Block internet access (allow only local NTP and DNS if needed). | Cloud features and auto-updates stop; plan manual firmware updates. |
+| Outdated firmware | Update from the vendor's site for the exact model and hardware revision (done by the user). | Reboot; possible setting resets; rare bricking; read the release notes. |
+| End-of-life model | Replace; until then, isolate with no internet and NVR-only access. | Hardware cost; installation work. |
+| Anonymous RTSP or snapshot access | Disable anonymous access; require authentication (digest where offered). | Clients using the anonymous URL must be updated. |
+| Basic auth on RTSP/HTTP | Switch to digest where offered. | A few older clients may not support digest. |
+| No NTP or wrong time | Point at a local NTP source. | None. |
+| Audio recorded without need | Disable audio. | Recordings lose sound. |
+| Field of view covers neighbors or private rooms | Add privacy masks, re-aim, or use a privacy mode. | Coverage changes; masked areas are never recorded. |
+| SD card holds unencrypted footage in an exposed camera | Disable SD recording if the NVR covers it, or accept and document the risk. | No local fallback when the network or NVR fails. |
+| Accessible outdoor Ethernet | Lock the switch port to the camera VLAN (and port security or 802.1X if supported). | A replacement camera needs the port's settings updated. |
+
+Changing default ports and hiding cameras from discovery are supplementary only. Never recommend them as
+the main fix.
+
+Group the plan: immediate containment (if any) → urgent fixes (internet-exposed cameras, open telnet,
+known-exploited firmware) → high-priority hardening (P2P, UPnP, egress, VLAN) → routine maintenance
+(firmware, NTP, accounts) → optional defense in depth. Then ask for approval (core: modes and
+authorization).
+
+---
+
+## Remediate
+
+Apply only approved changes, one at a time, following the core rules. Camera specifics:
+
+- **Before any change:** record the camera's current settings (screenshots of the relevant pages are
+  usually the only practical backup). A configuration export from the camera contains credentials; if the
+  user makes one, it stays with them, protected.
+- **Firewall and VLAN changes (C2):** change one camera, confirm the NVR still records it, then do the
+  next. Keep a path from an admin host to the camera's web UI until the change is verified.
+- **Disabling P2P, UPnP, telnet, or cloud features (C1 or C2):** the agent may guide the user through the
+  camera's UI or perform the change in a UI session the user has opened, with approval. Verify with
+  network evidence afterward (no egress attempts, closed port).
+- **Password and account changes (C2):** done by the user; then update every consumer listed in domain F
+  right away to avoid lockouts. Never paste the new password into a shared report or chat log.
+- **Firmware updates (C2):** the user downloads firmware only from the vendor's site for the exact model
+  and hardware revision, checks any published checksum, and applies it through the camera's UI or the
+  vendor's tool, with the camera on reliable power. The agent can find the right download page and read
+  the release notes. Never cross-flash firmware from another brand or region.
+- **Open firmware** (for example Thingino): a decision for the user, made with the project's
+  documentation for the exact hardware. The agent can explain trade-offs but never performs the flash.
+
+After each change, follow the core "after a change" steps: confirm live view and recording on the NVR,
+re-run the light port check where agreed, check firewall logs for blocked egress attempts, and record
+before and after.
+
+### Hard stops (refer to a specialist or do manually; never automate)
+
+- Testing default or guessed credentials, brute force, or running exploit code, for any reason.
+- Flashing firmware (vendor, cross-brand, or open firmware) or using serial or bootloader access.
+- Factory resets, and vendor password-recovery procedures (they wipe settings or depend on vendor
+  support).
+- Enabling telnet, SSH, or debug services to "look around".
+- Heavy or intrusive scanning of camera networks.
+- Deleting recordings or SD card contents.
+
+---
+
+## Respond
+
+On any P0 indicator, switch to Respond immediately. Follow the core playbook plus the camera-specific
+steps in [incident-response.md](incident-response.md).
+
+---
+
+## Vendor-family notes
+
+Short notes only for facts verified against the sources in [references.md](references.md). Always check
+the vendor's current documentation for the exact model; menus and defaults change with firmware.
+
+### Hikvision- and Dahua-family OEMs (and their rebrands)
+
+- Both have vulnerabilities in CISA's Known Exploited Vulnerabilities catalog, for example an
+  unauthenticated command injection in the web server of many Hikvision cameras and NVRs
+  (CVE-2021-36260, fixed in 2021 firmware) and Dahua authentication bypasses (CVE-2021-33044 and
+  CVE-2021-33045, added to KEV in 2024). Unpatched devices of this age are exploited at scale.
+- Vendor management ports: Hikvision TCP 8000 (client software/SDK) and UDP 37020 (SADP discovery);
+  Dahua TCP 37777. Neither should be reachable from the internet.
+- Cloud relay: Hik-Connect (Hikvision) and P2P/Easy4IP (Dahua). Disabling them stops the vendor app's
+  remote access; on some recorders users report the setting is hard to re-enable remotely, so change it
+  on site.
+- Many brands relabel these OEMs (for example Amcrest is widely described as a Dahua relabeler), so check
+  the OEM's advisories as well as the brand's. Firmware from the OEM is not always interchangeable with
+  the brand's; never cross-flash.
+
+### Reolink
+
+- The UID (P2P remote access) can be disabled on mains-powered cameras, NVRs, and Home Hubs through the
+  Reolink Client (desktop): Device Settings → Network → Advanced. Reolink notes this setting isn't in the
+  mobile app.
+- Battery cameras have no UID switch; Reolink suggests blocking the camera's internet access at the
+  router instead (with a DHCP reservation so the rule keeps matching).
+- Service ports (HTTP, HTTPS, RTSP, ONVIF, and the media port) can be turned on or off and changed under
+  Server Settings in the same menu; for cameras attached to a Reolink NVR or Home Hub, change them on
+  the recorder.
+
+### TP-Link Tapo
+
+- RTSP and ONVIF (Profile S) use a separate **camera account** created in the Tapo app, distinct from the
+  TP-Link cloud login. Ports are 554 (RTSP) and 2020 (ONVIF); streams are `/stream1` (high) and
+  `/stream2` (low).
+- Battery-powered models and some others don't support RTSP; check the model.
+- TP-Link itself warns that RTSP/ONVIF aren't highly secure, advises against exposing the camera through
+  port forwarding for long periods, and suggests a VPN instead.
+
+### Xiongmai/XMeye-style OEMs (many low-cost brands)
+
+- These cameras and DVRs use a proprietary DVRIP ("NetSurveillance") service on TCP 34567 and the XMEye
+  cloud/P2P service. Authenticated command injection through port 34567 (CVE-2022-45045) has been
+  reported as exploited, and new command-injection reports against this service continued into 2026.
+- A 2017 CISA ICS advisory (ICSA-17-341-01) described a critical web-interface buffer overflow and noted
+  the device could come back in a more vulnerable state with telnet reachable; the vendor did not
+  coordinate with CISA.
+- Treat these devices as untrusted: no internet access, no reachability from anything but the NVR, and
+  plan replacement. Open telnet on them is an urgent finding.
+
+### Wyze and open firmware
+
+- Wyze cameras are cloud-first. In 2022, Wyze said it couldn't patch an SD-card access vulnerability on
+  the end-of-life Wyze Cam v1 and advised customers to stop using end-of-life products. In February 2024,
+  Wyze reported that about 13,000 users were shown thumbnails from other users' cameras after an outage,
+  following a similar issue in September 2023. Treat the cloud account (MFA, shared users) and event
+  history as part of the camera's security, and decide whether cloud event storage is acceptable.
+- Wyze publishes security support periods for some models (its product security information page); check
+  the model's end date.
+- **Thingino** is open-source firmware for Ingenic-based cameras, including some Wyze models; it removes
+  the vendor cloud but ends vendor support. Battery cameras on some platforms aren't supported. Flashing is
+  the user's decision (hard stop for the agent). After flashing, assess the open firmware's own services
+  and defaults like any other camera.
+
+### Amcrest
+
+- Widely described as a relabeler of Dahua products; check Dahua advisories for the equivalent model as
+  well as Amcrest's firmware notes. Amcrest firmware can lag behind the equivalent OEM firmware.
+
+### Ubiquiti UniFi Protect
+
+- Cameras are adopted and managed by a UniFi console; firmware, accounts, and streams are controlled
+  there. Assess the console, its admin accounts, and its remote-access (cloud account) settings as the
+  real control plane.
+- RTSP streams are enabled per camera in Protect and served by the console (RTSPS on 7441 is the commonly
+  reported default; verify on the installed version). The generated stream URL path acts as the access
+  token, so treat the URL as a secret.
+
+---
+
+## Worked example (invented)
+
+### CAM-001: P2P cloud relay enabled with unrestricted internet egress
+
+**Confidence:** Confirmed
+**Priority:** P2. The camera keeps a vendor relay connection open, so anyone who obtains or guesses the
+device's cloud ID and password can reach it from the internet without any port forward, and the firmware
+is two years behind the vendor's latest release.
+**State:** Open
+**Component:** Wired PoE bullet camera, vendor-family OEM firmware, on the camera VLAN
+**Evidence:** Observed 2026-03-11: the camera's web UI (opened by the user) shows the P2P/cloud setting
+enabled with a device ID. Firewall logs show the camera at `198.51.100.31` sending UDP to many internet
+addresses (for example `203.0.113.40`) every few minutes. The firewall's camera-VLAN rules allow any
+outbound traffic. The NVR at `198.51.100.10` is the only local client. The user doesn't use the vendor
+app.
+**Expected secure state:** cloud relay disabled when unused; camera internet egress blocked except NTP if
+needed.
+**Exposure and prerequisites:** reachable via the vendor's relay; requires the device's cloud credentials
+or a relay or firmware vulnerability.
+**Dependencies / blast radius:** none for recording (the NVR pulls RTSP locally). Firmware auto-update
+will stop once egress is blocked; the user will update manually.
+**Recommended remediation:** (1) the user disables P2P in the camera's network settings; (2) add a
+firewall rule blocking the camera VLAN from the internet, allowing only the local NTP server; (3) the user
+updates firmware from the vendor's site for this model and hardware revision.
+**Operation class:** C1 (P2P setting), C2 (firewall rule; firmware update).
+**Approval required:** Yes.
+**Verification:** the setting shows disabled after a reboot; firewall logs show blocked (and then no)
+egress attempts; the NVR still records the camera.
+**Rollback:** re-enable the setting; remove the firewall rule.
+
+---
+
+## Version history
+
+- **1.0** (2026-10-30): Initial version.

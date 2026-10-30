@@ -1,0 +1,84 @@
+# Web Servers and Reverse Proxies: Respond (Incident Response)
+
+Use with the core playbook, [incident-response.md](../../../core/incident-response.md), which always
+applies. This file adds only web-server and reverse-proxy-specific steps.
+
+A compromised reverse proxy sees every request and response for every app behind it: passwords, session
+cookies, API tokens, and uploaded files. It holds the TLS private keys, and often ACME DNS-provider
+tokens that can change DNS for the whole domain. If the proxy itself may be compromised, assume all of
+that was exposed.
+
+## Triage and containment
+
+- **Indicators that point at the server or proxy itself:** configuration changes nobody made (new
+  virtual hosts, routes, redirects, `proxy_pass` targets, injected `sub_filter` or header rules), new
+  admin accounts in Nginx Proxy Manager, new or modified files in webroots (web shells, unfamiliar
+  `.php` files, modified `.htaccess`), unknown Caddy or Traefik plugins, a changed binary or container
+  image, new cron jobs or systemd units on the host, unexpected outbound connections from the server,
+  certificates issued for your names that you didn't request (check certificate transparency logs), or
+  DNS records changed with the ACME token.
+- **Contain at the edge, upstream of the proxy:** remove the firewall port forwards to it, stop the tunnel
+  connector, or switch the CDN to a maintenance page. That stops new attacker traffic without destroying
+  evidence on the host.
+- **Don't restart or redeploy containers yet:** recreating a container discards its writable layer,
+  which is often where a web shell or a changed config lives. Snapshot or export first (below).
+- **If one app behind the proxy was compromised but the proxy is trusted:** remove or block that app's
+  route, keep the others running, and use the proxy's logs as evidence.
+
+## Evidence to preserve (web-server-specific)
+
+Collect before changing anything. Treat configuration and key material as secret.
+
+- Access and error logs for every site, including rotated files; for containers, `docker logs` output
+  and the log driver's files. Copy them off the host.
+- The effective configuration (`nginx -T`, Apache configuration tree, Caddyfile and the admin API's
+  `/config/` output, Traefik static and dynamic configuration plus container labels, HAProxy
+  configuration, the NPM `data` volume). Store it securely; don't paste it into chat or tickets.
+- File listings with timestamps and hashes of webroots and configuration directories (for example `find
+  <webroot> -newer <reference-file> -ls`), and copies of any suspicious files. Don't open or run them.
+- For containers: `docker inspect`, `docker diff <container>` (changed files in the writable layer), the
+  image digest, and an export of the container or a host/VM snapshot.
+- Installed binaries and modules: package-manager verification (for example `dpkg --verify` or
+  `rpm -Va`, **not yet verified** on every distribution), and the list of loaded modules or plugins.
+- Certificate inventory: issued certificates from certificate transparency logs for your domains, and the
+  ACME account in use. Note the DNS provider's audit log, if it has one.
+- Running processes and network connections on the host (`ss -tnp`, `ps auxww`).
+
+## Scope checks specific to a reverse proxy
+
+- **Every app behind it:** credentials and session cookies that passed through may have been captured.
+  Check each app's admin accounts, tokens, and recent logins.
+- **The identity provider** (Authelia, Authentik, oauth2-proxy) if it's behind the same proxy, and every
+  app trusting its headers: an attacker controlling the proxy can forge `X-Forwarded-User`-style headers.
+- **DNS:** if an ACME DNS-provider token was on the host, review the zone for added or changed records
+  and for new certificates issued with them.
+- **Other hosts sharing the same wildcard certificate or key.**
+- **The container host**, if the proxy had the Docker socket mounted: treat the host and all its
+  containers as compromised.
+- Backends the proxy could reach that the internet couldn't: the proxy is a pivot point into the LAN.
+
+## Eradication and recovery
+
+- Rebuild the server or container from a known-good package or image (verify signatures or digests);
+  don't clean a compromised host in place. Rebuild the host itself if the Docker socket was exposed or
+  root access is likely.
+- Restore configuration from version control or a backup taken before the earliest plausible compromise,
+  and diff it against the compromised configuration to understand what changed.
+- **Rotate everything the proxy held:** issue new TLS keys and certificates, and revoke the old ones
+  (with the user's decision); new ACME account key; new DNS-provider tokens (revoke the old ones at the
+  provider); new basic-auth passwords and access-list credentials; NPM admin passwords; any upstream
+  credentials, forward-auth secrets, and cookie or session secrets.
+- Ask the user to force sign-out and password resets for apps whose traffic passed through the proxy.
+- Before reopening the edge: supported version, no admin UIs or dashboards reachable from the internet,
+  forwarded-header trust limited to known proxies, auth in front of internal apps, logs shipped off-host.
+
+## Quick checklist tailored for a web server or reverse proxy
+
+Start with the core quick checklist, plus:
+
+- [ ] Remove the port forwards or stop the tunnel to the proxy; don't recreate its containers yet.
+- [ ] Copy access and error logs and the configuration off the host; snapshot or export containers.
+- [ ] Check webroots and configuration for recently changed files; don't open suspicious files.
+- [ ] Check certificate transparency logs and the DNS zone for changes made with the ACME token.
+- [ ] Plan to rebuild from a known-good image, issue new keys and certificates, and rotate every
+      credential the proxy held.

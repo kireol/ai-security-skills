@@ -1,0 +1,490 @@
+---
+name: home-assistant
+description: >-
+  Security assessment, hardening, remediation, and incident response for Home Assistant (Home Assistant
+  OS, Container, and the unsupported Supervised and Core installs). Use when auditing a Home Assistant
+  instance, reviewing its remote access (Home Assistant Cloud, reverse proxies, tunnels, port forwards),
+  users, MFA, access tokens, auth providers, secrets and backups, apps (add-ons), HACS or Marketplace
+  custom integrations, cloud-connected integrations, security-sensitive automations, or when a Home
+  Assistant instance may have been compromised.
+license: CC-BY-4.0
+metadata:
+  version: "1.0"
+  last_reviewed: "2026-10-30"
+  applies_to: "Home Assistant 2026.x on Home Assistant OS or Container (verify the live version; settings move between monthly releases)"
+  audience: "home, homelab"
+  finding_prefix: "HA"
+  modes: "discover, recommend, remediate, respond"
+---
+
+# Home Assistant Security
+
+Act as a careful, evidence-driven home-automation security engineer. Home Assistant often controls the
+physical home: locks, garage doors, alarm panels, cameras, heating, and presence data. It also stores
+credentials for many cloud accounts and local devices. A compromised or over-exposed instance can unlock
+doors, disable alarms, reveal when nobody is home, and leak every integrated account. A careless change
+can just as easily lock the household out of its own lights and heating. Identify, explain, prioritize,
+remediate (only when authorized), and verify weaknesses in the instance, its access paths, and what it is
+allowed to control.
+
+## How to use this skill
+
+This skill holds only Home Assistant-specific guidance. It builds on the shared core, which always applies:
+
+| Core document | Covers |
+|---|---|
+| [modes-and-authorization.md](../../../core/modes-and-authorization.md) | The four modes, transitions, operation classes (R/C1/C2/C3), standing authorization |
+| [operating-principles.md](../../../core/operating-principles.md) | Principles, capability discovery, scope, communication, untrusted data |
+| [vulnerability-triage.md](../../../core/vulnerability-triage.md) | Lifecycle, CVE/KEV validation, P0–P4 priority scale |
+| [evidence-and-reporting.md](../../../core/evidence-and-reporting.md) | Evidence labels, statuses, finding template, report format, cadence |
+| [tool-use-contract.md](../../../core/tool-use-contract.md) | Rules for commands, APIs, MCP tools, and third-party integrations |
+| [reporting-protocol.md](../../../core/reporting-protocol.md) | Optional live progress reporting to a dashboard |
+| [incident-response.md](../../../core/incident-response.md) | The generic Respond playbook |
+
+Home Assistant-specific Respond steps are in [incident-response.md](incident-response.md). Vendor
+documentation and advisories are in [references.md](references.md). If the instance uses an MQTT broker,
+also use the [mqtt](../mqtt/SKILL.md) skill.
+
+## Home Assistant-specific principles
+
+- **Every user is effectively trusted.** The vendor's security policy states that Home Assistant "assumes
+  every user is trusted and does not enforce user privileges", and privilege escalation by logged-in users
+  is out of scope for vulnerability reports. Treat any account, admin or not, as able to reach everything.
+  The non-admin role only hides parts of the UI.
+- **Admin is code execution.** An administrator can install apps (add-ons), custom integrations, and
+  shell-command or script integrations, and can edit the configuration. On Home Assistant OS that reaches
+  the Supervisor and, through privileged apps, the host. Admin access, an admin's long-lived token, and
+  the configuration directory are all equivalent to full control.
+- **Automations act on the physical world.** Changing or disabling an automation can unlock a door, open
+  a garage, turn off an alarm, or stop heating. Treat every change to automations, scripts, scenes, and
+  lock/alarm/cover entities as at least **C2**, and never trigger one to "test" it.
+- **The configuration directory is a secret.** `secrets.yaml` is plain text (the vendor says so), and the
+  `.storage` directory holds users, password hashes, refresh and long-lived tokens, and integration
+  credentials, including OAuth tokens for cloud accounts. Never print, paste, upload, or copy these files.
+  Backups contain all of it.
+- **Monthly releases change the UI.** Settings move between releases (for example, HTTP server settings
+  moved from YAML to the UI in 2026.8; add-ons were renamed "apps" in 2026.2; HACS becomes the built-in
+  Marketplace in 2026.11). Verify menu paths and options on the installed version.
+- **Prefer the UI and documented APIs.** Many settings are UI-managed and stored in `.storage`; hand-editing
+  those files is unsupported and can corrupt the instance.
+
+## Deployment variants
+
+| Variant | How to recognize it | What changes |
+|---|---|---|
+| **Home Assistant OS** (HAOS; appliance on Home Assistant Green/Yellow, a single-board computer, or a VM) | Settings → About shows "Operating System" and "Supervisor" versions; Settings → Apps exists. | Supervisor manages the OS, core, and apps; three separate update streams (OS, Supervisor, Core) plus apps. Apps are containers with configurable privileges (domain E). Shell access is only through an SSH/terminal app or the physical/VM console. New installs from 2026.8 serve the UI on port 80 by default; older installs keep 8123. |
+| **Home Assistant Container** | Runs as a container the user manages (Compose or similar); About shows no Supervisor; no Apps menu. | No apps or Supervisor; the user updates the container and the host. Host and container runtime hardening is the user's job, and anyone with Docker access on the host controls Home Assistant. Default port stays 8123. Often runs with host networking for discovery. |
+| **Home Assistant Supervised** (unsupported) | Supervisor present on a general-purpose Linux host the user installed. | The vendor deprecated this method in May 2025 and ended support with 2025.12. Report it as an unsupported deployment (core triage: lifecycle) and plan a migration to HAOS or Container. The host OS is also in scope. |
+| **Home Assistant Core** (Python venv, unsupported) | Runs from a Python virtual environment; no Supervisor or container. | Deprecated in May 2025, support ended with 2025.12. Same lifecycle finding. Host hardening, Python updates, and file permissions on the config directory are the user's responsibility. |
+| **VM on a hypervisor** | Hypervisor guest; the user confirms. | Hypervisor admins control the instance and its backups; VM snapshots are a useful pre-change rollback and evidence tool. USB radios (Zigbee, Z-Wave) are often passed through. |
+
+## Detection
+
+Hints for recognizing this product during a network inventory (used by the `full-assessment` skill).
+Defaults can be changed, so confirm with the user before relying on a match.
+
+- Web UI on TCP 8123 (Container, and HAOS installs from before 2026.8) or TCP 80 (new HAOS installs from
+  2026.8). The login page title is "Home Assistant"; `/manifest.json` and `/auth/authorize` are present.
+  Plain HTTP unless TLS or a proxy is configured.
+- mDNS/DNS-SD service type `_home-assistant._tcp`, whose TXT record includes the location name, an
+  instance UUID, the Core version, and internal/external URLs. A default HAOS install also answers to
+  `homeassistant.local`.
+- It may also announce or expose services for features in use: HomeKit Bridge (`_hap._tcp`), an MQTT
+  broker app (TCP 1883/8883, WebSockets 1884/8884), SSH or Samba apps (22, 445), and Zigbee2MQTT's
+  frontend through the app.
+- MAC vendor (OUI) of the board maker (for example a single-board-computer vendor) on appliances; a
+  hypervisor vendor on VMs. Not a reliable signal on its own.
+- Outbound connections to the vendor's cloud relay when Home Assistant Cloud is enabled.
+
+---
+
+## Discover
+
+All operations in this mode are class **R** (read-only). Confirm scope and access first (core: operating
+principles). Mark anything you can't inspect **Not assessed**.
+
+### Access and baseline
+
+Prefer the UI with an admin account the user operates, or user-run checks. Most of this assessment needs
+admin rights, so be explicit with the user that an admin session or admin token is full control (see
+principles). Prefer the user driving the UI and sharing screenshots over handing the agent a token. If a
+token is used, ask for a **dedicated, newly created long-lived token** the user deletes after the
+assessment, and never store it.
+
+Candidate read-only checks, each labeled:
+
+```sh
+# REST API (vendor-documented endpoints; each needs a bearer token)
+# Use the instance's configured port (8123, or 80 on newer HAOS installs)
+curl -s -H "Authorization: Bearer <api-token>" http://<ha-host>:8123/api/config   # version, components
+curl -s -H "Authorization: Bearer <api-token>" http://<ha-host>:8123/api/states   # entities (personal data)
+
+# Home Assistant OS, from the SSH/terminal app or console (ha CLI vendor-documented; flags not yet verified)
+ha core info          # Core version, port, SSL, update available
+ha os info            # OS version and update available
+ha supervisor info    # Supervisor version, channel, update available, diagnostics setting
+ha apps               # installed apps (older releases: ha addons); verify the subcommand
+ha resolution info    # unsupported/unhealthy flags and suggested fixes
+ha backups            # backup list (names, dates, protected flag)
+
+# Container, on the host (not yet verified on every setup)
+docker inspect <ha-container> \
+  --format '{{.Config.Image}} {{.HostConfig.NetworkMode}} {{.HostConfig.Privileged}}'
+ls -l <config-dir>    # file ownership and permissions only
+```
+
+- `/api/states` returns personal data (who is home, locations, camera entity attributes). Read it only
+  with approval and summarize; don't paste it whole.
+- **Never** print, `cat`, copy, or upload `secrets.yaml`, anything under `.storage/` (especially `auth`,
+  `core.config_entries`, `cloud`), `ip_bans.yaml` contents from a third party's network, backup archives,
+  or the backup emergency kit. Never use options of the configuration-check script that print secret
+  values. Read file names, sizes, and permissions only.
+- **Never** call services or actions (`/api/services/...`), fire events, toggle entities, run scripts,
+  or trigger automations as part of an assessment. Those are changes, and some move physical things.
+- **Never** create or revoke tokens, users, or bans, or change app protection mode, during Discover.
+- Don't try logins against the instance (including to "test" the ban threshold).
+
+### Assessment domains
+
+Every domain must end with a status in the report (Pass / Finding / Not assessed / Not applicable /
+Accepted risk).
+
+#### A. Platform, versions, and lifecycle
+
+- Installation type (see variants). Supervised and Core are unsupported since 2025.12: lifecycle finding.
+- Core, OS, and Supervisor versions versus the latest releases. Home Assistant ships monthly; the vendor
+  checklist says to update with each monthly release. Note how many releases behind each component is.
+- Settings → Repairs: open repair issues, including alerts from the Home Assistant Alerts integration
+  (sourced from the vendor's alerts site) and "unsupported" or "unhealthy" system flags.
+- Check the vendor's published security advisories (GitHub Security Advisories, listed on the security
+  page) against the installed version. Validate per core triage.
+- 32-bit hardware (i386, armhf, armv7) was deprecated alongside the install methods; check the
+  architecture on older single-board computers.
+- Apps and custom integrations with pending updates (domains E and F).
+
+#### B. Users, admin rights, and authentication
+
+- Settings → People → Users: every user, whether it's an administrator, whether it's **local access
+  only**, and whether it's active. Unknown or unused users are findings. Remember that non-admin is not a
+  security boundary (principles).
+- Who is the owner, and is the owner account used for daily use?
+- MFA: whether each user (at least each admin and each user that can log in remotely) has the
+  Authenticator app (TOTP) module enabled under the user's profile → Security. Whether the notify MFA
+  module is used (it depends on notification delivery and can lock users out).
+- Auth providers (`homeassistant:` `auth_providers` in `configuration.yaml`):
+  - **`trusted_networks`**: lets listed networks skip the password. The vendor documents that MFA does not
+    apply to these logins, that without a `homeassistant` provider as fallback anyone on the network can
+    pick a user without a password, and that `allow_bypass_login` skips the login page entirely. Check
+    which networks are listed (a whole LAN, a VPN range, an IoT segment), which users are mapped, and
+    whether any trusted network also carries reverse-proxied traffic. A broad trusted network is
+    usually a finding.
+  - **`command_line`**: an external command decides logins and can set group membership; review the
+    command and who can change it.
+  - Legacy API password: should not be in use.
+- Password quality: ask the user, don't test it. Vendor guidance is a strong, unique password per user.
+
+#### C. Tokens and sessions
+
+- Each user's profile → Security: **long-lived access tokens** (name, created, last used). The developer
+  documentation says they are valid for 10 years. Each token has its user's full rights. Unknown, unused,
+  or undocumented tokens are findings; tokens held by integrations that no longer exist should go.
+- Refresh tokens (signed-in devices and apps) per user: unknown clients or locations. Unused refresh tokens
+  are removed after 90 days.
+- Where tokens live outside Home Assistant: dashboards, scripts on other hosts, voice assistants, MCP or AI
+  agent integrations, Node-RED, mobile widgets. Each is a place a full-rights credential can leak.
+- Mobile app (Companion) registrations: devices that no longer exist.
+
+#### D. Network exposure and remote access
+
+- How is the instance reached from outside, if at all? Ask, then check:
+  - **Home Assistant Cloud (Nabu Casa) remote UI**: the vendor documents end-to-end encryption through a
+    TCP-level relay, so the relay can't read traffic. The remote URL is still a public login page. Check
+    whether remote UI is enabled and whether the "block remote access for versions with known security
+    issues" protection has been turned off.
+  - **Reverse proxy or tunnel** (a proxy app, a separate proxy host, a cloud tunnel): Settings → System →
+    Network → HTTP server (2026.8+) or the `http:` block (older): **Trust X-Forwarded-For** and **Trusted
+    proxies**. Trusted proxies should list only the proxy's address or network. A trusted-proxy entry that
+    covers clients or a whole LAN lets those clients spoof their source address, which defeats IP bans and
+    can interact with `trusted_networks`. Also check what the proxy or tunnel adds (access policies, an
+    extra login layer) and whether it exposes other paths.
+  - **Port forward** to 8123 or 80 on the router or firewall, or a UPnP mapping: direct exposure. The
+    vendor's remote-access page says "just putting a port up is not secure" and its checklist advises not
+    exposing the instance directly. Test from outside only with explicit authorization.
+  - **VPN** (WireGuard, Tailscale, ZeroTier, or similar): which peers can reach the instance.
+- TLS: whether remote access is HTTPS end to end, and whether local access is plain HTTP on a shared
+  network (credentials and tokens in cleartext on the LAN).
+- HTTP server settings: listen addresses, **IP banning** enabled, and **login attempts before ban**
+  (range 1–1000; check whether "unlimited login attempts" is on). Bans are stored in `ip_bans.yaml` and
+  don't expire. Bans are useless if every request appears to come from the proxy (trusted proxies
+  misconfigured).
+- Internal reachability: can IoT, camera, or guest segments reach the UI and API? Ideally only trusted
+  clients can.
+- Files served from the `www/` folder at `/local/` require no authentication (vendor-documented). Check
+  for anything sensitive there (camera snapshots, exported data, keys).
+- CORS allowed origins: unexpected origins.
+- Other listening services on the host: SSH/terminal app, Samba, MariaDB, MQTT broker, Zigbee2MQTT or
+  Z-Wave JS frontends, code-server/editor apps, and the Observer page on HAOS. Each is assessed as its own
+  exposure.
+
+#### E. Apps (add-ons) and the Supervisor (Home Assistant OS and Supervised)
+
+- Every installed app: source (official, community, or a **third-party repository**), whether it's still
+  maintained, version and update status, whether it's running, and whether it's needed.
+- Elevated privileges, per app (shown on the app's page and in its security rating):
+  - **Protection mode** off. While on, the Supervisor withholds full access, Docker API access, and host
+    PID namespace even if the app requests them. An app with protection mode off and full or Docker API
+    access can control the host and every other container.
+  - **Host network**, **privileged**/hardware access, `hassio_role` of manager or admin (lets the app
+    manage the Supervisor or other apps), AppArmor disabled, and access to the Home Assistant API or
+    authentication.
+  - Low security rating (the vendor's rating drops for these privileges).
+- Ingress versus open ports: apps that publish their own ports (web terminals, editors, databases) are
+  reachable on the network, often with weaker auth than Home Assistant. Prefer ingress-only.
+- SSH/terminal apps: password versus keys, which port, and whether protection mode is off for them.
+- Third-party app repositories: each is a supply-chain dependency with update rights on code that may run
+  with these privileges.
+- Supervisor diagnostics and update channel (stable versus beta/dev).
+
+#### F. Custom integrations, HACS, and the Marketplace (supply chain)
+
+- List custom integrations (the `custom_components` folder; Settings → Devices & services marks custom
+  integrations). Each runs Python inside Home Assistant with full access to its memory, credentials, and
+  network. The vendor's security policy excludes attacks that need a malicious third-party integration,
+  so nothing here is vetted by the vendor.
+- HACS (Home Assistant 2026.10 and older) or the built-in **Marketplace** (2026.11 and newer, which replaces
+  HACS and migrates its content): installed items, their repositories and maintainers, last update, and
+  whether each is needed. Custom repositories added outside the default catalog are higher risk. Treat
+  "a repository changed hands" or "archived" as a finding to review.
+- Frontend resources (dashboard cards, themes): JavaScript running in every admin's browser session.
+- AppDaemon apps and Python scripts: after the Marketplace migration these are no longer managed or
+  updated (vendor-documented); check for stale copies.
+- `python_script`, `shell_command`, `command_line`, and `rest_command` integrations: what they run, and
+  who can trigger them.
+
+#### G. Integrations with cloud and device credentials
+
+- Settings → Devices & services: every integration that holds cloud credentials or OAuth tokens (smart
+  locks, alarm systems, cameras, vehicles, energy, voice assistants, email, notification services, AI
+  services). These credentials are readable by any admin and by any custom integration.
+- Integrations that are broken or unused but still hold credentials.
+- Shared accounts: does Home Assistant use the household's main account for a vendor cloud (which may
+  allow purchases, account recovery, or full device control) where a limited or dedicated account exists?
+- Voice assistant and AI integrations exposed to entities: which entities (locks, alarms, garage doors)
+  are exposed to Assist, cloud voice assistants, or an LLM/MCP integration, and whether they require a PIN
+  or confirmation.
+- MQTT integration: broker credentials, TLS, and whether broker validation is disabled (see the mqtt skill).
+- Local device protocols (Z-Wave S2 security, Zigbee network key, Matter fabrics) are stored by their
+  integrations; protect them like credentials.
+
+#### H. Security-sensitive automations and entities
+
+- Inventory automations and scripts that **unlock doors, open garage doors or gates, disarm alarms, disable
+  cameras or recording, open smart valves, or change heating**. For each: what triggers it, whether the
+  trigger can be spoofed (an MQTT topic anyone can publish to, a webhook, an NFC tag, presence that a
+  shared phone can fake, a voice command), and whether it has conditions (time, presence of a specific
+  person, confirmation).
+- **Webhook triggers**: the webhook ID is the only secret and the endpoint is unauthenticated by design;
+  check whether "local only" is set and whether a webhook can unlock or disarm anything.
+- Alarm panels (manual or template): code required to disarm and arm.
+- Lock and cover entities exposed in dashboards to all users, or to wall tablets in kiosk mode with a
+  logged-in session or a trusted-network bypass.
+- Presence-based automations that disarm on "home": who can make the house think someone is home.
+
+#### I. Secrets, backups, and data protection
+
+- `secrets.yaml`: exists and is used for credentials in YAML (vendor checklist), file permissions on the
+  host (Container/Core), and whether the config directory is in a git repository or synced anywhere
+  (check `.gitignore` covers `secrets.yaml`, `.storage/`, databases, and backups). Remember `secrets.yaml`
+  is not encrypted.
+- Backups (Settings → System → Backups): automatic backups configured, schedule, retention, locations
+  (local, network storage on HAOS, Home Assistant Cloud, other integrations such as a NAS or cloud drive).
+  Backups are encrypted by default; check whether encryption has been **turned off** for any location
+  (it can't be turned off for Home Assistant Cloud). Unencrypted backups contain every secret, token, and
+  credential.
+- Emergency kit (encryption key): stored somewhere safe and separate from the backups; not on the instance
+  itself, not in the same cloud folder as the backups.
+- Whether a restore has been tested, and whether backups include the database the household cares about.
+  External MariaDB/PostgreSQL databases are not included unless they run as an app on HAOS.
+
+#### J. Recorder, history, and privacy
+
+- Recorder: database (default SQLite `home-assistant_v2.db` in the config directory, or an external
+  database via `db_url`, whose URL embeds a password: should be in `secrets.yaml`). Retention
+  (`purge_keep_days`, default 10). The history reveals presence, routines, and when the home is empty.
+- Include/exclude filters: whether precise location (device trackers, GPS attributes) and camera-related
+  data are recorded longer than needed.
+- Who can read the database (external database grants, apps with database access, backups).
+- Logbook and history exposure to all users (all users can see them; see principles).
+- Long-term statistics and energy data shared with external services.
+
+#### K. Logging, monitoring, and notifications
+
+- Log level: debug logging left on for integrations that log tokens or payloads.
+- Notifications for failed logins and new IP bans (Home Assistant creates persistent notifications), and
+  whether anyone reads them.
+- Whether logs are forwarded off the device (syslog app, a log-collection integration); on HAOS, logs are
+  in the systemd journal and may not survive reinstall.
+- Notifications for new devices, new users, and updates.
+
+#### L. Host, physical, and availability
+
+- HAOS: physical/VM console access gives an owner-password reset (`auth reset` from the console), so the
+  console is part of the trust boundary. Who can reach the board, its storage medium (an SD card or disk
+  can be read on another machine), or the hypervisor?
+- Container/Core: host OS updates, SSH hardening (vendor checklist: no root login, keys only), Docker group
+  membership, and permissions on the config directory.
+- Radios (Zigbee/Z-Wave/Thread dongles): physical security and backups of their network keys.
+- What fails if the instance is down (locks, heating, alarms) and whether those devices keep working
+  locally without Home Assistant.
+
+---
+
+## Recommend
+
+No changes are made in this mode. For each finding, produce a recommendation using the core finding
+template, including **Dependencies / blast radius** and the **operation class**.
+
+### Dependency and blast-radius check (required)
+
+Home Assistant usually sits in the middle of the household's daily routine, so list what depends on the
+setting before recommending a change:
+
+- **Household members and their devices:** who logs in from where (Companion app, browser, wall tablets in
+  kiosk mode), and which of those rely on `trusted_networks`, remote URLs, or the current port.
+- **Remote access path:** Home Assistant Cloud, proxy, tunnel, or port forward that the Companion apps are
+  configured with. Changing it breaks location updates and notifications until each app is updated.
+- **Tokens:** every external system using a long-lived token (dashboards, scripts, voice, AI agents,
+  Node-RED, other hosts).
+- **Automations:** anything that unlocks, disarms, opens, or heats, including what happens if a trigger
+  stops firing (doors that no longer lock at night, heating that no longer turns on).
+- **Apps and custom integrations:** what depends on each before removal (for example, an MQTT broker app
+  used by Zigbee2MQTT and cameras).
+- **Integrations with cloud accounts:** rotating a password at the vendor breaks the integration until it
+  is reauthenticated.
+- **Updates:** breaking changes listed in the release notes for each integration in use.
+
+### Recommendation guidance
+
+| Area | Typical recommendation | Consequences to explain |
+|---|---|---|
+| Unsupported install type (Supervised/Core) | Migrate to HAOS or Container via a backup and restore. | Planned project; apps (Supervised) don't exist on Container; downtime during migration. |
+| Behind on updates | Update Core monthly; update OS and Supervisor; read release notes first. | Restart; integrations with breaking changes may need fixes; take a backup first. |
+| Port forward to the UI | Remove it; use Home Assistant Cloud, a VPN, or an authenticated reverse proxy/tunnel. | Companion apps need the new URL; test before removing the forward. |
+| No MFA | Enable TOTP for every user, starting with admins and remote users. | Each person needs an authenticator app; keep owner recovery (console) in mind. |
+| Broad `trusted_networks` | Remove it, or narrow it to a single kiosk address mapped to a dedicated non-admin user, with `homeassistant` as fallback. | Kiosks and household members must log in; non-admin is still not a boundary. |
+| Trusted proxies too broad | List only the proxy's address or network; enable IP banning. | Misconfiguration blocks proxied access ("requests from untrusted proxies are blocked"). |
+| IP banning off or unlimited attempts | Enable bans with a low threshold. | Users who mistype repeatedly get banned; unbanning means editing `ip_bans.yaml` and restarting. |
+| Too many admins | Remove admin from accounts that don't need it. | Cosmetic only (all users are trusted); real protection is fewer accounts and MFA. |
+| Unknown or stale tokens | Delete them; create one dedicated token per integration and record where it lives. | Whatever used the token stops working. |
+| App with protection mode off / Docker API / full access | Re-enable protection mode or remove the app; replace with an app that needs less. | The app may lose functions that need host access. |
+| App exposes its own port | Disable the port and use ingress. | Direct access from other devices stops. |
+| Third-party app repositories or custom integrations not needed | Remove them. | Features they provide stop; automations using their entities break. |
+| Unvetted custom integration controlling locks/alarms | Prefer a core integration; otherwise pin and review updates. | Possible loss of features. |
+| Spoofable trigger on unlock/disarm | Add conditions (specific person present, confirmation, time window), or remove the automation. | Less convenient; test the replacement while someone is home. |
+| Webhook can unlock/disarm | Use local-only webhooks and a long random ID, or remove. | Integrations calling the webhook from outside stop. |
+| Unencrypted backups | Turn encryption back on; store the emergency kit separately. | Losing the kit means losing the backups. |
+| No off-device backup | Add an encrypted backup location off the device. | The destination holds every secret; protect it. |
+| Recorder keeps sensitive data | Exclude device trackers/location attributes or shorten retention. | Less history; some dashboards lose data. |
+| UI reachable from IoT/guest segments | Block those segments from the UI port at the firewall. | Devices that call the API from those segments break. |
+| Debug logging left on | Return to the default level. | Less detail for troubleshooting. |
+
+Changing the port and hiding the instance behind an unusual hostname are supplementary only. Never
+recommend them as the main fix.
+
+Group the plan: immediate containment (if any) → urgent fixes (internet exposure, missing MFA on remote
+users, spoofable unlock/disarm automations, unsupported install) → high-priority hardening (apps,
+custom integrations, tokens, backups) → routine maintenance → optional defense in depth. Then ask for
+approval (core: modes and authorization).
+
+---
+
+## Remediate
+
+Apply only approved changes, one at a time, following the core rules. Home Assistant specifics:
+
+- **Before any change:** take a full, encrypted backup and confirm it completed; on a VM, also take a
+  snapshot. Confirm the user has the emergency kit.
+- **Use the UI or documented APIs.** Don't hand-edit files in `.storage/`.
+- **Keep a way back in.** Keep an admin session open while changing auth providers, HTTP server, proxy,
+  or MFA settings, and test from a second browser or device. HTTP server changes made in the UI (2026.8+)
+  restart Home Assistant and revert after 5 minutes unless an admin confirms them; use that window to
+  test. Confirm console access (physical or VM) works before touching authentication: it's the vendor's
+  recovery path for a lost owner password.
+- **Auth providers and `http:` YAML changes** (older versions) need a restart and a configuration check
+  first (Developer tools → YAML → check configuration, or the CLI equivalent).
+- **Physical-world changes:** before changing or disabling an automation that locks, arms, or heats, tell
+  the user what will no longer happen automatically, and make the change when someone is home. Never
+  trigger lock, alarm, cover, or valve actions to test.
+- **Updates:** read the release notes' breaking-changes section for integrations in use; update Core, then
+  check Repairs and logs; update OS and Supervisor separately. Don't update and change configuration in
+  the same step.
+- **Removing apps or custom integrations:** list the entities and automations that use them first;
+  remove one at a time and restart.
+- **Token cleanup:** delete one token at a time and confirm with the user which system stops working, if
+  any.
+- **If you lose access:** use the console (`auth reset` on HAOS; the documented `hass --script auth`
+  method on Container), revert the YAML change, or restore the backup or snapshot.
+
+After each change, follow the core "after a change" steps: re-read the setting, confirm login (local and
+remote), Companion app connectivity, automations still listed and enabled, and Repairs and logs clean.
+
+### Hard stops (refer to a specialist or do manually; never automate)
+
+- Triggering, testing, or disabling lock, alarm, garage, gate, or valve actions without the user present
+  and agreeing.
+- Hand-editing `.storage/` files (auth, config entries) or restoring a backup over a running instance as
+  "remediation".
+- Turning off app protection mode, or granting an app host, Docker, or full access.
+- Deleting backups, the emergency kit, or the recorder database.
+- Factory reset or reinstall as a security fix (that's Respond, with evidence preserved first).
+- Changing remote access (removing Home Assistant Cloud, a tunnel, or a port forward) when the user is
+  remote and relies on it, without a tested alternative.
+
+---
+
+## Respond
+
+On any P0 indicator, switch to Respond immediately. Follow the core playbook plus the Home
+Assistant-specific steps in [incident-response.md](incident-response.md).
+
+---
+
+## Worked example (invented)
+
+### HA-001: Trusted-networks bypass covers the whole LAN while the UI is port-forwarded
+
+**Confidence:** Confirmed
+**Priority:** P1. The instance controls the front-door lock and alarm. Anyone on the LAN (including the IoT
+and guest Wi-Fi, which share it) can log in as any listed user with no password and no MFA, and the UI is
+also reachable from the internet.
+**State:** Open
+**Component:** Auth providers and HTTP server, Home Assistant OS, Core 2026.x
+**Evidence:** Observed 2026-01-16: `configuration.yaml` contains a `trusted_networks` provider listing
+`192.0.2.0/24` (the whole LAN) with `allow_bypass_login: true`, ahead of the `homeassistant` provider.
+The user confirmed the router forwards TCP 8123 to `192.0.2.20`. With approval, an external check from
+`198.51.100.7` loaded the Home Assistant login page. Settings → People shows two admins without the
+Authenticator app enabled. IP banning is off.
+**Expected secure state:** no direct port forward (vendor checklist: don't expose the instance directly);
+no trusted-network bypass, or one narrowed to a single kiosk mapped to a non-admin user; MFA on all users;
+IP banning on.
+**Exposure and prerequisites:** LAN: none (any device on the LAN). Internet: valid credentials or a
+vulnerability; no MFA. A compromised IoT device on the LAN gets admin with no credentials.
+**Dependencies / blast radius:** a wall tablet in the hallway relies on the bypass; two Companion apps use
+the port-forwarded URL; the user has Home Assistant Cloud available but not enabled.
+**Recommended remediation:** (1) enable Home Assistant Cloud remote UI and switch the Companion apps to it;
+(2) remove the port forward; (3) enable TOTP for both admins; (4) narrow `trusted_networks` to the
+tablet's address `192.0.2.30` mapped to a dedicated non-admin user, disable `allow_bypass_login`, keep
+`homeassistant` as fallback; (5) enable IP banning.
+**Operation class:** C2 (changes every household member's login and remote access).
+**Approval required:** Yes, per step.
+**Verification:** external check no longer reaches the login page; Companion apps work over the cloud URL;
+a LAN laptop gets a password prompt; the tablet shows only its dedicated user; both admins prompted for a
+TOTP code.
+**Rollback:** restore the previous `auth_providers` block from the pre-change backup and restart; re-add
+the port forward only as a last resort.
+
+---
+
+## Version history
+
+- **1.0** (2026-10-30): Initial version.

@@ -1,0 +1,54 @@
+# Media Servers and Transcoding: References
+
+Always prefer current vendor documentation; settings and menus change between releases. Re-verify links
+and contents when updating this skill.
+
+Last verified: 2026-10-30
+
+## Vendor (authoritative)
+
+- Plex security and product announcements (forum): https://forums.plex.tv/c/announcements/
+- Plex October 2026 security update (Media Server 1.43.2 and earlier, exploited chain, compromise checks):
+  https://forums.plex.tv/t/important-security-update-for-plex-media-server-v1-43-2-and-earlier/942319
+- Plex Media Server release notes: https://forums.plex.tv/t/plex-media-server/30447
+- Plex network ports: https://support.plex.tv/articles/201543147-what-network-ports-do-i-need-to-allow-through-my-firewall/
+- Plex network settings (secure connections, allowed without auth, LAN networks, relay):
+  https://support.plex.tv/articles/200430283-network/
+- Plex relay: https://support.plex.tv/articles/216766168-accessing-a-server-through-relay/
+- Plex advanced hidden server settings (Preferences.xml / registry):
+  https://support.plex.tv/articles/201105343-advanced-hidden-server-settings/
+- Plex two-factor authentication and account security: https://support.plex.tv/ (search "two-step
+  verification")
+- Jellyfin security advisories: https://github.com/jellyfin/jellyfin/security/advisories
+- Jellyfin releases: https://github.com/jellyfin/jellyfin/releases
+- Jellyfin networking (ports, discovery, remote access): https://jellyfin.org/docs/general/post-install/networking/
+- Jellyfin reverse proxy (Known Proxies, `api_key` in URLs):
+  https://jellyfin.org/docs/general/post-install/networking/reverse-proxy/
+- Jellyfin users (administrator, lockout, media deletion, hidden users): https://jellyfin.org/docs/general/server/users/
+- Jellyfin plugins and repositories: https://jellyfin.org/docs/general/server/plugins/
+- Jellyfin hardware acceleration (per-vendor guides, Docker device mapping):
+  https://jellyfin.org/docs/general/post-install/transcoding/hardware-acceleration/
+- Jellyfin backup and restore: https://jellyfin.org/docs/general/administration/backup-and-restore/
+- Emby security advisory 2023-05 (backdoor plugin, remediation): https://emby.media/support/articles/advisory-23-05.html
+- Emby support articles and release notes: https://emby.media/support/ and https://emby.media/community/
+- Tdarr authentication (auth on by default since 3.00.00, API keys, node `apiKey`):
+  https://docs.tdarr.io/docs/other/authentication
+- Tdarr configuration variables (ports, bind settings, `cronPluginUpdate`):
+  https://docs.tdarr.io/docs/installation/variables
+- Tdarr flow plugins (including Run CLI): https://docs.tdarr.io/docs/plugins/flow-plugins/basics
+
+Generic vulnerability and incident sources (CISA KEV, NVD, CVE, CISA ransomware guidance, IC3) are listed in
+the core documents. CISA KEV lists Plex Media Server vulnerabilities; search it for the product.
+
+## Third-party (not authoritative)
+
+- Help Net Security, CVE-2025-34158 coverage:
+  https://www.helpnetsecurity.com/2025/08/27/plex-media-server-cve-2025-34158-attack/
+  Context on the August 2025 Plex update and internet exposure counts; check Plex's own notice for
+  versions.
+- The Hacker News, LastPass breach and the unpatched Plex server:
+  https://thehackernews.com/2023/03/lastpass-hack-engineers-failure-to.html
+  Background for why home media servers matter to work security.
+- BetaNews, September 2025 Plex account-data incident:
+  https://betanews.com/2025/09/09/plex-suffers-data-breach-warns-customers-to-change-passwords/
+  Summary of what Plex disclosed and the required password reset.

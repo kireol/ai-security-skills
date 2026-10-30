@@ -1,0 +1,97 @@
+# Home Assistant: Respond (Incident Response)
+
+Use with the core playbook, [incident-response.md](../../../core/incident-response.md), which always
+applies. This file adds only Home Assistant-specific steps.
+
+A compromised Home Assistant instance is a compromised home: it can unlock doors, disarm alarms, turn off
+cameras, and reveal when nobody is home, and it holds credentials for every integrated cloud account and
+local device. **Physical safety comes before evidence.** If locks, alarms, or garage doors may be under an
+attacker's control, the first step is to secure them manually.
+
+## Triage and containment
+
+- **Indicators:** unknown users, admins, long-lived tokens, or signed-in devices; logins from unknown
+  addresses or new IP bans the user can't explain; apps, app repositories, custom integrations, or
+  Marketplace/HACS repositories nobody installed; protection mode turned off on an app; new or edited
+  automations, scripts, webhooks, or `shell_command`/`command_line` entries; locks unlocking or alarms
+  disarming at odd times (logbook); `trusted_networks` or trusted-proxy settings changed; encryption turned
+  off on a backup location; unusual outbound connections from the host.
+- **Physical safety first:** have the user lock doors manually, check the garage and gates, and arm the
+  alarm from its own panel or vendor app. Consider switching smart locks to a mode that ignores remote
+  commands, if the lock supports it.
+- **Cut remote paths, keep local console:** disable Home Assistant Cloud remote UI (from the Nabu Casa
+  account or the instance), remove port forwards or stop the tunnel/proxy at the router or proxy host, and
+  disconnect VPN peers. If the instance itself may be running attacker code, isolate it at the switch,
+  firewall, or hypervisor (VM network detach) rather than through Home Assistant's own settings.
+- **Don't power off, reset, or restore yet.** Restoring a backup overwrites `.storage` and logs. Capture
+  evidence first unless destruction or physical danger is ongoing.
+- **Stop automations, not the instance,** if a malicious automation is acting on devices: disable that
+  automation (record its YAML first) or stop Home Assistant Core while leaving the host and logs intact.
+
+## Evidence to preserve (Home Assistant-specific)
+
+Collect from the console or a clean admin workstation, before changing anything. Treat every artifact
+here as secret material: store it encrypted and never upload it to third-party services.
+
+- A **full backup** (encrypted) taken now, plus the list of existing backups with dates. Older backups are
+  your baseline for diffing; don't delete any.
+- Users, admin flags, MFA status, long-lived tokens (names, created, last used), and refresh tokens or
+  signed-in devices per user (screenshots).
+- `configuration.yaml` and included files (auth providers, `http`, `shell_command`, `command_line`,
+  `rest_command`), and the automations, scripts, and scenes files. Copy files; don't print secrets.
+- Installed apps, their repositories, versions, protection mode, and privileges; custom integrations
+  (`custom_components` listing with file timestamps); Marketplace/HACS repositories including custom ones.
+- Logs: Home Assistant core log (`home-assistant.log` or the log viewer, including the previous run's
+  log), Supervisor and host logs on HAOS (`ha supervisor logs`, `ha host logs`; verify on the installed
+  version), app logs, proxy or tunnel logs, and router/firewall logs for the instance's address.
+- `ip_bans.yaml` and persistent notifications about failed logins.
+- Logbook and history for locks, alarm panels, covers, cameras, and presence around the suspected window;
+  the recorder database file if the user agrees (it contains personal data).
+- On a VM: a snapshot (with memory if available) before any change.
+
+## Scope checks specific to Home Assistant
+
+- **Every integration credential** was readable by an admin or by malicious code: smart lock, alarm,
+  camera, vehicle, energy, voice, email, notification, and AI service accounts; check each vendor account
+  for new sessions, shared users, or API keys.
+- **Physical access events:** lock and alarm vendor logs (independent of Home Assistant) for unlocks and
+  disarms during the window.
+- **The MQTT broker** and everything on it (use the [mqtt](../mqtt/SKILL.md) skill): Home Assistant's broker
+  credentials can publish to every device topic.
+- **Local radio networks:** Zigbee network key, Z-Wave keys, Thread credentials, and Matter fabrics.
+- **Systems holding Home Assistant tokens:** dashboards, scripts on other hosts, Node-RED, AI/MCP agents.
+- **Backup destinations:** NAS shares, cloud drives, and the location of the emergency kit.
+- **The host and neighbors:** on Container/Core, the host OS and other containers; on HAOS, apps with host
+  or Docker access imply the host and everything the host can reach; on a VM, the hypervisor.
+- Mobile devices running the Companion app, if a user's session or device was the entry point.
+
+## Eradication and recovery
+
+- If a malicious app, custom integration, or code execution path was involved, **rebuild**: install a
+  fresh HAOS or Container from the vendor's published images (verify checksums where published) and
+  restore from a backup taken **before** the earliest plausible compromise. Diff that backup's
+  configuration against the compromised one (automations, auth providers, `custom_components`, apps) so
+  you don't restore the attacker's changes.
+- **Rotate everything the instance held:** every user password; delete all long-lived tokens and refresh
+  tokens and reissue only needed ones; reauthenticate every cloud integration after changing its
+  account password at the vendor (and revoke old OAuth grants in the vendor's account settings); MQTT
+  broker passwords; database passwords in `db_url`; SSH keys and passwords for terminal apps; the backup
+  encryption key (download a new emergency kit; old backups keep the old key); Home Assistant Cloud
+  account password and MFA. Consider re-keying Zigbee/Z-Wave networks if their keys were exposed (a large
+  project; plan it with the user).
+- Reinstall only apps and custom integrations that are still needed, from their official sources.
+- Before reconnecting remote access: MFA on every user, no `trusted_networks` bypass beyond a reviewed
+  kiosk, no port forward, trusted proxies exact, IP banning on, protection mode on for all apps, backups
+  encrypted, and lock/alarm automations reviewed line by line with the user.
+
+## Quick checklist tailored for Home Assistant
+
+Start with the core quick checklist, plus:
+
+- [ ] Secure the home physically: lock doors, close the garage, arm the alarm from its own panel or app.
+- [ ] Cut remote access (Home Assistant Cloud remote UI, port forwards, tunnels, VPN peers); keep console
+      access.
+- [ ] Take an encrypted backup and screenshots of users, tokens, apps, and custom integrations before
+      changing anything.
+- [ ] Check lock and alarm vendor logs independently of Home Assistant.
+- [ ] Plan a rebuild from a pre-compromise backup and rotate every credential the instance held.

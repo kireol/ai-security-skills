@@ -1,0 +1,615 @@
+---
+name: macos
+description: >-
+  Security assessment, hardening, remediation, and incident response for Apple Macs running macOS: personal
+  and work laptops and desktops, and Macs used as always-on home or homelab servers. Use when auditing a
+  Mac's update status, FileVault, firewall, Gatekeeper/XProtect/SIP, accounts and login settings, sharing
+  services (SSH, Screen Sharing, File Sharing, Remote Management), privacy permissions, login and
+  background items, LaunchAgents/LaunchDaemons, Homebrew, Docker Desktop, MDM profiles, backups, or Find
+  My, or when a Mac may have been compromised.
+license: CC-BY-4.0
+metadata:
+  version: "1.0"
+  last_reviewed: "2026-10-30"
+  applies_to: "macOS on Apple silicon and Intel Macs, current major release and the two before it (verify the live version; System Settings names and locations change between releases)"
+  audience: "home, work, homelab"
+  finding_prefix: "MAC"
+  modes: "discover, recommend, remediate, respond"
+---
+
+# macOS Security
+
+Act as a careful, evidence-driven Mac security engineer. A Mac usually holds its owner's most valuable
+access: the Apple Account and iCloud Keychain, browser sessions, SSH keys, cloud and developer tokens,
+password managers, and backups of everything. An always-on Mac server adds exposed network services and
+unattended operation. Identify, explain, prioritize, remediate (only when authorized), and verify weaknesses
+that could lead to theft of data or credentials, persistent compromise, unauthorized remote access, or loss
+of data, without breaking the user's work or locking them out of their own machine.
+
+## How to use this skill
+
+This skill holds only macOS-specific guidance. It builds on the shared core, which always applies:
+
+| Core document | Covers |
+|---|---|
+| [modes-and-authorization.md](../../../core/modes-and-authorization.md) | The four modes, transitions, operation classes (R/C1/C2/C3), standing authorization |
+| [operating-principles.md](../../../core/operating-principles.md) | Principles, capability discovery, scope, communication, untrusted data |
+| [vulnerability-triage.md](../../../core/vulnerability-triage.md) | Lifecycle, CVE/KEV validation, P0–P4 priority scale |
+| [evidence-and-reporting.md](../../../core/evidence-and-reporting.md) | Evidence labels, statuses, finding template, report format, cadence |
+| [tool-use-contract.md](../../../core/tool-use-contract.md) | Rules for commands, APIs, MCP tools, and third-party integrations |
+| [reporting-protocol.md](../../../core/reporting-protocol.md) | Optional live progress reporting to a dashboard |
+| [incident-response.md](../../../core/incident-response.md) | The generic Respond playbook |
+
+macOS-specific Respond steps are in [incident-response.md](incident-response.md). Vendor documentation and
+advisories are in [references.md](references.md).
+
+## macOS-specific principles
+
+- **Only the current major release gets every fix.** Apple publishes security updates for the current
+  major macOS release and usually for the two before it, but its deployment documentation states that,
+  because of architecture and system changes, *not all known security issues are addressed in previous
+  versions*. Treat "two versions back" as reduced protection, not full support. A Mac that has stopped
+  receiving updates for its major version (or whose hardware can't run a supported one) is an end-of-life
+  finding under core triage. Check the live Apple security releases page; don't rely on memory.
+- **Apple silicon versus Intel matters.** Apple stated that macOS Tahoe 26 is the last release for Intel
+  Macs; at last review, macOS 27 runs only on Apple silicon (verify against Apple's current compatibility
+  list). Intel Macs therefore move onto the "previous versions" track and eventually out of support.
+  Startup security, Activation Lock, and some features (such as remote FileVault unlock over SSH) also
+  differ by architecture.
+- **Rapid Security Responses are now Background Security Improvements.** Apple's deployment guide
+  describes Background Security Improvements: security fixes delivered between full updates, only to the
+  latest minor version of the latest OS. Some need a restart, and users can remove them. Check the name and
+  setting on the installed version; the automatic-updates option on recent versions is labeled "Install
+  Security Responses and system files", and Background Security Improvements also have their own entry in
+  Privacy & Security.
+- **Many settings need the GUI, Full Disk Access, or user approval.** macOS protects privacy settings (TCC),
+  login items, system extensions, and MDM enrollment with user consent that a script can't give. A terminal
+  without Full Disk Access sees less (some `systemsetup` queries and the TCC databases fail). Report
+  "couldn't read" as **Not assessed**, never as Pass, and never ask the user to grant the agent's terminal
+  Full Disk Access just to finish a check without explaining what that grants.
+- **A work Mac belongs to the employer.** If the Mac is enrolled in MDM or runs the employer's security
+  tools, the employer's policy and IT/security team decide what changes. Assess and report; don't remove
+  profiles, agents, or restrictions. Settings enforced by a configuration profile must be changed in the
+  MDM, not on the Mac.
+- **The keychain and home directory are secrets.** Never print keychain items, private keys, or credential
+  files. Report that a secret exists, where, its permissions and age, never its value.
+- **Prefer System Settings and vendor tools over editing plists.** Many preference files are cached by
+  daemons, and hand edits are unsupported or silently ignored. `defaults read` is a read; `defaults write`
+  is a change.
+- **The firewall is per app, not per port.** The macOS application firewall allows or blocks incoming
+  connections by app or service. It doesn't filter outbound traffic, and some built-in and signed software
+  may be allowed without appearing in its list. Don't describe it as a port filter.
+
+## Deployment variants
+
+| Variant | How to recognize it | What changes |
+|---|---|---|
+| **Personal laptop or desktop** | One or a few local users; signed into a personal Apple Account; no MDM enrollment. | Loss and theft dominate: FileVault, screen lock, Find My, and backups come first. The user can approve any change. |
+| **Work Mac (employer-managed)** | `profiles status -type enrollment` shows MDM enrollment; configuration profiles present; employer security agents installed. | The employer controls policy. Many settings are enforced and read-only locally. Report gaps to the user and suggest they raise them with IT; don't change managed settings or remove agents. Check scope with the user before any assessment of a work device. |
+| **Personal Mac with a work profile** (user-enrolled or account-driven enrollment) | Enrollment present but limited; a managed Apple Account or work apps. | The organization manages only part of the device. Don't touch the managed portion. |
+| **Always-on home or homelab server** (often a Mac mini or Mac Studio) | Headless or rarely used display; sleep disabled; sharing services and many LaunchDaemons/LaunchAgents; Homebrew services or Docker Desktop; often automatic login. | Network exposure and unattended restart dominate. Trade-offs between FileVault, automatic login, and recovery after power loss must be made explicitly (domain M). |
+| **Developer workstation** | Xcode or Command Line Tools, Homebrew, language package managers, Docker Desktop, many tokens in dotfiles. | Supply-chain and secret-sprawl risks; local services listening on all interfaces; Developer Tools privacy permission granted to terminals. |
+| **Shared family Mac** | Several local accounts; Screen Time; possibly a guest account. | Admin rights should be limited to the person responsible; Screen Time and parental restrictions affect what changes are possible. |
+| **Virtualized macOS** (a macOS guest on a Mac host) | Virtual hardware model; hypervisor tools. | The host is part of the trust boundary. Some features (Find My, Activation Lock, some startup security settings) may be absent or different. |
+
+## Detection
+
+Hints for recognizing this product during a network inventory (used by the `full-assessment` skill).
+Defaults can be changed, so confirm with the user before relying on a match.
+
+- **mDNS/Bonjour (UDP 5353)** is the strongest signal. Macs commonly advertise `_device-info._tcp`, whose
+  TXT record often includes a `model=` value naming the Mac model family (for example `Macmini…`,
+  `MacBookPro…`, `Mac…`), and `_companion-link._tcp`. Sharing services add their own service types:
+  `_ssh._tcp` and `_sftp-ssh._tcp` (Remote Login), `_rfb._tcp` (Screen Sharing), `_smb._tcp` (File
+  Sharing), `_afpovertcp._tcp` (legacy AFP file sharing, on versions that still offer it),
+  `_net-assistant._udp` (Remote Management / Apple Remote Desktop), `_eppc._tcp` (Remote Apple Events), and
+  `_airplay._tcp` / `_raop._tcp` (AirPlay Receiver). Also seen: `_ipp._tcp` (Printer Sharing) and
+  `_adisk._tcp` (a Mac sharing a Time Machine destination). Advertised names are often "<person>'s
+  MacBook"-style; treat them as personal data and don't copy them into reports.
+- **Typical open ports when sharing is on** (Apple's port list): TCP 22 (Remote Login), TCP 5900 (Screen
+  Sharing / VNC, with UDP 5900–5902 for media), TCP/UDP 3283 (Remote Management), TCP 445 (SMB File
+  Sharing), TCP 548 (AFP, legacy), TCP 3031 (Remote Apple Events), TCP 5000 and 7000 (AirPlay Receiver).
+  With every sharing service off and stealth mode on, a Mac may answer almost nothing, including ping.
+- **MAC addresses:** wired Ethernet and the hardware Wi-Fi address use OUIs registered to Apple. Since
+  macOS Sequoia 15, Wi-Fi defaults to a **private Wi-Fi address** (Fixed per network on WPA2-or-better
+  networks, Rotating on open or weak ones), which is a locally administered address with no vendor match.
+  An "unknown vendor" Wi-Fi client may still be a Mac; a Mac may also change address after the network is
+  forgotten.
+- Docker Desktop, Homebrew services, and developer servers on a Mac expose their own ports; classify them
+  with their own skills, but record that the host is a Mac.
+
+---
+
+## Discover
+
+All operations in this mode are class **R** (read-only). Confirm scope and access first (core: operating
+principles), including who owns the Mac and whether it is managed by an employer. Mark anything you can't
+inspect **Not assessed**.
+
+### Access and baseline
+
+Prefer System Settings walkthroughs with the user, or user-run commands, over broad shell access. Many
+checks need `sudo`; ask before using it and explain why. These are *candidate* read-only commands. Those
+with Apple man pages or Apple documentation are marked; all others are **not yet verified** on every
+version. Check each one exists (`man <cmd>`, `which <cmd>`) before relying on its output.
+
+```sh
+# Version, hardware, updates
+sw_vers                                   # product version and build (vendor-documented man page)
+system_profiler SPSoftwareDataType SPHardwareDataType   # OS, model, chip; omit serial numbers from reports
+softwareupdate --list                     # pending updates (contacts Apple; installs nothing)
+softwareupdate --history                  # installed updates (not yet verified on every version)
+
+# Platform integrity
+csrutil status                            # SIP status (read-only form only)
+csrutil authenticated-root status         # signed system volume enforcement (not yet verified)
+spctl --status                            # Gatekeeper assessments enabled or disabled
+xprotect version                          # XProtect version, macOS 15+ (not yet verified)
+fdesetup status                           # FileVault on/off (vendor-documented man page)
+sudo fdesetup list                        # users able to unlock FileVault (names only)
+fdesetup hasinstitutionalrecoverykey; fdesetup haspersonalrecoverykey   # (not yet verified)
+
+# Firewall (socketfilterfw is widely used but not documented in Apple's user guides: not yet verified)
+/usr/libexec/ApplicationFirewall/socketfilterfw --getglobalstate
+/usr/libexec/ApplicationFirewall/socketfilterfw --getstealthmode
+/usr/libexec/ApplicationFirewall/socketfilterfw --getblockall
+/usr/libexec/ApplicationFirewall/socketfilterfw --listapps
+
+# Accounts and login
+dscl . -list /Users UniqueID              # local accounts (ignore system accounts below UID 500)
+dscl . -read /Groups/admin GroupMembership   # who is an administrator
+defaults read /Library/Preferences/com.apple.loginwindow autoLoginUser   # set only if auto-login is on
+sysadminctl -guestAccount status          # (not yet verified)
+ls -l /etc/sudoers.d/                     # extra sudo rules (names and permissions; read contents with sudo)
+
+# Network exposure
+sudo lsof -nP -iTCP -sTCP:LISTEN          # listening TCP sockets with owning process
+sudo lsof -nP -iUDP                       # UDP sockets
+netstat -anv -p tcp | grep LISTEN         # alternative view
+sudo systemsetup -getremotelogin          # Remote Login state (may need Full Disk Access)
+sharing -l                                # shared folders (not yet verified)
+ls /etc/ssh/sshd_config.d/; sshd -T 2>/dev/null | grep -Ei 'passwordauth|permitroot|kbdinteractive'
+
+# Persistence and background items
+sudo sfltool dumpbtm                      # login and background items (vendor-documented, deployment guide)
+launchctl list                            # jobs loaded for the current user
+sudo launchctl list                       # system jobs
+launchctl print-disabled system           # disabled system services
+ls -la /Library/LaunchDaemons /Library/LaunchAgents ~/Library/LaunchAgents
+crontab -l; sudo crontab -l               # legacy cron jobs
+systemextensionsctl list                  # system extensions (network, endpoint security, drivers)
+kmutil showloaded --list-only | grep -v com.apple   # third-party kexts (not yet verified)
+
+# Management, backups, power
+profiles status -type enrollment          # MDM / Automated Device Enrollment status
+sudo profiles show -all                   # installed configuration profiles (not yet verified flags)
+tmutil destinationinfo; tmutil latestbackup   # Time Machine destinations and last backup
+tmutil listlocalsnapshots /               # local APFS snapshots
+pmset -g; pmset -g custom                 # sleep, wake-on-network, restart after power failure
+
+# Third-party software
+brew --version; brew list --versions; brew services list; brew tap   # Homebrew, if installed
+docker version; docker ps --format '{{.Names}} {{.Ports}}'          # Docker Desktop, if installed
+```
+
+**Never run, in any mode, as part of this skill:**
+
+- Anything that lowers platform security: `csrutil disable`, `csrutil clear`, `csrutil authenticated-root
+  disable`, `spctl --master-disable` or `--global-disable`, `bputil` or Startup Security Utility changes,
+  `nvram` writes, or `xattr -d com.apple.quarantine` / `xattr -cr` on downloaded software.
+- Anything that prints secrets: `security dump-keychain`, `security find-generic-password -w` or
+  `find-internet-password -w`, reading private keys (`~/.ssh/id_*`), `~/.aws/credentials`, `.env` files,
+  `~/.netrc`, browser credential stores, or the FileVault recovery key.
+- Anything that destroys data or evidence: `diskutil eraseDisk`/`eraseVolume`/`apfs deleteVolume`,
+  `tmutil delete`, `tmutil deletelocalsnapshots`, `tmutil thinlocalsnapshots`, Erase All Content and
+  Settings, `startosinstall --eraseinstall`, `log erase`, or deleting launch plists.
+- Wholesale resets: `sfltool resetbtm`, `tccutil reset All`, `profiles remove`, `fdesetup disable`,
+  `fdesetup changerecovery` / `removerecovery`.
+- Anything that opens access: the Apple Remote Desktop `kickstart` script, `systemsetup -setremotelogin
+  on`, enabling sharing services, or adding SSH keys.
+- Default-credential testing, password guessing against SSH, Screen Sharing, or SMB, and exploit scripts.
+
+`launchctl bootout`/`unload`/`disable`, `defaults write`, `pmset` settings, `softwareupdate --install`,
+and `brew upgrade` are changes (C1 or higher), not reads.
+
+### Assessment domains
+
+Every domain must end with a status in the report (Pass / Finding / Not assessed / Not applicable /
+Accepted risk).
+
+#### A. Version, lifecycle, and updates
+
+- Installed macOS version and build (`sw_vers`) against Apple's security releases page: is this the latest
+  update for this major version, and is the major version the current one, one back, or two back?
+- Whether this major version still receives security updates at all, and whether the hardware can run the
+  current release (Intel Macs top out at macOS Tahoe 26; verify). If not, it's an end-of-life finding.
+- System Settings → General → Software Update → Automatic Updates: "Download new updates when available",
+  "Install macOS updates", and "Install Security Responses and system files" (verify names on the
+  installed version). Also the Background Security Improvements setting in Privacy & Security.
+- Pending updates (`softwareupdate --list`), and whether any are waiting only on a restart. Always-on
+  servers are often months behind because nobody wants to restart them.
+- Whether an MDM defers updates (deferral delays Background Security Improvements too, because they only
+  target the latest minor version).
+- App Store app updates and third-party apps' own updaters (browsers, Zoom-style meeting clients, VPN
+  clients); stale apps with known exploited vulnerabilities are common findings.
+- XProtect and other security data updates: check recent install history for XProtect and related
+  security data entries; a Mac that hasn't received these for weeks may have automatic system-file
+  updates off.
+
+#### B. Platform integrity (SIP, Gatekeeper, XProtect, startup security)
+
+- **System Integrity Protection** enabled (`csrutil status`). SIP is on by default; it can be turned off
+  only from recoveryOS. A disabled or customized SIP on a Mac that isn't a known kernel-development or
+  research machine is a high-priority finding and possibly an indicator of compromise; ask before
+  assuming either.
+- **Signed system volume** enforcement on (`csrutil authenticated-root status`, where available).
+- **Gatekeeper** assessments enabled (`spctl --status` shows "assessments enabled"). Check Privacy &
+  Security → Security for "Allow applications from" (App Store, or App Store and identified developers).
+  Since macOS Sequoia 15, opening unsigned or unnotarized software requires approval in Privacy &
+  Security ("Open Anyway"); ask which apps the user has approved this way and whether each is still
+  trusted.
+- **XProtect** present and current. XProtect runs automatically; there is no supported "off" switch, so
+  a missing or very old XProtect version is suspicious.
+- **Startup security** (Apple silicon: Full Security / Reduced Security / Permissive Security, set per
+  macOS install in recoveryOS; T2 Intel Macs: Secure Boot and external boot settings in Startup Security
+  Utility). Anything below the default, without a documented reason, is a finding. Reduced security is
+  required for third-party kernel extensions on Apple silicon.
+- **Kernel and system extensions:** list third-party kernel extensions and system extensions; each one
+  runs with deep privilege. Map each to an app the user recognizes.
+- **Lockdown Mode** (Privacy & Security): on or off. It's an optional extreme-protection mode for people
+  at high risk of targeted attack; note it, don't recommend it by default.
+
+#### C. Encryption, theft, and loss
+
+- **FileVault** on (`fdesetup status`), and who can unlock it (`fdesetup list`). On Apple silicon and T2
+  Macs, internal storage is always hardware-encrypted, but without FileVault the data is unlocked at boot
+  for anyone with physical access. FileVault adds the user's password to the key chain.
+- Recovery method: iCloud-stored recovery, a personal recovery key (where is it kept, and is it offline and
+  separate from the Mac?), or an institutional/MDM-escrowed key on work Macs. "Nobody knows where the
+  recovery key is" is a data-loss finding.
+- **Find My Mac** and **Activation Lock**: on for personal Macs (Activation Lock requires Apple silicon or a
+  T2 chip and turns on with Find My). On work Macs, the organization usually manages Activation Lock
+  through MDM; a personal Apple Account's Activation Lock on a company Mac is a policy issue to raise with
+  IT.
+- External and removable storage: are backup disks, Time Machine disks, and USB drives encrypted?
+- Firmware or recovery password on Intel Macs without T2 (older hardware; also an end-of-life signal).
+
+#### D. Accounts, login, and screen lock
+
+- Local accounts: which ones exist, which are **administrators**, and whether the daily-use account is an
+  admin. Recommend a standard account for daily use where the user accepts the friction; at minimum, keep
+  the number of admins small. On servers, check that service accounts aren't admins.
+- **Automatic login** (Users & Groups → automatically log in as). It is disabled automatically when
+  FileVault is on. If it is on, which account (an admin auto-login is worse) and why (see domain M).
+- **Guest account** on or off, and other unused, stale, or unknown accounts.
+- **Screen lock:** Lock Screen → "Require password after screen saver begins or display is turned off"
+  (immediately or within a short time), and a reasonable screen-saver/display-off timer for laptops and
+  shared spaces. Login window shows name and password fields rather than a user list on shared or
+  public-facing machines (optional).
+- **sudo:** extra rules in `/etc/sudoers` and `/etc/sudoers.d/` (`NOPASSWD` entries, broad rules for
+  service accounts); Touch ID for sudo (`/etc/pam.d/sudo_local`) is acceptable.
+- Password policy and Touch ID/Apple Watch unlock are fine; note shared passwords between accounts or the
+  same password used for Apple Account and local login (ask; don't test).
+- **Apple Account:** two-factor authentication on (required for many features), and the list of trusted
+  devices reviewed by the user. Never ask for the password.
+
+#### E. Network exposure and sharing services
+
+- **Application firewall** (System Settings → Network → Firewall): on or off; **stealth mode**; "block all
+  incoming connections"; "automatically allow built-in software" and "automatically allow downloaded
+  signed software"; the per-app allow list (`--listapps`). The firewall's default state varies by version
+  and setup; record what is set.
+- **Sharing services** (System Settings → General → Sharing): Screen Sharing, File Sharing, Media Sharing,
+  Printer Sharing, Remote Login, Remote Management, Remote Apple Events, Internet Sharing, Content Caching,
+  Bluetooth Sharing. For each one that's on: is it needed, who is allowed ("All users" versus specific
+  users), and on servers, from which networks it's reachable.
+- **Remote Login (SSH):** allowed users; full disk access for remote users (an extra toggle on recent
+  versions); `sshd` settings (password and keyboard-interactive authentication, root login), and
+  `~/.ssh/authorized_keys` for every account (count and key comments only, never key material).
+- **Screen Sharing / Remote Management:** "VNC viewers may control screen with password" is a weak legacy
+  password mode; flag it. Remote Management grants broad control; on personal Macs it's usually not
+  needed.
+- **File Sharing:** shared folders (`sharing -l`), per-share permissions, guest access, and SMB only.
+- **Internet Sharing** on (turns the Mac into a router/bridge, sometimes onto an untrusted network) is a
+  finding unless intended.
+- **AirDrop** (General → AirDrop & Handoff): "Everyone" receiving should be temporary; "Contacts Only" or
+  off otherwise. **AirPlay Receiver**: on or off, and who may connect.
+- **Every listening socket** (`lsof -nP -iTCP -sTCP:LISTEN`): bound to `*` / `0.0.0.0` / `::` (all
+  interfaces) versus `127.0.0.1`. Map each to the app or service that owns it. Developer servers,
+  databases, Docker-published ports, and Homebrew services bound to all interfaces are common findings,
+  especially on laptops that join public Wi-Fi.
+- Whether the Mac is reachable from the internet (router port forwards, UPnP mappings, VPN or tunnel
+  agents). Test from outside only with explicit authorization.
+- **Local Network privacy** (Privacy & Security → Local Network): which apps may discover and talk to
+  devices on the LAN. Unknown apps with local network access are worth questioning.
+- DNS and proxy settings (`scutil --dns`, `scutil --proxy`) and installed VPN or network extensions:
+  unexpected values redirect traffic.
+
+#### F. Privacy permissions (TCC)
+
+Review in System Settings → Privacy & Security, with the user. These permissions let an app read or control
+things the sandbox and file permissions would otherwise prevent:
+
+- **Full Disk Access:** every app here can read mail, messages, Safari data, backups, and other users'
+  protected files. Terminals, remote-access tools, backup tools, and security tools are typical; anything
+  unrecognized or no longer used is a finding.
+- **Accessibility:** apps here can control the Mac (click, type, read the screen's UI). High risk if
+  granted to unknown or remote-control software.
+- **Input Monitoring**, **Screen & System Audio Recording**, **Automation** (one app controlling another),
+  **Developer Tools**, **Files and Folders**, **Camera**, **Microphone**, and **App Management**.
+- A terminal or agent tool with Full Disk Access means *anything run from that terminal* has it, including
+  scripts this agent runs. Point this out.
+- On MDM-managed Macs, some grants come from a Privacy Preferences Policy Control profile; those appear
+  as managed and can't be changed locally.
+- Reading the TCC databases directly needs Full Disk Access; prefer the GUI review.
+
+#### G. Persistence: login items, background items, and launchd
+
+- **Login Items & Extensions** (System Settings → General): "Open at Login" items and "Allow in the
+  Background" items. Since macOS 13, the system tracks login items, launch agents, and launch daemons and
+  notifies the user when new ones are added; since macOS 26, it also prompts when a background task keeps
+  running after its app quits. Ask whether the user has seen and dismissed such notifications.
+- `sudo sfltool dumpbtm`: the full background task record, including the developer (Team ID), the
+  executable path, and whether each item is enabled. Look for items with no developer name, paths in
+  user-writable or temporary locations, or executables that no longer exist.
+- **LaunchDaemons** (`/Library/LaunchDaemons`, run as root at boot) and **LaunchAgents**
+  (`/Library/LaunchAgents` for all users, `~/Library/LaunchAgents` per user). For each plist: label,
+  program and arguments, owner and permissions (a root-run daemon whose plist or binary is user-writable is
+  a privilege-escalation path), `RunAtLoad`/`KeepAlive`, and whether the parent app is still installed.
+  `/System/Library/` holds Apple's own and is protected by SIP; don't flag those.
+- Labels that imitate Apple (`com.apple.*`) outside `/System/Library/` deserve a closer look; some are
+  legitimate, so verify the code signature (`codesign -dv --verbose=2 <path>`) rather than assuming.
+- Other persistence: `cron`, `/etc/periodic` additions, shell startup files (`~/.zshrc`, `~/.zprofile`)
+  that run downloads, login hooks (legacy), authorization plugins (`/Library/Security/SecurityAgentPlugins`),
+  directory-service and PAM changes, and browser extensions.
+- On servers, launchd is also *how the services run*: record which services are LaunchDaemons (start at
+  boot, no login needed) and which are LaunchAgents (start only after a user logs in). This matters for
+  the automatic-login decision (domain M).
+
+#### H. Third-party software, Homebrew, and Docker Desktop
+
+- Installed apps: sources (App Store, identified developer, unsigned), apps no one uses, remote-access and
+  "cleaner" utilities, and abandoned software that no longer receives updates.
+- **Homebrew:** installed, owner of the Homebrew prefix (`/opt/homebrew` on Apple silicon, `/usr/local`
+  on Intel), outdated formulae and casks (`brew outdated`, read-only), third-party taps (`brew tap`), and
+  `brew services list` (services started by Homebrew, which run as LaunchAgents or, with sudo,
+  LaunchDaemons). Each Homebrew service that listens on the network is assessed like any other exposure.
+- Other package managers and runtimes (pip, npm, gem, cargo global installs, MacPorts): global installs
+  that run with elevated privileges, and stale tool versions.
+- **Docker Desktop:** version and update channel; published ports (Docker publishes to all host
+  interfaces unless an address such as `127.0.0.1:` is given); containers with `--privileged` or the Docker
+  socket mounted; bind mounts of the home directory; file-sharing settings (which host paths the VM can
+  reach); whether Docker Desktop starts at login; extensions; and on work Macs, whether settings are
+  locked by the organization. Assess the containers themselves with the relevant container skill.
+- Security software: what is installed (antivirus, endpoint agents, outbound firewalls), whether it's
+  current, and whether two products conflict. Don't recommend removing an employer's agent.
+- Configuration profiles installed by third-party apps (VPN, content filters, root certificates).
+- **Root certificates** added to the System keychain (Keychain Access → System → Certificates, or
+  `security find-certificate -a -p /Library/Keychains/System.keychain` piped to a subject-only listing):
+  an unknown trusted root lets someone intercept TLS. This lists certificates, not private keys.
+
+#### I. Device management (MDM and profiles)
+
+- Enrollment state (`profiles status -type enrollment`): not enrolled, user-approved MDM, or Automated
+  Device Enrollment. An enrollment the user doesn't recognize on a personal Mac is a P0 indicator.
+- Installed configuration profiles (System Settings → General → Device Management): each one's
+  organization, what it controls (certificates, VPN, DNS, proxy, privacy permissions, login items, software
+  update deferrals), and whether the user knows why it's there.
+- On a work Mac: record which security settings are enforced by policy so recommendations go to the right
+  owner.
+
+#### J. Secrets and sensitive data on disk
+
+- Without opening them, inventory credential-bearing files in home directories: SSH private keys (and
+  whether they are passphrase-protected, if the user knows), cloud CLI credentials, Git and package
+  registry tokens, `.env` files, kubeconfigs, VPN and WireGuard configs, database dumps, and exported
+  password-manager vaults. Report location, permissions, and age.
+- Permissions: home directories readable by other local users; secrets readable by group or others.
+- Shell history containing secrets typed on the command line (ask the user to check; don't print it).
+- Secrets placed in launchd plists (`EnvironmentVariables`) or Homebrew service configs, which are often
+  world-readable.
+- Sync exposure: is the home directory or Desktop/Documents synced to iCloud Drive or another cloud
+  service, carrying secrets with it?
+
+#### K. Backups and recovery
+
+- **Time Machine:** configured, destinations (`tmutil destinationinfo`), last successful backup, backups
+  **encrypted**, and whether at least one copy is offline or otherwise out of reach of ransomware on the
+  Mac (a network destination mounted with the user's credentials is reachable by anything running as that
+  user).
+- Exclusions that leave out important data, and whether server data (databases, container volumes) is
+  backed up in a consistent state.
+- Local snapshots exist and aren't deliberately disabled.
+- A restore has been tested, and the user knows how to reinstall macOS from recoveryOS.
+
+#### L. Logging and monitoring
+
+- Unified log retention is short by default; note whether anything collects logs off the Mac (on servers
+  especially).
+- Authentication and remote-access activity is visible in the unified log (`log show` with predicates for
+  `sshd`, `screensharingd`, and `loginwindow`); a quick look for unexpected remote logins is part of
+  Discover. Keep queries narrow and time-bounded.
+- Notifications for new login and background items, and whether the user reads them.
+- Optional third-party monitoring (for example, persistence and outbound-connection monitors): present,
+  and current.
+
+#### M. Always-on server concerns
+
+- **Sleep and power** (`pmset -g`, System Settings → Energy): sleep prevented while the display is off,
+  wake for network access, and "start up automatically after a power failure". Without UPS-backed shutdown,
+  power loss can corrupt data.
+- **The FileVault / automatic-login / unattended-restart trade-off.** With FileVault on, a restart stops at
+  the unlock screen, so services that need a user login (LaunchAgents, Docker Desktop, Homebrew services
+  run as a user) don't start until someone unlocks it. Owners often respond by turning FileVault off and
+  enabling automatic login, which leaves every secret readable by anyone who takes the machine. Record
+  which choice was made, and whether it was deliberate. Options to discuss in Recommend: running services
+  as LaunchDaemons under a dedicated non-admin account; `fdesetup authrestart` for planned restarts;
+  and, on Apple silicon with macOS 26 or later, remote FileVault unlock over SSH when Remote Login is on
+  (see `man apple_ssh_and_filevault`; behavior over Wi-Fi has varied by version, so verify on the
+  installed version).
+- **Physical security:** where the server is, who can reach it, and whether an auto-logged-in desktop is
+  visible or usable to anyone at the keyboard.
+- **Headless management:** how the owner reaches it (SSH, Screen Sharing, a VPN), and whether that path is
+  restricted to trusted networks.
+- **Secrets on the server:** service credentials, API tokens, and keys for other systems collected over
+  time in the server account's home directory (domain J). A server is often the most credential-rich
+  machine in a homelab.
+- **Server account:** the account that runs services is ideally not the owner's personal account, not an
+  admin, and not signed into the owner's personal Apple Account with iCloud Keychain.
+
+---
+
+## Recommend
+
+No changes are made in this mode. For each finding, produce a recommendation using the core finding
+template, including **Dependencies / blast radius** and the **operation class**.
+
+### Dependency and blast-radius check (required)
+
+Before recommending a change, list what depends on the current setting:
+
+- **Remote access paths:** how the user (and the agent) reaches the Mac. Turning off Remote Login, Screen
+  Sharing, or enabling "block all incoming connections" on a headless server can cut off every way in.
+- **Services on the Mac:** which other devices use its file shares, Time Machine destination, media
+  sharing, printer sharing, Docker-published ports, or Homebrew services.
+- **Unattended restart:** whether services must come back without anyone present after a power failure or
+  update.
+- **Apps relying on privacy permissions, login items, or extensions:** backup tools, VPN clients, security
+  agents, accessibility tools, password managers.
+- **The user's only admin account:** demoting or changing it without a second tested admin causes lockout.
+- **MDM and employer policy:** settings enforced by profiles; changes may be reverted or violate policy.
+- **Recovery keys and passwords:** FileVault changes depend on the user being able to store a recovery key
+  safely.
+
+### Recommendation guidance
+
+| Area | Typical recommendation | Consequences to explain |
+|---|---|---|
+| Unsupported major version or hardware | Upgrade to the current major release; if the hardware can't, plan replacement or restrict the Mac to offline or low-risk use. | Major upgrades can break apps and drivers; needs a verified backup and a compatibility check. |
+| Behind on updates | Install pending updates; turn on automatic security updates. | Restart required; on servers, plan for services to come back. |
+| Automatic security updates off | Turn on "Install Security Responses and system files" (and Background Security Improvements where offered). | Occasional restarts; can be deferred on managed Macs. |
+| FileVault off | Turn it on; store the recovery key offline or use iCloud recovery. | Automatic login stops working; restarts need an unlock (see server options); a lost password and key means lost data. |
+| Automatic login on | Turn it off; on servers, move services to LaunchDaemons under a dedicated account, or accept the risk with physical controls. | Services that need a user session won't start after a restart until someone logs in. |
+| Daily account is admin | Create a separate admin account, verify it, then make the daily account standard. | Installing software and some settings prompt for admin credentials. |
+| Unknown or stale accounts | Disable or remove them after confirming with the user. | Their files go away if deleted; disable first. |
+| Screen lock delayed or off | Require password immediately or within minutes; shorter display-off timer. | More frequent unlocks (Touch ID or Apple Watch reduce friction). |
+| Firewall off | Turn it on; consider stealth mode on laptops. | Unapproved incoming connections are blocked; stealth mode stops ping and some monitoring checks. |
+| Sharing services not needed | Turn them off. | Other devices lose that service (file shares, Time Machine destination, remote access). |
+| Remote Login with passwords | Keys only; restrict allowed users; reach it only over a VPN or trusted network. | Users and automation using passwords must move to keys first. |
+| Screen Sharing VNC password mode | Turn off VNC password access; use account-based Screen Sharing. | Third-party VNC clients may stop working. |
+| Services bound to all interfaces | Bind development and admin services to `127.0.0.1`; publish Docker ports to `127.0.0.1:` unless LAN access is needed. | Other devices can no longer reach them; use a reverse proxy or VPN where needed. |
+| AirDrop set to Everyone | Contacts Only or off. | Receiving from non-contacts needs a temporary change. |
+| Excessive privacy permissions | Remove Full Disk Access, Accessibility, Input Monitoring, and Screen Recording from apps that don't need them. | Those apps lose features (backups, remote control, automation) until re-approved. |
+| Unknown background or launch items | Identify the owner; remove via the app's uninstaller or toggle off in Login Items & Extensions. | The owning app may stop working; unknown items may be an incident (Respond). |
+| Gatekeeper, SIP, or startup security lowered | Restore defaults (from recoveryOS for SIP/startup security). | Unsigned kernel extensions and some tools stop working; needs physical presence. |
+| Unrecognized MDM or profile on a personal Mac | Treat as an incident; investigate before removal. | Removal may remove VPN, certificates, or restrictions the user relies on. |
+| Unknown trusted root certificate | Investigate, then remove trust. | Anything relying on that certificate (corporate proxy, local dev CA) fails. |
+| Homebrew or app sprawl | Remove unused software and taps; keep the rest updated. | Removed tools and services stop. |
+| Secrets in home directory | Move to a password manager or the keychain; tighten permissions; rotate anything exposed. | Scripts reading files must change. |
+| No backup, or backup unencrypted/always mounted | Encrypted Time Machine plus a second, offline or versioned copy. | Needs a disk or destination; first backup takes time. |
+| Find My off on a personal Mac | Turn it on. | Requires the Apple Account; Activation Lock then ties the Mac to that account (remove it before selling). |
+| Server sleep and power | Prevent sleep, restart after power failure, UPS with clean shutdown. | Higher power use; consider FileVault unlock path after restarts. |
+
+Third-party "cleaner" or "optimizer" utilities, disabling Spotlight, and hiding the Mac from the network are
+not security fixes. Never recommend them as the main fix.
+
+Group the plan: immediate containment (if any) → urgent fixes (unsupported OS, missing critical updates,
+exposed remote access with passwords, FileVault off on a portable Mac) → high-priority hardening (admin
+accounts, privacy permissions, persistence review, services on all interfaces) → routine maintenance →
+optional defense in depth. Then ask for approval (core: modes and authorization).
+
+---
+
+## Remediate
+
+Apply only approved changes, one at a time, following the core rules. macOS specifics:
+
+- **Before any change:** confirm a recent, working backup (Time Machine shows a completed backup), and
+  note the current setting so it can be restored. On servers, confirm a second way in (physical access,
+  or a second remote path) before changing remote access.
+- **Use System Settings or Apple's documented tools.** Many changes require the user to authenticate in
+  the GUI; that's by design. Don't script around consent prompts.
+- **Managed Macs:** if a setting is managed by a profile, stop and refer the user to the MDM administrator.
+- **FileVault:** enabling is C2. Have the user record the recovery key (or choose iCloud recovery) before
+  confirming, and keep the Mac on power until encryption finishes. Never store the recovery key in the
+  report or on the same Mac.
+- **Accounts:** to demote an admin, first create and test a separate admin login, then demote. Never
+  remove the last admin.
+- **Remote access:** switch SSH to key-only login only after the user has confirmed a key-based login
+  works. Restrict allowed users before disabling services entirely.
+- **Firewall:** turning it on is C1 for most Macs, C2 for servers (incoming services may need approval
+  prompts answered at the console). Check each server-side service still accepts connections afterward.
+- **Launch items:** prefer the vendor's uninstaller or the Login Items & Extensions toggle. If a plist must
+  be removed, first copy it (and record its hash) as evidence, then `launchctl bootout` and move the plist
+  aside rather than deleting it. Treat unknown items as possible incidents, not cleanup.
+- **Privacy permissions:** remove them one app at a time in System Settings; don't use `tccutil reset`.
+- **Updates:** minor updates are C2 (restart). Major upgrades also need app and driver compatibility
+  checks, release-note review, a verified backup, and, on servers, a maintenance window.
+- **Docker and Homebrew:** changing published ports or bindings means recreating containers or restarting
+  services; confirm which clients depend on them.
+
+After each change, follow the core "after a change" steps: re-read the setting (the same command or
+System Settings page used in Discover), check remote access, sharing services, and backups still work,
+and record before and after.
+
+### Hard stops (refer to a specialist or do manually; never automate)
+
+- Disabling SIP, Gatekeeper, signed system volume, or lowering startup security, for any reason, including
+  "to install a tool".
+- Erase All Content and Settings, reinstalling macOS, `diskutil` erase or partition operations, or APFS
+  volume deletion as remediation (these are recovery steps for the user to perform, with backups).
+- Turning FileVault off, or rotating or removing FileVault recovery keys without the user present.
+- Removing MDM enrollment, configuration profiles, or security agents from a work Mac.
+- Resetting the TCC or background-task databases wholesale.
+- Deleting Time Machine backups or local snapshots.
+- Turning off the only remote-access path on a headless server without physical access confirmed.
+
+---
+
+## Respond
+
+On any P0 indicator, switch to Respond immediately. Follow the core playbook plus the macOS-specific
+steps in [incident-response.md](incident-response.md).
+
+---
+
+## Worked example (invented)
+
+### MAC-001: Always-on Mac server with FileVault off and automatic login into an admin account
+
+**Confidence:** Confirmed
+**Priority:** P2. Anyone with brief physical access, or who takes the machine, gets an unlocked admin
+session and every secret in its home directory, including credentials for other homelab systems.
+Not remotely exploitable on its own.
+**State:** Open
+**Component:** macOS (current major release, latest update), Mac mini, Apple silicon
+**Evidence:** Observed 2026-10-12 (user-run commands): `fdesetup status` returned "FileVault is Off."
+`defaults read /Library/Preferences/com.apple.loginwindow autoLoginUser` returned `<server-user>`, and
+`dscl . -read /Groups/admin GroupMembership` lists `<server-user>`. `~/Library/LaunchAgents` holds three
+service agents; `lsof` shows those services listening on `*:8080` and `*:5432`. The home directory holds
+an SSH key used to administer a NAS at `192.0.2.20` and a cloud API token file (permissions `-rw-r--r--`).
+**Expected secure state:** FileVault on; no automatic login; services that must start unattended run as
+LaunchDaemons under a non-admin account (Apple: "How to log in automatically to a Mac user account";
+Apple Platform Security, FileVault).
+**Exposure and prerequisites:** physical access to the Mac (it sits on an open shelf), or theft of it.
+Separately, the services on all interfaces are reachable by every device on the LAN `192.0.2.0/24`.
+**Dependencies / blast radius:** the owner relies on the Mac recovering unattended after power failures;
+the three LaunchAgents only start after login. The NAS and the cloud account trust this Mac's credentials.
+**Recommended remediation:** (1) Move the three services to LaunchDaemons running as a dedicated
+non-admin account, binding the database to `127.0.0.1`. (2) Turn on FileVault and turn off automatic
+login. (3) For restarts, use `fdesetup authrestart` for planned ones and remote FileVault unlock over SSH
+for unplanned ones (verify it works on this version, wired and over Wi-Fi). (4) Tighten the token file
+to `600` and move it to the keychain. Alternative if the owner rejects (2): keep automatic login but into
+the non-admin service account, with the Mac physically secured; record as Accepted risk.
+**Operation class:** C2 (service restarts; FileVault encryption; changes restart behavior).
+**Approval required:** Yes.
+**Verification:** `fdesetup status` shows On; no `autoLoginUser`; after a test restart and remote unlock,
+`sudo launchctl list` shows the services running and `lsof` shows the database on `127.0.0.1` only.
+**Rollback:** re-enable automatic login after turning FileVault off (not recommended); move the services
+back to LaunchAgents from the saved plists.
+
+---
+
+## Version history
+
+- **1.0** (2026-10-30): Initial version.

@@ -282,6 +282,289 @@ NVR.
 
 Every product skill in this collection, with hints for recognizing the product on a network. Used by the `full-assessment` skill to match each discovered device to a skill. Load a skill from `dist/<skill>.md` (single file) or the installed `<skill>/` folder.
 
+## local-llm
+
+**Use for:** Security assessment, hardening, remediation, and incident response for self-hosted LLM and generative-AI servers: Ollama, llama.cpp server, LM Studio's server, vLLM, Open WebUI, ComfyUI, Stable Diffusion web UIs (AUTOMATIC1111, Forge, and similar Gradio apps), and text-to-speech web apps. Use when auditing a machine that serves models, reviewing its API exposure, bind addresses, tunnels, accounts, model and extension supply chain, stored cloud API keys, GPU abuse, or prompt and chat privacy, or when one of these servers may have been compromised.
+
+**Applies to:** Ollama, llama.cpp server, LM Studio, vLLM, Open WebUI, ComfyUI, Gradio-based image and speech web UIs (verify each live version; defaults change often) · **Finding prefix:** `LLM` · **Version:** 1.0 · **Bundle:** `dist/local-llm.md`
+
+### Detection
+
+Hints for recognizing this product during a network inventory (used by the `full-assessment` skill).
+Defaults can be changed, so confirm with the user before relying on a match.
+
+- **Ollama:** TCP 11434. `GET /` returns the plain text `Ollama is running`. `GET /api/version` returns a
+  JSON version with no authentication. `GET /api/tags` lists local models.
+- **llama.cpp server (`llama-server`):** 127.0.0.1:9931 in current builds. Older builds and many Docker
+  examples use 8080. `GET /health` is public even with an API key. `GET /props` includes a `build_info`
+  field (it may require the key when one is set). A built-in web chat UI is enabled by default.
+- **vLLM:** OpenAI-compatible server; vendor examples commonly use port 8000 (check the live command
+  line). `/version`, `/health`, and `/metrics` answer without the API key.
+- **LM Studio:** port 1234 by default; OpenAI-compatible `GET /v1/models`.
+- **Open WebUI:** port 8080 inside the container. Vendor Docker examples publish it on host port 3000.
+  The page title is "Open WebUI". `GET /api/version` returns its version.
+- **ComfyUI:** TCP 8188. `GET /system_stats` returns ComfyUI, Python, and PyTorch versions and GPU/VRAM
+  details. `GET /object_info` lists every loaded node, which also reveals installed custom nodes.
+- **AUTOMATIC1111, Forge, and similar Gradio apps (many TTS apps too):** TCP 7860 (Gradio's default; the
+  next free port if it is taken). Gradio page markup. With `--api`, `/sdapi/v1/...` endpoints. A
+  `*.gradio.live` URL means a public share link.
+- **Vector databases often installed alongside:** Qdrant 6333 (REST) and 6334 (gRPC), Chroma 8000. See
+  the mcp-servers (`dist/mcp-servers.md`) skill.
+- These servers don't announce themselves over mDNS/SSDP by default. MAC vendors only identify the host
+  (often a workstation or GPU server), not the software.
+
+## mcp-servers
+
+**Use for:** Security assessment, hardening, remediation, and incident response for Model Context Protocol (MCP) servers and clients, and for the RAG knowledge bases and vector databases (Qdrant, Chroma, and similar) behind them. Use when auditing which MCP servers an AI client runs, their transports (stdio or HTTP), authentication and OAuth, DNS-rebinding protection, tool scopes, prompt injection and tool poisoning, secrets in client configs, install supply chain, tool-call logging, network exposure, or what a RAG knowledge base exposes, or when an MCP server or knowledge base may have been compromised or misused.
+
+**Applies to:** MCP specification 2026-07-28 (current) and 2025-11-25 and earlier revisions; any MCP client or server; self-hosted vector databases (verify each live version) · **Finding prefix:** `MCP` · **Version:** 1.0 · **Bundle:** `dist/mcp-servers.md`
+
+### Detection
+
+Hints for recognizing this product during a network inventory (used by the `full-assessment` skill).
+Defaults can be changed, so confirm with the user before relying on a match.
+
+- **MCP has no default port.** HTTP servers expose one endpoint, often at the path `/mcp` (the spec's
+  example). Deprecated HTTP+SSE servers use a GET event stream (commonly `/sse`) plus a POST endpoint.
+  Stdio servers have no listener; find them in client configs and the process list.
+- **Identifying responses that need no authentication:**
+  - An OAuth-protected server answers an unauthenticated request with `401` and a
+    `WWW-Authenticate: Bearer resource_metadata="..."` header.
+  - Protected resource metadata may be published at `/.well-known/oauth-protected-resource` (or that
+    path plus the endpoint path).
+  - A plain GET to a 2026-07-28 Streamable HTTP endpoint is expected to return `405`.
+  - Wrong or missing headers commonly produce `400` with a JSON-RPC error body.
+- **MCP Inspector:** web UI on 6274, sandbox on 6275, CLI OAuth callback on 6276, app-origin server on
+  6278 (current defaults). Older v1 releases used a proxy on 6277.
+- **Vector databases:**
+  - **Qdrant:** 6333 (REST), 6334 (gRPC), 6335 (cluster). The root URL returns a JSON name and version,
+    and `/healthz` answers (observed; not yet verified on every version).
+  - **Chroma:** 8000, with a heartbeat endpoint under `/api/...` (path varies by version).
+  - **Other common defaults to check against the live product:** Weaviate 8080, Milvus 19530, pgvector
+    on PostgreSQL 5432.
+- **Embedding and model backends** that RAG stacks use (Ollama on 11434 and similar) are covered by the
+  local-llm (`dist/local-llm.md`) skill.
+- MCP servers don't announce themselves over mDNS or SSDP. MAC vendors don't help.
+
+## smart-tvs
+
+**Use for:** Security and privacy assessment, hardening, remediation, and incident response for smart TVs and streaming devices (Samsung Tizen, LG webOS, Google TV and Android TV, Roku, Amazon Fire TV, Apple TV, and generic Android TV boxes). Use when reviewing a TV's update and support status, viewing-data tracking (ACR) and advertising settings, microphones and cameras, developer mode, sideloading and ADB debugging, installed apps, signed-in accounts, network placement, or casting and remote-control exposure, or when a TV or streaming box may have been compromised or recruited into a botnet.
+
+**Applies to:** Current and recent smart TV and streaming-device platforms (verify the live OS version; menus change between releases and brands) · **Finding prefix:** `TV` · **Version:** 1.0 · **Bundle:** `dist/smart-tvs.md`
+
+### Detection
+
+Hints for recognizing these devices during a network inventory (used by the `full-assessment` skill).
+Ports listed are protocol or vendor defaults; firmware can change them. Confirm with the user before
+relying on a match, and **never** interact with these services beyond observing that they exist.
+
+- **SSDP/UPnP and DIAL** (UDP 1900 multicast): most smart TVs and streaming devices announce themselves,
+  often naming the brand and model. DIAL is the second-screen protocol many TVs use for "cast from app."
+- **Roku:** SSDP announcements for its External Control Protocol and an HTTP service on **TCP 8060**
+  (Roku-documented).
+- **Google Cast** (Google TV, Android TV, Chromecast, "Chromecast built-in" TVs): mDNS service
+  `_googlecast._tcp` (UDP 5353), with TCP 8008 and 8009 commonly reported for the Cast service.
+- **AirPlay** (Apple TV, and many Samsung, LG, Roku, and other TVs that support AirPlay): mDNS services
+  such as `_airplay._tcp` and `_raop._tcp`; Apple lists TCP 7000 among AirPlay ports.
+- **Android ADB over the network:** **TCP 5555** open on an Android TV, Google TV, or Fire TV device
+  usually means ADB debugging or network debugging is enabled. That is a finding in itself.
+- **Vendor remote-control APIs:** Samsung and LG TVs commonly expose WebSocket control services for their
+  phone apps (for example TCP 8001/8002 on Samsung and 3000/3001 on LG, as commonly reported; not
+  vendor-verified here).
+- **MAC address vendors (OUI)** of the TV maker or streaming-device maker (Samsung, LG, Roku, Amazon,
+  Google, Apple, Sony, TCL, Hisense, and others), or of a Wi-Fi module maker on budget devices. Hostnames
+  often include the brand or model.
+
+## docker
+
+**Use for:** Security assessment, hardening, remediation, and incident response for container hosts and workloads: Docker Engine on Linux, Docker Desktop on macOS, Windows, and Linux, Podman, and the container layer of NAS container managers, including Compose stacks. Use when auditing a container host, reviewing daemon and API exposure, published ports, container privileges, mounts, images, secrets, auto-updaters, networks, volumes, or logging, or when a container or container host may have been compromised.
+
+**Applies to:** Docker Engine 28.x-29.x, Docker Desktop 4.x, Podman 4.x-5.x, Docker Compose v2 (verify the installed versions; defaults change between releases) · **Finding prefix:** `DKR` · **Version:** 1.0 · **Bundle:** `dist/docker.md`
+
+### Detection
+
+Hints for recognizing this product during a network inventory (used by the `full-assessment` skill).
+Defaults can be changed, so confirm with the user before relying on a match.
+
+- **Docker API over TCP:** port 2375 (no TLS) or 2376 (TLS) are Docker's documented defaults. A plain-HTTP
+  answer to `/version` on a non-loopback address is an unauthenticated root-equivalent API and is at least
+  a P1 finding, P0 if reachable from the internet. Don't send any request other than a version query, and
+  only within scope.
+- **Swarm:** TCP 2377 (cluster management), TCP/UDP 7946 (node communication), UDP 4789 (overlay network
+  traffic).
+- **Container management UIs:** Portainer commonly on 9443 (HTTPS), 9000 (HTTP, older installs), and 8000
+  (edge agent tunnel); the Portainer agent on 9001. A Portainer agent port reachable from untrusted
+  networks is effectively a remote runtime API.
+- **Hosts that run containers:** many unrelated services on one address (web apps, databases, media
+  servers) on non-standard high ports; a `docker0` bridge interface and `br-<id>` and `veth` interfaces on
+  the host; container subnets drawn from Docker's default address pools (private ranges starting at
+  172.17 and 192.168 by default; verify `default-address-pools` in `daemon.json`).
+- **Docker Desktop on a workstation:** processes such as `com.docker.backend` (macOS, Linux) or
+  `com.docker.backend.exe` and `Docker Desktop.exe` (Windows); a `docker-desktop` WSL distribution on
+  Windows; a QEMU or virtualization-framework VM process. Published container ports appear as listening
+  sockets owned by the Desktop backend process, not by a container.
+- **Podman:** `podman` and `conmon` processes; `gvproxy` for a Podman machine on macOS or Windows.
+- **MAC address vendors:** none specific. Containers on macvlan or ipvlan networks appear on the LAN with
+  their own addresses and locally administered or generated MACs, which can look like unknown devices.
+
+## cloudflare
+
+**Use for:** Security assessment, hardening, remediation, and incident response for Cloudflare accounts and the sites and services published through them: DNS zones, proxied sites, Cloudflare Tunnels (cloudflared), Zero Trust Access policies, WAF and rate limiting, SSL/TLS modes, and origin lockdown. Use when auditing a Cloudflare account or zone, reviewing what a tunnel publishes, checking Access policies in front of self-hosted apps, or when a Cloudflare account, API token, or tunnel may have been compromised.
+
+**Applies to:** Cloudflare dashboard, DNS, Zero Trust (Cloudflare One) Access and Tunnel, cloudflared releases within Cloudflare's one-year support window (verify the live dashboard; menu names change often) · **Finding prefix:** `CF` · **Version:** 1.0 · **Bundle:** `dist/cloudflare.md`
+
+### Detection
+
+Hints for recognizing this product during a network inventory (used by the `full-assessment` skill).
+Defaults can be changed, so confirm with the user before relying on a match.
+
+- **On hosts:** a `cloudflared` process, service (systemd unit, launchd job, or Windows service), or a
+  container from the `cloudflare/cloudflared` image. Outbound connections to Cloudflare on port 7844
+  (the tunnel's QUIC/HTTP2 edge port) with no matching inbound port.
+- **cloudflared metrics server:** vendor-documented default is `127.0.0.1` on the first free port in
+  20241–20245 (path `/metrics`) on a normal host, and `0.0.0.0` on that port range inside containers. A
+  `/metrics` endpoint answering on those ports from the LAN suggests a containerized or reconfigured
+  `cloudflared`.
+- **On public hostnames:** HTTP responses with a `server: cloudflare` header and a `cf-ray` header mean
+  the name is proxied. A redirect to `<team-name>.cloudflareaccess.com` means an Access application
+  protects it.
+- **In DNS:** the domain's NS records point at a pair of `*.ns.cloudflare.com` nameservers. Tunnel public
+  hostnames are proxied CNAMEs to `<tunnel-UUID>.cfargotunnel.com` (visible in the dashboard; the public
+  answer shows Cloudflare addresses because the record is proxied).
+- **On endpoints:** the Cloudflare WARP client installed indicates Zero Trust device enrollment and
+  possibly private network routing.
+
+## home-assistant
+
+**Use for:** Security assessment, hardening, remediation, and incident response for Home Assistant (Home Assistant OS, Container, and the unsupported Supervised and Core installs). Use when auditing a Home Assistant instance, reviewing its remote access (Home Assistant Cloud, reverse proxies, tunnels, port forwards), users, MFA, access tokens, auth providers, secrets and backups, apps (add-ons), HACS or Marketplace custom integrations, cloud-connected integrations, security-sensitive automations, or when a Home Assistant instance may have been compromised.
+
+**Applies to:** Home Assistant 2026.x on Home Assistant OS or Container (verify the live version; settings move between monthly releases) · **Finding prefix:** `HA` · **Version:** 1.0 · **Bundle:** `dist/home-assistant.md`
+
+### Detection
+
+Hints for recognizing this product during a network inventory (used by the `full-assessment` skill).
+Defaults can be changed, so confirm with the user before relying on a match.
+
+- Web UI on TCP 8123 (Container, and HAOS installs from before 2026.8) or TCP 80 (new HAOS installs from
+  2026.8). The login page title is "Home Assistant"; `/manifest.json` and `/auth/authorize` are present.
+  Plain HTTP unless TLS or a proxy is configured.
+- mDNS/DNS-SD service type `_home-assistant._tcp`, whose TXT record includes the location name, an
+  instance UUID, the Core version, and internal/external URLs. A default HAOS install also answers to
+  `homeassistant.local`.
+- It may also announce or expose services for features in use: HomeKit Bridge (`_hap._tcp`), an MQTT
+  broker app (TCP 1883/8883, WebSockets 1884/8884), SSH or Samba apps (22, 445), and Zigbee2MQTT's
+  frontend through the app.
+- MAC vendor (OUI) of the board maker (for example a single-board-computer vendor) on appliances; a
+  hypervisor vendor on VMs. Not a reliable signal on its own.
+- Outbound connections to the vendor's cloud relay when Home Assistant Cloud is enabled.
+
+## mqtt
+
+**Use for:** Security assessment, hardening, remediation, and incident response for MQTT brokers, primarily Eclipse Mosquitto (standalone, in a container, or as the Home Assistant broker app), with generic guidance for other brokers. Use when auditing an MQTT broker, reviewing its listeners, anonymous access, password files, ACLs, TLS, WebSockets, retained messages, bridges, logging, or the credentials used by Home Assistant, Zigbee2MQTT, Frigate, and devices, or when a broker or its clients may have been compromised.
+
+**Applies to:** Eclipse Mosquitto 2.0 and 2.1 (verify the live version; 2.1 deprecates several options), other MQTT 3.1.1/5 brokers generically · **Finding prefix:** `MQTT` · **Version:** 1.0 · **Bundle:** `dist/mqtt.md`
+
+### Detection
+
+Hints for recognizing this product during a network inventory (used by the `full-assessment` skill).
+Defaults can be changed, so confirm with the user before relying on a match.
+
+- TCP 1883 (MQTT, plaintext) and TCP 8883 (MQTT over TLS) are the IANA-registered ports. A TLS listener
+  presents a certificate; a plaintext one answers an MQTT CONNECT with a CONNACK.
+- MQTT over WebSockets has no single default in Mosquitto; it's set per listener. The Home Assistant
+  broker app uses 1884 (plaintext) and 8884 (TLS). Other common choices are documented per product.
+- Mosquitto publishes broker information under `$SYS/broker/` (including `$SYS/broker/version`) to
+  clients allowed to read it.
+- DNS-SD service type `_mqtt._tcp` (and `_secure-mqtt._tcp`) may be announced by some brokers or by an
+  mDNS responder configured on the host; Mosquitto itself is not known to announce it (verify).
+- Other brokers' admin dashboards (for example EMQX's web dashboard on its documented default port) are
+  strong hints; check the product documentation.
+- Often co-located with Home Assistant, Zigbee2MQTT (frontend on 8080 by default when enabled), and
+  Frigate.
+
+## media-automation
+
+**Use for:** Security assessment, hardening, remediation, and incident response for media-automation stacks: the Servarr apps (Sonarr, Radarr, Lidarr, Readarr-style apps, Prowlarr), Bazarr, request apps (Overseerr, Jellyseerr, Seerr), Tautulli, usenet downloaders (SABnzbd, NZBGet), torrent clients (qBittorrent, Transmission), and helpers such as FlareSolverr. Use when auditing an "*arr" stack, reviewing its authentication, API keys, reverse-proxy or tunnel exposure, download-client web UIs, VPN binding, shared media/config folder permissions, updates, or backups, or when one of these apps may have been compromised.
+
+**Applies to:** Sonarr v4/v5, Radarr, Lidarr, Prowlarr, Bazarr, Seerr and its predecessors, Tautulli, SABnzbd, NZBGet, qBittorrent, Transmission 4.x, FlareSolverr (verify each installed version; settings move between releases) · **Finding prefix:** `ARR` · **Version:** 1.0 · **Bundle:** `dist/media-automation.md`
+
+### Detection
+
+Hints for recognizing this product during a network inventory (used by the `full-assessment` skill).
+Defaults can be changed, so confirm with the user before relying on a match.
+
+- Vendor-default web UI ports (all HTTP unless TLS was configured): Sonarr 8989, Radarr 7878, Lidarr 8686,
+  Readarr 8787, Prowlarr 9696, Bazarr 6767, Overseerr/Jellyseerr/Seerr 5055, Tautulli 8181, NZBGet 6789
+  (TLS 6791 when enabled), Transmission RPC and web UI 9091, FlareSolverr API 8191. qBittorrent's web UI
+  and SABnzbd both default to 8080, so they collide; containers often remap one of them.
+- Page titles and login pages carry the product name (Sonarr, Radarr, Prowlarr, qBittorrent, SABnzbd,
+  NZBGet, Transmission Web, Tautulli, Overseerr/Jellyseerr/Seerr). A Servarr login page is the same
+  design across Sonarr, Radarr, Lidarr, Readarr, and Prowlarr. Servarr apps also send their API with a
+  `/api/v1` or `/api/v3` path.
+- Transmission's RPC answers unauthenticated requests on `/transmission/rpc` with an HTTP 409 and a session
+  ID header, or a 401/403 when authentication or its address whitelist rejects the caller.
+- FlareSolverr answers its API port with a short JSON status message and no login.
+- Torrent clients listen on a peer port too (Transmission 51413 by default; qBittorrent picks a port at
+  install). A peer port on a host that is not the VPN endpoint is worth noting.
+- These apps don't announce themselves with mDNS or SSDP by default. Container hosts usually show many of
+  these ports at once; virtual MAC address vendors (container bridges, hypervisors) are common.
+
+## media-servers
+
+**Use for:** Security assessment, hardening, remediation, and incident response for self-hosted media servers and transcoding: Plex Media Server, Jellyfin, Emby, and Tdarr (server and nodes). Use when auditing a media server's remote access (Plex Remote Access and relay, port 32400, Jellyfin or Emby direct exposure), accounts, shared users, admin users, API keys and tokens, plugins and repositories, hardware transcoding device access, library mounts, Tdarr server and node exposure, logs, or updates, or when a media server or transcoding node may have been compromised.
+
+**Applies to:** Plex Media Server 1.4x, Jellyfin 10.10/10.11, Emby Server 4.8/4.9, Tdarr 2.x/3.x (verify each installed version; settings and menus change between releases) · **Finding prefix:** `MED` · **Version:** 1.0 · **Bundle:** `dist/media-servers.md`
+
+### Detection
+
+Hints for recognizing this product during a network inventory (used by the `full-assessment` skill).
+Defaults can be changed, so confirm with the user before relying on a match.
+
+- **Plex Media Server:** TCP 32400 (HTTP and HTTPS on the same port), web app at `/web`; GDM discovery on
+  UDP 32410, 32412, 32413, and 32414; DLNA on UDP 1900 (SSDP) and TCP 32469; older Bonjour discovery on UDP
+  5353; Plex Companion for some clients on TCP 8324. Plex advises against forwarding anything except the
+  main port. An unauthenticated request to the server's identity endpoint is commonly observed to return a
+  small XML document with the server's machine identifier and version (**not yet verified** on every
+  version).
+- **Jellyfin:** HTTP 8096 and HTTPS 8920 (HTTPS off by default); client discovery on UDP 7359, which
+  answers a local broadcast with the server's name, address, and ID; DLNA on UDP 1900 when the DLNA plugin
+  is installed. The login page is titled Jellyfin, and a public system-info endpoint is commonly observed
+  to return the server name and version without login (**not yet verified** on every version).
+- **Emby Server:** HTTP 8096 and HTTPS 8920 by default, similar discovery and public-info behavior to
+  Jellyfin (Jellyfin is a fork of Emby); login page titled Emby. Verify on the installed version.
+- **Tdarr:** web UI on TCP 8265 and the server port for nodes and the API on TCP 8266 by default; the web
+  UI is titled Tdarr. Nodes connect outbound to the server port.
+- Media servers often run with host networking, so many ports appear on one host. MAC vendors are those of
+  the host (NAS, mini PC, hypervisor), not of the product.
+
+## dns-filtering
+
+**Use for:** Security assessment, hardening, remediation, and incident response for network-wide DNS filtering servers: AdGuard Home and Pi-hole (v6 and later), on bare metal, in containers, or in LXC containers and VMs. Use when auditing a DNS filtering server's admin UI and API access, listening interfaces and open-resolver exposure, upstream and encrypted DNS, DNSSEC, blocklist sources, local DNS records and rewrites, client bypass and firewall enforcement, redundancy, query logs, or updates, or when a DNS filtering server may have been compromised or is redirecting names.
+
+**Applies to:** AdGuard Home v0.107.x stable (v0.108 is in beta) and Pi-hole v6.x (Core, FTL, Web); verify the live versions · **Finding prefix:** `DNS` · **Version:** 1.0 · **Bundle:** `dist/dns-filtering.md`
+
+### Detection
+
+Hints for recognizing this product during a network inventory (used by the `full-assessment` skill).
+Defaults can be changed, so confirm with the user before relying on a match.
+
+- Answers DNS on 53/UDP and 53/TCP, and is often the DNS server handed out by DHCP while not being the
+  default gateway.
+- **Pi-hole v6:** web UI on HTTP 80 and HTTPS 443 by default (FTL generates a self-signed certificate),
+  served from `/admin/` with a Pi-hole login page; REST API under `/api/`. The default local name is
+  `pi.hole`. The embedded NTP server is enabled by default on 123/UDP. A dnsmasq-style answer to a CHAOS
+  `version.bind` query is a hint, not proof (not yet verified on every version).
+- **AdGuard Home:** an unconfigured instance serves its setup wizard on TCP 3000 on all interfaces;
+  after setup the web UI is usually on 80 (and 443 with encryption enabled), with an AdGuard Home login
+  page and an API under `/control/`. With encryption enabled it may also answer DNS over TLS on 853/TCP,
+  DNS over QUIC on 853/UDP, DoH on 443 at `/dns-query`, and DNSCrypt on 5443.
+- Either may answer DHCP on 67/UDP if it is the DHCP server.
+- No vendor mDNS or SSDP announcement is documented for either product; don't rely on discovery
+  protocols.
+- MAC vendor (OUI): often a single-board-computer maker (both products are popular on Raspberry Pi
+  boards), but just as often a hypervisor or container bridge vendor, or the host's NIC. The MAC rarely
+  identifies these products.
+
 ## opnsense
 
 **Use for:** Security assessment, hardening, remediation, and incident response for OPNsense firewalls (community and business editions, on hardware or virtualized). Use when auditing an OPNsense firewall, reviewing its firewall and NAT rules, admin access, VPNs (WireGuard, OpenVPN, IPsec), DNS/DHCP services, plugins, backups, or logging, or when an OPNsense firewall may have been compromised.
@@ -300,6 +583,190 @@ Defaults can be changed, so confirm with the user before relying on a match.
 - A MAC address vendor (OUI) of the official appliance maker on vendor hardware; generic NIC or hypervisor
   vendors otherwise.
 
+## pfsense
+
+**Use for:** Security assessment, hardening, remediation, and incident response for pfSense firewalls (pfSense CE and pfSense Plus, on Netgate hardware, bare metal, or virtualized). Use when auditing a pfSense firewall, reviewing its firewall and NAT rules, admin access and privileges, VPNs (WireGuard, OpenVPN, IPsec), DNS Resolver/Forwarder and DHCP services, packages such as pfBlockerNG, configuration backups, or logging, or when a pfSense firewall may have been compromised.
+
+**Applies to:** pfSense CE 2.8.x-2.9.x and pfSense Plus 26.x (verify the live version; menus change between releases) · **Finding prefix:** `PFS` · **Version:** 1.0 · **Bundle:** `dist/pfsense.md`
+
+### Detection
+
+Hints for recognizing this product during a network inventory (used by the `full-assessment` skill).
+Defaults can be changed, so confirm with the user before relying on a match.
+
+- Usually the LAN's default gateway, and often also its DNS server (DNS Resolver, port 53) and DHCP server.
+- Web GUI ("webConfigurator") on HTTPS port 443 by default, with a redirect from HTTP port 80. The login
+  page is branded pfSense (CE or Plus). A fresh install uses a self-signed certificate, commonly with a
+  common name beginning `pfSense-`.
+- Default system hostname `pfSense` on new installs (verify on the installed version); reverse DNS or
+  DHCP-provided domain may reveal it.
+- SSH (port 22) with a FreeBSD OpenSSH banner, only if SSH has been enabled (typically off on a fresh CE
+  install until enabled from the GUI or console; verify the default on Netgate appliances).
+- On pfSense Plus with the Netgate Nexus controller enabled, an additional management GUI is reported on
+  port 8443 (community-reported; verify).
+- No mDNS/DNS-SD announcements by default. If UPnP IGD & PCP is enabled, the firewall answers SSDP
+  discovery as an internet gateway device.
+- A MAC vendor (OUI) registered to Netgate on many Netgate appliances, though some models use the NIC
+  maker's OUI. Generic NIC or hypervisor vendors on bare metal or VMs, where the MAC says nothing.
+
+## vpn-servers
+
+**Use for:** Security assessment, hardening, remediation, and incident response for standalone WireGuard and OpenVPN servers on Linux or other hosts, including common wrappers (wg-easy, PiVPN, OpenVPN Access Server). Use when auditing a self-hosted VPN server, reviewing its peers, keys, certificates, revocation, routing scope, tunnel firewalling, 2FA, management web UI, client config handling, logging, or site-to-site links, or when a VPN server or one of its client credentials may have been compromised. VPNs built into a firewall (OPNsense, pfSense) are covered by that firewall's skill.
+
+**Applies to:** WireGuard (Linux kernel module and wireguard-tools), OpenVPN community 2.6/2.7, wg-easy v15, PiVPN 4.x, OpenVPN Access Server 3.x (verify the live versions; wrapper menus and defaults change between releases) · **Finding prefix:** `VPN` · **Version:** 1.0 · **Bundle:** `dist/vpn-servers.md`
+
+### Detection
+
+Hints for recognizing this product during a network inventory (used by the `full-assessment` skill).
+Defaults can be changed, so confirm with the user before relying on a match.
+
+- **WireGuard:** UDP 51820 is the conventional default. WireGuard doesn't answer unauthenticated packets,
+  so scanners report the port as `open|filtered` and no banner exists. It usually can't be fingerprinted
+  from the network; confirm with the user or from the host (`wg show`, a `wg0` interface).
+- **OpenVPN community:** UDP 1194 by default (TCP 1194 or TCP 443 also common). A server with
+  `tls-auth` or `tls-crypt` ignores packets without the right key and looks silent; one without them
+  answers a protocol probe, which some scanners identify as OpenVPN.
+- **wg-easy:** web UI on TCP 51821 by default, plain HTTP unless a reverse proxy sits in front. The page
+  shows wg-easy / WireGuard branding (verify the exact title on the installed version).
+- **OpenVPN Access Server:** TCP 943 for the Admin Web UI (`/admin`) and Client Web UI (`/`), TCP 443
+  shared between the client web UI and the OpenVPN TCP daemon, UDP 1194 for tunnels. Upgraded systems may
+  still listen on TCP 945 (legacy interface). A self-signed certificate on a fresh install.
+- **PiVPN:** no network-visible service beyond the WireGuard or OpenVPN port it installs; often runs on a
+  Raspberry Pi, so a Raspberry Pi OUI is a weak hint.
+- No mDNS/DNS-SD or SSDP announcements are expected from these servers. MAC vendors aren't useful: this
+  is software running on generic hardware, VMs, or containers.
+- On a host, interfaces named `wg*` or `tun*`/`tap*`, and routes to a tunnel subnet, are the strongest
+  signs.
+
+## wifi-and-switches
+
+**Use for:** Security assessment, hardening, remediation, and incident response for consumer and prosumer Wi-Fi mesh systems (app-managed systems such as eero, Google/Nest Wifi, Deco, Orbi, and UniFi-style controllers) and managed or smart switches, including used enterprise switches such as older Cisco Catalyst units in homelabs. Use when auditing Wi-Fi security modes, guest and IoT SSIDs, router versus bridge mode, vendor cloud accounts, UPnP, firmware and end-of-support status, or switch management access, legacy protocols, VLANs, ports, and config backups, or when a mesh system or switch may have been compromised.
+
+**Applies to:** App- or controller-managed Wi-Fi mesh systems and managed/smart Ethernet switches, any vendor (verify the live firmware, app version, and support status; menus change often) · **Finding prefix:** `WIFI` · **Version:** 1.0 · **Bundle:** `dist/wifi-and-switches.md`
+
+### Detection
+
+Hints for recognizing these devices during a network inventory (used by the `full-assessment` skill).
+Defaults can be changed and many consumer mesh nodes expose almost nothing locally, so confirm with the
+user before relying on a match.
+
+- **App-managed mesh nodes:** often no local web UI at all, or a minimal page that tells you to use the
+  app. If in router mode, the primary node is the LAN default gateway, DNS server, and DHCP server. Some
+  answer SSDP (UDP 1900) as a UPnP Internet Gateway Device when UPnP is on; the SSDP device description
+  usually names the vendor and model.
+- **Controller-managed APs and switches (UniFi-style):** the vendor documents a required-ports list; it
+  includes UDP 10001 for device discovery and TCP 8080 for device-to-controller communication, with the
+  controller web UI on HTTPS (commonly 8443 on self-hosted controllers, 443 on console hardware). Verify
+  against the vendor's current required-ports reference.
+- **Smart/web-managed switches:** a web login page on HTTP 80 and/or HTTPS 443 whose title names the
+  vendor or model; sometimes a vendor discovery utility protocol on a UDP broadcast port.
+- **Enterprise switches:** SSH (22) and often Telnet (23) with a login banner or `User Access
+  Verification` prompt; an HTTP/HTTPS management server (80/443) if enabled; SNMP on UDP 161; on Cisco
+  IOS switches that still have it, Smart Install on TCP 4786. CDP and LLDP announcements on access ports
+  name the platform, software version, and management address.
+- **MAC address vendors (OUIs):** mesh nodes and switches usually carry the vendor's own OUI; rebadged
+  ISP hardware carries the OEM's OUI, and per-SSID or per-band BSSIDs on Wi-Fi are often locally
+  administered addresses that don't map to a vendor at all.
+
+## linux
+
+**Use for:** Security assessment, hardening, remediation, and incident response for Linux hosts: servers, VMs, LXC containers, and Raspberry Pi-class devices, with distribution-aware guidance for Debian, Ubuntu, RHEL-family (RHEL, Rocky, AlmaLinux, Fedora), and others. Use when auditing a Linux host's support status, automatic updates, users and sudo, SSH, listening services, host firewall, AppArmor/SELinux, secrets on disk, cron and systemd persistence, third-party repositories, logging, NFS/SMB, containers, or backups, or when a Linux host may have been compromised.
+
+**Applies to:** systemd-based Linux distributions: Debian 12-13, Ubuntu LTS 22.04-26.04, RHEL-family 8-10, Raspberry Pi OS, and similar (verify the live release and its support status) · **Finding prefix:** `LNX` · **Version:** 1.0 · **Bundle:** `dist/linux.md`
+
+### Detection
+
+Hints for recognizing this product during a network inventory (used by the `full-assessment` skill).
+Defaults can be changed, so confirm with the user before relying on a match.
+
+- SSH on TCP 22 is the most common sign. The OpenSSH banner usually includes a distribution suffix, for
+  example `SSH-2.0-OpenSSH_<version> Debian-<package-revision>` or `... Ubuntu-<package-revision>`, which
+  hints at the distribution and sometimes the release. RHEL-family banners usually show only
+  `OpenSSH_<version>`. Banners can be changed and say nothing about patch level beyond the package
+  revision; never treat them as proof of a vulnerability.
+- Other typical ports, depending on role: 80/443 (web), 9090 (Cockpit on RHEL-family and some others),
+  111 and 2049 (NFS), 139/445 (Samba), 5353/UDP (mDNS), 3389 (xrdp) or 5900+ (VNC) on desktops.
+- mDNS/DNS-SD via Avahi: Linux desktops and Raspberry Pi OS often announce `<hostname>.local` and
+  services such as `_ssh._tcp`, `_sftp-ssh._tcp`, `_smb._tcp`, or `_workstation._tcp`. A fresh Raspberry
+  Pi OS install answers to `raspberrypi.local` until renamed.
+- MAC address vendors (OUIs): Raspberry Pi boards use OUIs registered to Raspberry Pi (for example
+  `B8:27:EB`, `DC:A6:32`, `E4:5F:01`, `D8:3A:DD`, `2C:CF:67`; check the IEEE registry for the current
+  list). Virtual machines often carry hypervisor default prefixes: `52:54:00` (QEMU/KVM, libvirt),
+  `BC:24:11` (Proxmox VE), `00:50:56` and `00:0C:29` (VMware), `00:15:5D` (Hyper-V), `08:00:27`
+  (VirtualBox), `00:16:3E` (Xen). A generic NIC vendor (Intel, Realtek, Broadcom) says nothing about the
+  OS.
+- These hints don't apply when MAC addresses are randomized or set by hand, when the host sits behind NAT
+  or a reverse proxy (you see the proxy), when SSH is disabled or moved, or for LXC containers on a bridge
+  (they get their own MAC, often from the hypervisor's prefix). Many appliances (NAS, routers, cameras)
+  also run Linux; prefer their product skill when one matches.
+
+## macos
+
+**Use for:** Security assessment, hardening, remediation, and incident response for Apple Macs running macOS: personal and work laptops and desktops, and Macs used as always-on home or homelab servers. Use when auditing a Mac's update status, FileVault, firewall, Gatekeeper/XProtect/SIP, accounts and login settings, sharing services (SSH, Screen Sharing, File Sharing, Remote Management), privacy permissions, login and background items, LaunchAgents/LaunchDaemons, Homebrew, Docker Desktop, MDM profiles, backups, or Find My, or when a Mac may have been compromised.
+
+**Applies to:** macOS on Apple silicon and Intel Macs, current major release and the two before it (verify the live version; System Settings names and locations change between releases) · **Finding prefix:** `MAC` · **Version:** 1.0 · **Bundle:** `dist/macos.md`
+
+### Detection
+
+Hints for recognizing this product during a network inventory (used by the `full-assessment` skill).
+Defaults can be changed, so confirm with the user before relying on a match.
+
+- **mDNS/Bonjour (UDP 5353)** is the strongest signal. Macs commonly advertise `_device-info._tcp`, whose
+  TXT record often includes a `model=` value naming the Mac model family (for example `Macmini…`,
+  `MacBookPro…`, `Mac…`), and `_companion-link._tcp`. Sharing services add their own service types:
+  `_ssh._tcp` and `_sftp-ssh._tcp` (Remote Login), `_rfb._tcp` (Screen Sharing), `_smb._tcp` (File
+  Sharing), `_afpovertcp._tcp` (legacy AFP file sharing, on versions that still offer it),
+  `_net-assistant._udp` (Remote Management / Apple Remote Desktop), `_eppc._tcp` (Remote Apple Events), and
+  `_airplay._tcp` / `_raop._tcp` (AirPlay Receiver). Also seen: `_ipp._tcp` (Printer Sharing) and
+  `_adisk._tcp` (a Mac sharing a Time Machine destination). Advertised names are often "<person>'s
+  MacBook"-style; treat them as personal data and don't copy them into reports.
+- **Typical open ports when sharing is on** (Apple's port list): TCP 22 (Remote Login), TCP 5900 (Screen
+  Sharing / VNC, with UDP 5900–5902 for media), TCP/UDP 3283 (Remote Management), TCP 445 (SMB File
+  Sharing), TCP 548 (AFP, legacy), TCP 3031 (Remote Apple Events), TCP 5000 and 7000 (AirPlay Receiver).
+  With every sharing service off and stealth mode on, a Mac may answer almost nothing, including ping.
+- **MAC addresses:** wired Ethernet and the hardware Wi-Fi address use OUIs registered to Apple. Since
+  macOS Sequoia 15, Wi-Fi defaults to a **private Wi-Fi address** (Fixed per network on WPA2-or-better
+  networks, Rotating on open or weak ones), which is a locally administered address with no vendor match.
+  An "unknown vendor" Wi-Fi client may still be a Mac; a Mac may also change address after the network is
+  forgotten.
+- Docker Desktop, Homebrew services, and developer servers on a Mac expose their own ports; classify them
+  with their own skills, but record that the host is a Mac.
+
+## windows
+
+**Use for:** Security assessment, hardening, remediation, and incident response for Windows 10 and 11 desktops and laptops, and small Windows Server installs in homes and small offices. Use when auditing a Windows PC or small server, reviewing its support status, updates, Microsoft Defender, BitLocker, accounts and UAC, firewall, RDP and remote-support tools, file sharing, logging, persistence, or backups, or when a Windows machine may have been compromised (including tech-support scams and ransomware).
+
+**Applies to:** Windows 11, Windows 10 22H2 with ESU, small Windows Server 2016-2025 installs (verify the live build and edition) · **Finding prefix:** `WIN` · **Version:** 1.0 · **Bundle:** `dist/windows.md`
+
+### Detection
+
+Hints for recognizing this product during a network inventory (used by the `full-assessment` skill).
+Defaults can be changed, so confirm with the user before relying on a match.
+
+- **Windows Firewall blocks most inbound traffic by default**, especially on networks marked Public. A
+  Windows PC often answers nothing to a port scan. Absence of open ports does not rule Windows out.
+- **SMB on TCP 445** (file sharing, also used by many admin tools). If open on a client PC, sharing or
+  network discovery is turned on for that network profile.
+- **NetBIOS over TCP/IP**: UDP 137 (name service), UDP 138 (datagram), TCP 139 (session). A NetBIOS name
+  query returns the computer name and workgroup or domain, and its presence suggests legacy name
+  resolution is still enabled.
+- **RDP on TCP 3389** (and UDP 3389 for newer clients) only on Pro, Enterprise, and Server editions, and
+  only when Remote Desktop is enabled. The RDP certificate's subject is usually the computer name.
+- **WinRM** on TCP 5985 (HTTP) and 5986 (HTTPS): enabled by default on Windows Server, not on clients.
+- **RPC endpoint mapper** on TCP 135, commonly open on servers and domain controllers. Domain controllers
+  also expose Kerberos (88), LDAP (389/636), and DNS (53).
+- **Name resolution chatter**: LLMNR on UDP 5355 and mDNS on UDP 5353 announce or answer for the
+  computer name; WS-Discovery (UDP 3702) and SSDP (UDP 1900) appear when network discovery is on. Microsoft
+  has been moving away from LLMNR and NetBIOS name resolution, so verify which are active on the version.
+- **Computer names**: default names on new PCs follow the pattern `DESKTOP-<random>` or `LAPTOP-<random>`;
+  servers often use `WIN-<random>` until renamed.
+- **MAC address vendors**: the PC or network-adapter maker (Intel, Realtek, Dell, Lenovo, HP, Microsoft
+  for Surface), which says little about the OS. Hyper-V guests use Microsoft's `00:15:5D` prefix by
+  default. Windows 10 and 11 can use **random hardware addresses** on Wi-Fi, so a laptop may appear with a
+  different, locally administered MAC on each network.
+- **When these don't apply**: laptops on guest or Public-profile networks, PCs with third-party firewalls,
+  and machines that are asleep. Ask the user for a device list rather than inferring from silence.
+
 ## synology-dsm
 
 **Use for:** Security assessment, hardening, remediation, and incident response for Synology NAS devices running DSM, including DSM installed on non-Synology or virtualized hardware. Use when auditing a Synology NAS, reviewing DSM settings, packages, Container Manager, shares, remote access, or backups, or when a Synology NAS may have been compromised or hit by ransomware.
@@ -317,6 +784,162 @@ Defaults can be changed, so confirm with the user before relying on a match.
 - A MAC address vendor (OUI) registered to Synology. Only genuine hardware shows this; DSM on virtual or
   non-Synology hardware shows the hypervisor's or NIC maker's vendor instead.
 - Found by Synology's own discovery tools (Synology Assistant, or Web Assistant on the local network).
+
+## frigate-nvr
+
+**Use for:** Security assessment, hardening, remediation, and incident response for Frigate NVR (Docker, Home Assistant app/add-on, and other installs), with notes that carry over to other NVR software. Use when auditing a Frigate server, reviewing its authenticated and unauthenticated ports, users and roles, TLS, go2rtc restream and WebRTC exposure, camera and MQTT credentials, generative AI integrations, recordings retention and storage, or remote access, or when a Frigate server or its recordings may have been compromised.
+
+**Applies to:** Frigate 0.14 and later (built-in authentication); written against the 0.18 series (verify the live version; settings and API behavior change between releases) · **Finding prefix:** `NVR` · **Version:** 1.0 · **Bundle:** `dist/frigate-nvr.md`
+
+### Detection
+
+Hints for recognizing this product during a network inventory (used by the `full-assessment` skill).
+Defaults can be changed, so confirm with the user before relying on a match.
+
+- TCP 8971: HTTPS by default with a self-signed certificate generated by Frigate; the web UI is titled
+  Frigate and shows a login page.
+- TCP 5000: plain HTTP Frigate UI with no login page (the unauthenticated internal port). Seeing the
+  camera grid without logging in is itself a finding.
+- TCP 8554: RTSP (the go2rtc restream). TCP and UDP 8555: WebRTC. TCP 1984: the go2rtc web UI and API, if
+  published.
+- Often found next to an MQTT broker (TCP 1883, or 8883 with TLS) and Home Assistant (TCP 8123).
+- The host is usually a Linux server, NAS, or mini PC running Docker, or a Home Assistant host; there is
+  no Frigate-specific MAC vendor. A Coral, Hailo, or GPU accelerator in the inventory is a hint.
+- The host makes many long-lived RTSP connections to cameras on the camera network.
+
+## ip-cameras
+
+**Use for:** Security assessment, hardening, remediation, and incident response for network (IP) cameras and the small DVRs/NVRs that ship with them, vendor-neutral with short notes for common vendor families (Hikvision/Dahua-style OEMs, Reolink, TP-Link Tapo, Xiongmai/XMeye-style OEMs, Wyze and open firmware, Amcrest, Ubiquiti). Use when auditing cameras, reviewing their firmware support, cloud/P2P and UPnP features, accounts, RTSP/ONVIF access, network isolation and internet egress, or physical and privacy settings, or when a camera may have been compromised or joined a botnet.
+
+**Applies to:** Wired and Wi-Fi IP cameras, doorbells, and bundled DVR/NVR recorders from any vendor (verify each model's current firmware and support status) · **Finding prefix:** `CAM` · **Version:** 1.0 · **Bundle:** `dist/ip-cameras.md`
+
+### Detection
+
+Hints for recognizing this product during a network inventory (used by the `full-assessment` skill).
+Defaults can be changed, so confirm with the user before relying on a match.
+
+- RTSP on TCP 554 (some vendors and models use another port). An `OPTIONS` or `DESCRIBE` reply with a
+  vendor-specific `Server` header is a strong hint.
+- ONVIF: devices answer WS-Discovery probes on UDP 3702 (multicast) and expose the ONVIF device service
+  over HTTP, usually on port 80 and sometimes on a vendor port (for example TP-Link Tapo uses 2020).
+- SSDP/UPnP announcements on UDP 1900 with camera or NVR device descriptions.
+- Web UI on 80/443 with a vendor-branded login page; many embedded web servers identify the OEM in page
+  titles, script names, or the `Server` header.
+- Vendor management ports, from vendor or OEM documentation: Hikvision-family devices use TCP 8000 for
+  the SDK/client software port and UDP 37020 for SADP discovery; Dahua-family devices use TCP 37777;
+  Xiongmai-family devices use TCP 34567 (DVRIP/"NetSurveillance"). An open TCP 23 (telnet) or 9527 on
+  a cheap camera is a red flag (9527 is a debug port reported on some OEM firmware; not yet verified for
+  any specific model).
+- MAC vendors (OUI) often name the camera maker (for example Hikvision, Dahua, TP-Link, Ubiquiti), but
+  many Wi-Fi cameras show the Wi-Fi module's maker instead, and rebranded cameras show the OEM, not the
+  brand on the box.
+- Behavior: steady outbound connections to vendor cloud or P2P servers (often UDP to many destinations),
+  and long-lived RTSP sessions from an NVR.
+
+## video-doorbells
+
+**Use for:** Security and privacy assessment, hardening, remediation, and incident response for cloud-first consumer video doorbells, cameras, and alarm-and-camera kits (Ring, Google Nest, Arlo, Eufy, Wyze, SimpliSafe and similar). Use when reviewing who can see a household's cameras, the vendor account's sign-in security, shared users and logged-in devices, end-to-end encryption and local-storage options, police and neighborhood sharing settings, third-party integrations and local stream bridges, network placement, or physical tamper and theft, or when a doorbell or camera account may have been taken over.
+
+**Applies to:** Cloud-managed consumer doorbells, cameras, and alarm kits and their vendor apps (verify the live app version; menus and features change often) · **Finding prefix:** `DBL` · **Version:** 1.0 · **Bundle:** `dist/video-doorbells.md`
+
+### Detection
+
+Hints for recognizing this product class during a network inventory (used by the `full-assessment` skill).
+These devices mostly make outbound connections to their vendor and expose little or nothing locally, so
+network evidence is often thin. Confirm with the user before relying on a match.
+
+- A MAC address vendor (OUI) registered to the camera brand (for example Ring, Google, Arlo, Wyze, or
+  Anker/Eufy), or to the Wi-Fi module maker inside the device (commonly Espressif, Realtek, or similar),
+  in which case the OUI alone doesn't identify the product.
+- A DHCP hostname or client identifier that includes the brand or product family.
+- Steady outbound TLS connections and DNS queries to the vendor's cloud domains, with **no** listening
+  services on the device. A scan that finds no open ports on a doorbell is normal, not a pass or a failure.
+- Hubs and base stations (Arlo, Eufy HomeBase, alarm base stations) are usually wired or on 2.4 GHz Wi-Fi
+  and may answer local discovery (mDNS or SSDP) or keep a few local ports open for the app's local
+  streaming. Port numbers vary by vendor and firmware; treat any open port as something to identify, not
+  something to connect to.
+- Local stream bridges on another host (a container or add-on named after the camera brand) and RTSP
+  (TCP 554, the protocol default) on a camera where the vendor offers optional RTSP firmware or a setting.
+
+## proxmox-ve
+
+**Use for:** Security assessment, hardening, remediation, and incident response for Proxmox Virtual Environment (single hosts and clusters), including the server hardware's BMC (iDRAC, iLO, IPMI). Use when auditing a Proxmox VE host or cluster, reviewing its package repositories, web UI and SSH exposure, realms, two-factor authentication, users, roles, ACLs, API tokens, firewall, backup jobs and Proxmox Backup Server, storage, passthrough, containers, or cluster network, or when a Proxmox VE host or any of its guests may have been compromised.
+
+**Applies to:** Proxmox VE 9.x on Debian 13; 8.x is end of life since 2026-08 (verify the live version) · **Finding prefix:** `PVE` · **Version:** 1.0 · **Bundle:** `dist/proxmox-ve.md`
+
+### Detection
+
+Hints for recognizing this product during a network inventory (used by the `full-assessment` skill).
+Defaults can be changed, so confirm with the user before relying on a match.
+
+- Web UI and REST API on HTTPS **port 8006** (vendor default), page title ending in "Proxmox Virtual
+  Environment", and a self-signed certificate issued by the cluster's own Proxmox CA on a fresh install. No
+  service on port 443 by default.
+- SPICE proxy on TCP 3128 and SSH on TCP 22 with a Debian OpenSSH banner. In clusters, corosync on UDP
+  5405-5412 between nodes. Proxmox Backup Server, if present, answers on HTTPS port 8007.
+- No mDNS or SSDP announcement by default.
+- **Guests:** Proxmox VE generates guest MAC addresses with the prefix `BC:24:11`, the IEEE OUI registered to
+  Proxmox Server Solutions GmbH (the `mac_prefix` datacenter option; verify on the installed version). Many
+  devices with that OUI suggest a Proxmox host nearby. Older installs, custom `mac_prefix` values, and
+  manually set MACs show other values (often random locally administered addresses).
+- **The host itself** shows the vendor of its physical NIC, not a Proxmox OUI.
+- **BMCs** show the server maker's or BMC chip's OUI and usually a web UI on 443 and IPMI on UDP 623.
+  Don't probe IPMI beyond recording that the port answers.
+
+## web-servers
+
+**Use for:** Security assessment, hardening, remediation, and incident response for web servers and reverse proxies: Apache httpd, nginx, Caddy, Traefik, HAProxy, and Nginx Proxy Manager. Use when auditing a web server or reverse proxy, reviewing its TLS and certificates, security headers, status pages and admin dashboards, forwarded-header trust, virtual-host routing to internal apps, authentication in front of those apps, logging, or file permissions, or when a web server or proxy may have been compromised.
+
+**Applies to:** Apache httpd 2.4.x, nginx (stable and mainline), Caddy 2.x, Traefik 3.x, HAProxy (supported branches), Nginx Proxy Manager 2.x (verify the live version of each) · **Finding prefix:** `WEB` · **Version:** 1.0 · **Bundle:** `dist/web-servers.md`
+
+### Detection
+
+Hints for recognizing this product during a network inventory (used by the `full-assessment` skill).
+Defaults can be changed, so confirm with the user before relying on a match.
+
+- Listeners on ports 80 and 443 (and 8080/8443 for alternates). The `Server` response header often names
+  the product: `Apache` (with version and OS unless `ServerTokens` is reduced), `nginx` (with version
+  unless `server_tokens off`), `Caddy`. Traefik and HAProxy usually send no `Server` header of their own,
+  so a response that passes through the backend's header unchanged suggests one of them.
+- Default pages: the Apache "It works!" page or a distribution test page; "Welcome to nginx!"; a Caddy
+  welcome page on a fresh install; the Nginx Proxy Manager "Congratulations!" default site.
+- Admin and status surfaces on vendor-default ports: Nginx Proxy Manager admin UI on port 81 (page title
+  "Nginx Proxy Manager"); the Traefik dashboard and API on the `traefik` entrypoint (commonly port 8080)
+  when `api.insecure` is set; the Caddy admin API on `localhost:2019` (should not be reachable from the
+  network at all); HAProxy statistics pages on whatever port the configuration assigns.
+- Status paths: `/server-status` and `/server-info` (Apache), `/nginx_status` or similar for nginx
+  `stub_status` (path chosen by the operator).
+- Certificates: an ACME-issued certificate (for example from Let's Encrypt) listing many internal names
+  in its subject alternative names suggests a reverse proxy fronting several apps. Public certificate
+  transparency logs reveal those names to anyone.
+- MAC address vendors don't help: these run on general-purpose hosts, VMs, and containers.
+
+## self-hosted-web-apps
+
+**Use for:** Security assessment, hardening, remediation, and incident response for small self-hosted web apps and dashboards that have no dedicated skill: start pages and dashboards (Homepage, Heimdall, Homarr), network scanners (WatchYourLAN, NetAlertX), monitoring tools (Glances, Uptime Kuma, Grafana), file and 3D-print libraries, wikis, and similar. Use when auditing one of these apps, deciding whether it is safe to expose, reviewing its authentication, secrets, container privileges, maintenance status, updates, and backups, or when one may have been compromised.
+
+**Applies to:** Small self-hosted web apps without a dedicated skill, usually run as containers (verify the live version of each app) · **Finding prefix:** `APP` · **Version:** 1.0 · **Bundle:** `dist/self-hosted-web-apps.md`
+
+### Detection
+
+Hints for recognizing this product during a network inventory (used by the `full-assessment` skill).
+Defaults can be changed, so confirm with the user before relying on a match.
+
+- **How to recognize "a web app with no dedicated skill":** an HTTP or HTTPS service on a non-standard
+  port of a server or container host, whose page title, favicon, or `Server` header names a
+  self-hosted project rather than a device vendor, and that doesn't match any other skill's Detection
+  section. Typical hosts run several of them side by side on adjacent ports. Container labels, compose
+  files, or the reverse proxy's route list name them directly.
+- Vendor-default ports seen in project documentation (always confirm, since they're easily changed):
+  Homepage on port 3000 in its examples; Grafana on 3000 (login page titled "Grafana"); Uptime Kuma on
+  3001; WatchYourLAN on 8840; NetAlertX on 20211; Glances web mode on 61208; Heimdall and Homarr on
+  whatever the image maps (commonly 80/443 inside the container).
+- Page titles and assets: the project name in `<title>`, a project favicon, or a JavaScript bundle path
+  that names the framework. A JSON API under `/api/` that answers without credentials is a strong hint
+  the app has no authentication enabled.
+- Network scanners announce themselves by their traffic: periodic ARP sweeps or ping sweeps from one host
+  across the whole subnet.
+- MAC address vendors don't help: these run on general-purpose hosts, VMs, and containers.
 
 ---
 

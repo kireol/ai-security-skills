@@ -1,0 +1,59 @@
+# macOS: References
+
+Always prefer current Apple documentation. Apple's guides have a version selector; check that a page
+describes the installed macOS version, because System Settings names and locations change between
+releases.
+
+Last verified: 2026-10-30
+
+## Vendor (authoritative)
+
+- Apple security releases (security content of every update; current version noted at the top):
+  https://support.apple.com/en-us/100100
+- About software updates for Apple devices (including the statement that not all known issues are fixed in
+  previous versions): https://support.apple.com/guide/deployment/about-software-updates-depc4c80847a/web
+- Background Security Improvements (successor to Rapid Security Responses):
+  https://support.apple.com/guide/deployment/background-security-improvements-dep93ff7ea78/web
+- Get macOS updates and automatic update settings: https://support.apple.com/guide/mac-help/get-macos-updates-mchlpx1065/mac
+- Apple Platform Security guide (FileVault, SIP, signed system volume, Gatekeeper, XProtect, startup
+  security): https://support.apple.com/guide/security/welcome/web
+- System Integrity Protection: https://support.apple.com/guide/security/system-integrity-protection-secb7ea06b49/web
+- Firewall on Mac: https://support.apple.com/guide/mac-help/block-connections-to-your-mac-with-a-firewall-mh34041/mac
+- Privacy & Security settings: https://support.apple.com/guide/mac-help/change-privacy-security-settings-on-mac-mchl211c911f/mac
+- Local Network access: https://support.apple.com/guide/mac-help/control-access-to-your-local-network-on-mac-mchla4f49138/mac
+- Login items and background tasks (including `sfltool dumpbtm`):
+  https://support.apple.com/guide/deployment/depdca572563/web
+- Automatic login and FileVault: https://support.apple.com/en-us/102316
+- TCP and UDP ports used by Apple software products: https://support.apple.com/en-us/103229
+- Private Wi-Fi addresses: https://support.apple.com/en-us/102509
+- Activation Lock for Mac: https://support.apple.com/en-us/102541
+- Activation Lock on managed devices: https://support.apple.com/guide/deployment/activation-lock-depf4ab94ef1/web
+- Apple Platform Deployment guide (MDM, profiles, software update management):
+  https://support.apple.com/guide/deployment/welcome/web
+- Reporting security issues to Apple: https://security.apple.com/
+- Man pages on the Mac itself (`man fdesetup`, `man sfltool`, `man csrutil`, `man spctl`, `man profiles`,
+  `man apple_ssh_and_filevault`, `man pmset`, `man tmutil`): the most version-accurate command reference.
+
+## Third-party software vendors (authoritative for their own products)
+
+- Docker: publishing ports (default binding to all interfaces):
+  https://docs.docker.com/get-started/docker-concepts/running-containers/publishing-ports/
+- Docker Desktop release notes and security announcements: https://docs.docker.com/desktop/release-notes/
+- Homebrew documentation: https://docs.brew.sh/
+
+Generic vulnerability and incident sources (CISA KEV, NVD, CVE, CISA ransomware guidance, IC3) are listed in
+the core documents.
+
+## Third-party (not authoritative)
+
+- macOS Security Compliance Project (NIST and partners): https://github.com/usnistgov/macos_security
+  Baselines and checks for many settings; built for managed fleets, so adapt for personal Macs and verify
+  against the installed version.
+- The Eclectic Light Company (Howard Oakley): https://eclecticlight.co/
+  Detailed explanations of login and background items, XProtect updates, and startup security. Useful
+  background; check claims against Apple's documentation.
+- Objective-See tools: https://objective-see.org/tools.html
+  Free persistence and network monitors (for example, KnockKnock and BlockBlock) useful for Discover and
+  Respond. They are third-party software with deep privileges; install only with the user's approval.
+- CIS Benchmarks for macOS: https://www.cisecurity.org/benchmark/apple_os
+  Consensus hardening settings; some items don't suit personal or server Macs.

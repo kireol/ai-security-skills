@@ -1,0 +1,95 @@
+# WireGuard and OpenVPN Servers: Respond (Incident Response)
+
+Use with the core playbook, [incident-response.md](../../../core/incident-response.md), which always
+applies. This file adds only VPN-server-specific steps.
+
+Two different incidents look alike here: **a stolen client credential** (a lost phone, a leaked config, a
+departed user's certificate) and **a compromised VPN server**. The first is contained by revoking one
+credential. The second exposes every key on the server and everything the tunnel can reach, and must be
+contained from outside the server. Decide which one you're facing early, and assume the worse one until
+the evidence rules it out.
+
+## Triage and containment
+
+- **Indicators of a stolen client credential:** a peer handshaking from an unfamiliar endpoint (country,
+  ISP, or network the owner doesn't use), at times the owner wasn't connected, or while the owner's
+  device was offline or lost; two simultaneous sessions for one OpenVPN certificate; authentication
+  failures followed by success; access from the tunnel to systems that user never uses.
+- **Indicators of a compromised server:** peers or users nobody added, changed `AllowedIPs` (especially a
+  peer that now claims a whole subnet or `0.0.0.0/0`), new or changed `PostUp`/`PreUp` hooks, OpenVPN
+  scripts, or plugins, new certificates issued by the CA, new wrapper admin accounts or API activity,
+  wrapper web UI logins from unknown addresses, firewall rules on the tunnel that were opened up, or
+  unexpected processes and outbound connections on the host.
+- **Contain a stolen client credential:** remove that one peer (from the running interface and the
+  persistent config, or through the wrapper), or revoke the certificate and install the new CRL; then
+  disconnect any live session for it. Disable the user account too where there is one (Access Server,
+  RADIUS/LDAP). With approval, as an emergency containment step.
+- **Contain a compromised server:** stop trusting it. Block the VPN port and any wrapper web UI at the
+  upstream firewall or router, or disconnect the server's network at the hypervisor or switch. Keep
+  console access. Don't power it off unless destruction is ongoing (memory and live state are evidence).
+- **If the user is connected through the affected VPN,** set up another path in before cutting it.
+
+## Evidence to preserve (VPN-specific)
+
+Collect from the console or a clean admin session, before changing anything. Record collection times.
+Never capture private keys in notes or chat; store any file that contains them as secret evidence.
+
+- WireGuard runtime state: `wg show` (keys hidden), `wg show all latest-handshakes`,
+  `wg show all endpoints`, and `wg show all transfer`. This state is lost when the interface restarts.
+- OpenVPN runtime state: the `status` file (connected clients, real source addresses, tunnel addresses)
+  and the management interface's client list if it is used; Access Server's connected-user list.
+- Configuration: the WireGuard config, OpenVPN server config, `client-config-dir` files, hook scripts,
+  plugin and script paths, and the wrapper's data volume or database, copied as files to protected
+  storage (they hold keys). Note file modification times first.
+- PKI: Easy-RSA `index.txt` (issued and revoked certificates with dates and subjects), the `issued/`
+  directory listing, the current CRL, and serial numbers. These show certificates an attacker issued.
+- Logs: OpenVPN or Access Server logs, the journal for the VPN services, wg-easy container logs, web UI
+  access logs or reverse-proxy logs, host authentication logs, and firewall logs for the VPN port and the
+  tunnel subnet.
+- Host firewall state: `nft list ruleset` or `iptables-save` output, and routes (`ip route`, `ip rule`).
+- Upstream: the router or firewall's port-forward rules and its logs for the VPN port.
+- For VMs and containers: a snapshot (with memory if supported) before any change.
+
+## Scope checks specific to VPN servers
+
+- **Everything the tunnel could reach.** Use the tunnel firewall rules (or their absence) to list the
+  systems a stolen credential or a compromised server could reach, then check those systems' logs for
+  access from the tunnel subnet during the suspect period.
+- **Every client identity, if the server is compromised.** Where the server or wrapper generated client
+  keys (wg-easy, PiVPN, Access Server profiles), it held every client's private key, so every client
+  config must be treated as exposed.
+- **Site-to-site peers:** the remote site may be the source (its key was used) or the next target (the
+  server's routes reach it). Check the remote end as well.
+- **The PKI:** if the CA private key was on the server, every certificate it ever issued is suspect, and
+  an attacker could mint new ones.
+- **Accounts tied to the VPN:** wrapper admin accounts, Access Server users, RADIUS/LDAP bind accounts,
+  dynamic DNS credentials that point clients at the server (a hijacked name sends clients to a rogue
+  server), and the host's SSH keys.
+- **Client devices:** a lost or compromised device may also hold saved passwords and other credentials.
+
+## Eradication and recovery
+
+- **Single stolen client credential:** after revocation, issue a new config to the legitimate owner (new
+  key pair, generated on the device where possible). Check that the revoked credential is rejected
+  (handshake doesn't complete; OpenVPN logs a revocation failure). Review what the tunnel let it reach.
+- **Compromised server:** rebuild the host from a known-good OS image and current packages rather than
+  cleaning it. Don't restore its configuration as-is; rebuild the peer list from an inventory the user
+  confirms, and diff against the compromised configuration to understand what changed.
+- **Rotate everything the server held:** a new WireGuard server key and new keys (and preshared keys) for
+  every peer; for OpenVPN, a new `tls-crypt`/`tls-auth` key, a new server certificate, and, if the CA key
+  was on the server, a **new CA** with every client certificate reissued; wrapper admin passwords and
+  2FA secrets; Access Server user passwords and MFA enrollments; any credentials in hook scripts.
+- **Before reconnecting:** only expected peers or certificates; per-peer tunnel firewalling in place; web
+  UIs not reachable from the internet; 2FA on wrapper and admin logins; logging and handshake monitoring
+  working; the old server key and CA no longer trusted by any client profile.
+
+## Quick checklist tailored for VPN servers
+
+Start with the core quick checklist, plus:
+
+- [ ] Decide: one stolen client credential, or the server itself? Assume the server until ruled out.
+- [ ] Capture `wg show` handshakes and endpoints (or the OpenVPN status file) before any restart.
+- [ ] Stolen credential: remove the peer or revoke the certificate, install the new CRL, end live sessions.
+- [ ] Compromised server: block the VPN port and web UIs upstream; keep console access; don't power off.
+- [ ] List what the tunnel could reach and check those systems for access from the tunnel subnet.
+- [ ] Plan to rebuild the server and rotate every key, certificate, and admin credential it held.

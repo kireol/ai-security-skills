@@ -26,12 +26,13 @@ scripts/check-content.sh            # privacy check, whole repo; review every hi
 scripts/check-content.sh skills/x   # one path
 scripts/build-dist.py               # rebuild dist/ after changing core/ or skills/
 scripts/build-dist.py --check       # exit 1 if dist/ is stale
+scripts/lint-skills.py              # structure: files, sections, frontmatter, unique prefixes, links
 python3 -m unittest discover -s tools/dashboard                 # dashboard tests
 python3 -m unittest tools/dashboard/test_dashboard.py -k Server  # one group of tests
 python3 tools/dashboard/dashboard.py serve                      # run the dashboard locally
 ```
 
-Run both checks before every commit. `.private-denylist` (git-ignored) holds the owner's identifiers for
+Run the content check, the linter, and `build-dist.py --check` before every commit. `.private-denylist` (git-ignored) holds the owner's identifiers for
 the content check. Never commit it, and never copy its contents into a tracked file.
 
 ## Layout and conventions
@@ -52,6 +53,10 @@ the content check. Never commit it, and never copy its contents into a tracked f
   example.
 - Skills contain only product-specific content and link to core with `../../../core/<file>.md`.
   `build-dist.py` rewrites those links for the bundles.
+- Skills may link to each other with relative paths (`../mqtt/SKILL.md`). `build-dist.py` rewrites them
+  to sibling-folder links in folder bundles and to `dist/<skill>.md` pointers in single-file bundles.
+- `check-content.sh` also flags vendor contact emails and vendor-documented private addresses; leave
+  those out and point to the vendor page instead.
 - `dist/` is generated and committed, so people can download a skill without building. Never edit it by
   hand.
 - Frontmatter follows the Agent Skills format: `name` and `description` at the top level; `version`,

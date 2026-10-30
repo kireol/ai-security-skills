@@ -1,0 +1,63 @@
+# WireGuard and OpenVPN Servers: References
+
+Always prefer current vendor documentation; wrapper defaults and menus change between releases.
+
+Last verified: 2026-10-30
+
+## Vendor (authoritative)
+
+### WireGuard
+
+- Quick start (configuration, `PersistentKeepalive`): https://www.wireguard.com/quickstart/
+- `wg(8)` man page (`show`, `showconf`, `WG_HIDE_KEYS`): https://man7.org/linux/man-pages/man8/wg.8.html
+- Known limitations (identity hiding, key rotation, post-quantum and preshared keys, time):
+  https://www.wireguard.com/known-limitations/
+- Protocol and cryptography: https://www.wireguard.com/protocol/
+- Release and security announcements (mailing list): https://lists.zx2c4.com/mailman/listinfo/wireguard
+
+### OpenVPN community
+
+- Security announcements: https://community.openvpn.net/Security%20Announcements
+- Supported versions: https://community.openvpn.net/Pages/Supported%20versions
+- Reference manual, 2.6 (`crl-verify`, `tls-crypt-v2`, `verify-client-cert`, `client-to-client`,
+  `script-security`, `static-challenge`, `auth-gen-token`):
+  https://openvpn.net/community-docs/community-articles/openvpn-2-6-manual.html
+- Releases, with changes and deprecations per release: https://github.com/OpenVPN/openvpn/releases
+- Easy-RSA documentation (PKI, revocation, CRL): https://easy-rsa.readthedocs.io/
+
+### OpenVPN Access Server
+
+- Documentation (choose the 2.x or 3.x line): https://openvpn.net/as-docs/
+- Release notes (including security fixes): https://openvpn.net/as-docs/v3/release-notes/
+- Web services interface and ports:
+  https://openvpn.net/as-docs/v3/tutorials/tutorial--web-services-interface-and-ports/
+- OpenVPN daemon interface and ports:
+  https://openvpn.net/as-docs/v3/tutorials/tutorial--openvpn-daemons-interface-and-ports.html
+- TOTP MFA: https://openvpn.net/as-docs/v3/totp-mfa/
+- Turning on MFA: https://openvpn.net/as-docs/v3/tutorials/tutorial--turn-on-mfa.html
+
+### wg-easy
+
+- Documentation (latest release): https://wg-easy.github.io/wg-easy/latest/
+- Optional configuration (`PORT`, `HOST`, `INSECURE`, `TRUSTED_PROXIES`):
+  https://wg-easy.github.io/wg-easy/latest/advanced/config/optional-config/
+- Running without a reverse proxy (labeled insecure):
+  https://wg-easy.github.io/wg-easy/latest/examples/tutorials/reverse-proxyless/
+- Two-factor authentication: https://wg-easy.github.io/wg-easy/latest/guides/2fa/
+- Prometheus metrics: https://wg-easy.github.io/wg-easy/latest/advanced/metrics/prometheus/
+- Source, releases, and changelog: https://github.com/wg-easy/wg-easy
+
+### PiVPN
+
+- Documentation (maintenance status, commands): https://docs.pivpn.io/
+- WireGuard usage (commands, client removal, permissions): https://docs.pivpn.io/wireguard/
+- Source and releases: https://github.com/pivpn/pivpn
+
+Generic vulnerability and incident sources (CISA KEV, NVD, CVE, CISA ransomware guidance, IC3) are listed in
+the core documents.
+
+## Third-party (not authoritative)
+
+- Linux distribution security trackers (Debian, Ubuntu, Red Hat) for the packaged `wireguard-tools`,
+  `openvpn`, and TLS library versions actually installed. Backported fixes mean the upstream version
+  number alone can mislead; check the distribution's advisory for the installed package.

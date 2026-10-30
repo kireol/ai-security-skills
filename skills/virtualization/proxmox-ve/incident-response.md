@@ -1,0 +1,99 @@
+# Proxmox VE: Respond (Incident Response)
+
+Use with the core playbook, [incident-response.md](../../../core/incident-response.md), which always
+applies. This file adds only Proxmox VE-specific steps.
+
+A compromised hypervisor is a compromise of every guest on it: the attacker can read guest disks and memory,
+open consoles, run commands through the guest agent, change virtual networks, and delete backups. In a
+cluster, a compromise of one node is a compromise of all nodes, because they share `/etc/pve`, root SSH
+keys, and the cluster CA. If the host itself may be compromised, **don't rely on it, or on any guest it
+runs, to contain the incident**.
+
+## Triage and containment
+
+- **Indicators that point at the host itself:** unknown users, realms, API tokens, or ACL grants; TFA
+  removed from an admin; logins from unknown addresses in the journal; tasks in the task log nobody started
+  (guest creation, `vzdump` to unknown storage, console sessions, snapshot deletion, backup pruning); new
+  storage entries; new hookscripts; new systemd units, cron jobs, or SSH keys in `authorized_keys`;
+  unexpected packages or repositories; firewall disabled; unusual outbound connections from the host.
+- **Indicators that a guest attacked the host:** a privileged container or one with raw `lxc.*` overrides,
+  host bind mounts, or device passthrough that shows unexpected activity; host processes running as a
+  container's mapped UIDs outside its cgroup.
+- **If the host may be compromised:** contain upstream of it. Disconnect the host's uplinks at the switch,
+  or disable its switch ports, and keep out-of-band access (physical console or BMC). If the site's
+  firewall runs on this host, the site's internet connection goes down with it; plan for that with the
+  user. Don't power the host off unless destruction is ongoing (memory and running state are evidence).
+- **If one guest is compromised and the host is trusted:** use host-side controls, with approval: set the
+  guest's NIC link down (`link_down` on the NIC, verify on the installed version) or move it to an isolated
+  bridge, and take a snapshot (with RAM, for VMs) before changing anything inside it. Don't destroy it.
+- **If the BMC may be compromised:** the user disconnects the BMC's network port or management VLAN. The
+  BMC can reflash firmware, mount virtual media, and power-cycle the server, so it outranks the host.
+- **Protect backups first** if ransomware or destruction is suspected: ask the user to restrict or
+  disconnect the backup server's access from the host, and confirm protected or off-site copies still
+  exist.
+
+## Evidence to preserve (Proxmox VE-specific)
+
+Collect from the console or a clean admin workstation, before changing anything:
+
+- Versions and configuration metadata: `pveversion -v`, `qm list`, `pct list`, `pvesm status`, `pvecm
+  status`, and copies of `/etc/pve` (excluding the contents of `priv/`, which you note by file name, size,
+  and modification time only). Treat copies as secret material.
+- Identity: `pveum user list`, `pveum acl list`, `pveum user token list <userid>` for every user, `pveum
+  user tfa list`, `pveum realm list`, and `/etc/pve/user.cfg`.
+- Task history: the cluster task log in the UI and the files under `/var/log/pve/tasks/` (location not yet
+  verified on every version). Tasks record who started what and when.
+- Logs: the systemd journal for `pveproxy`, `pvedaemon`, `sshd`, and `pvescheduler`; the web access log
+  under `/var/log/pveproxy/` (verify location); `pve-firewall` logs. Export them off the host.
+- Persistence surfaces: `/etc/systemd/system/`, timers, crontabs, `/usr/local/bin` and `/usr/local/sbin`,
+  hookscripts and snippet storage, `/root/.ssh/authorized_keys` (key comments and fingerprints), and the
+  package list with origins.
+- Network state: `ss -tulpn`, `ip addr`, `ip route`, bridges, and current firewall rules (`iptables-save`
+  or `nft list ruleset`).
+- Guests of interest: VM snapshots including RAM, and container backups, written to storage the host can't
+  later alter. For deeper forensics, copy disk images rather than working on the originals.
+- Backup state: the list of backups and their dates on every backup storage and the backup server,
+  including prune and delete events from the backup server's own logs.
+
+## Scope checks specific to Proxmox VE
+
+- **Every guest on the host or cluster**, especially virtualized firewalls, NAS, DNS, directory servers,
+  and password managers: treat their secrets as exposed if the host was compromised.
+- **Every node in the cluster**, the QDevice host, and any host holding the cluster's SSH key.
+- **The backup server:** its datastore credentials were on the host; check for deleted or altered backups
+  and logins from the host's address.
+- **Network storage:** NFS and SMB shares and iSCSI targets the host mounted; their credentials were on the
+  host.
+- **External realms:** the LDAP/AD bind account and the OpenID Connect client secret were on the host.
+- **Integrations** holding API tokens (monitoring, automation, Terraform), and the admin workstations used
+  to manage the host.
+- **The BMC** and anything sharing its management network.
+
+## Eradication and recovery
+
+- If host integrity is in doubt, **reinstall the node from a verified installer image** (check the
+  published checksum) rather than cleaning it. In a cluster, plan the rejoin with the vendor's cluster
+  documentation; removing and re-adding nodes is a specialist step (hard stops in the skill).
+- Restore guests only from backups taken **before** the earliest plausible compromise, onto an isolated
+  network first; check each for the attacker's changes before reconnecting.
+- **Rotate every shared secret:** `root@pam` and all admin passwords; every API token (delete and
+  recreate); TFA enrollments for admins; root SSH keys on every node and their `authorized_keys` entries;
+  the corosync authkey and cluster certificates (follow vendor documentation; specialist step); storage and
+  backup server credentials; LDAP/AD bind and OpenID Connect secrets; backup encryption keys if the host
+  was compromised (new backups with a new key; keep the old key to read old backups); BMC credentials.
+- Rotate secrets held inside guests whose disks or memory the attacker could read.
+- Before reconnecting: supported release with current updates, TFA on every admin, management reachable
+  only from the management network, no unknown tokens, users, units, hookscripts, or repositories, firewall
+  policy as intended, backups to a separate system working, and remote logging in place.
+
+## Quick checklist tailored for Proxmox VE
+
+Start with the core quick checklist, plus:
+
+- [ ] If the host may be compromised, isolate it at the switch, keep BMC or physical console access, and
+      plan for any firewall or DNS guest going down with it.
+- [ ] Protect the backups: cut the host's access to the backup server and confirm untouched copies exist.
+- [ ] Export the task log, journal, users, ACLs, tokens, and persistence surfaces before rebooting.
+- [ ] Snapshot affected guests (with RAM) before changing them; isolate guests by link-down or bridge,
+      not by destroying them.
+- [ ] Plan to reinstall from a verified image and rotate every secret the host or cluster held.

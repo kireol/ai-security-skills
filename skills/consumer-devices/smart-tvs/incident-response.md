@@ -1,0 +1,93 @@
+# Smart TVs and Streaming Devices: Respond (Incident Response)
+
+Use with the core playbook, [incident-response.md](../../../core/incident-response.md), which always
+applies. This file adds only smart-TV- and streaming-device-specific steps.
+
+A compromised TV or streaming box is usually one of three things: a device with **malware installed**
+(through sideloaded apps, exposed ADB, or preinstalled firmware on an uncertified box) being used as a
+residential proxy, miner, or foothold on the LAN; a **signed-in account** being misused (purchases,
+profile changes, the account's other data); or **someone on the network controlling the TV** through its
+casting or remote-control features. Many "the TV turned itself on" reports have benign causes (HDMI-CEC,
+scheduled power-on, a household phone app, an automation). Rule those out calmly, but don't dismiss
+indicators like enabled debugging or unknown apps.
+
+## Triage and containment
+
+- **Indicators:** developer options, ADB, or network debugging enabled that nobody turned on; apps nobody
+  installed (especially VPN, proxy, "free TV", or unofficial store apps); Google Play Protect turned off or
+  showing warnings; purchases or rentals nobody made; unknown devices in the platform account; new
+  profiles or changed account details; the device's traffic staying high while it's idle, or connections to
+  many unrelated addresses (consistent with proxy use); router or ISP warnings that the household's address
+  is part of a botnet; TCP 5555 reachable from the internet.
+- **Contain on the network, not on the device:** block or quarantine the device at the router or
+  firewall, or unplug its Ethernet cable or remove it from Wi-Fi (forget the network on the router side
+  if possible). Keep it powered if evidence is still to be gathered; don't factory reset yet.
+- **If an account is being misused:** from a clean device, change the platform account's password,
+  enable 2SV, review and remove signed-in devices, and check purchases and payment methods. Contact the
+  platform for unauthorized charges.
+- **If the device is an uncertified or "unlocked" Android box:** treat it as untrusted. Disconnect it
+  and plan to replace it, not clean it.
+- **If someone is controlling the TV over the LAN:** restrict control features (Roku network control,
+  AirPlay or Cast access, paired control apps) and look for the controlling device; a compromised computer
+  or phone on the same network is in scope.
+
+## Evidence to preserve (smart-TV-specific)
+
+Collect before uninstalling or resetting anything:
+
+- Photos of the software version, developer options and debugging state, installed-apps list (with app
+  details for anything suspicious: name, source, permissions), Play Protect status, and the accounts and
+  profiles on the device.
+- The platform account's signed-in device list, purchase history, and any security or login activity page
+  (from the account's website, on a clean device).
+- Router or firewall evidence: DHCP lease and MAC address, the device's connection logs and DNS queries
+  around the suspected period, traffic volume, and UPnP mappings it created. Export them before logs
+  rotate.
+- Any ISP or platform notice about botnet or proxy activity.
+- The device's model, purchase source, and whether it is Play Protect certified (relevant for preinstalled
+  malware).
+- Don't connect to ADB to pull logs. If deeper forensics is needed, refer to a specialist.
+
+## Scope checks specific to smart TVs
+
+- **Other devices on the same network:** ADB-spreading malware scans the LAN for more open ADB ports, and
+  proxy malware may probe or relay to local devices. Check other Android TV, Fire TV, and Android devices
+  for enabled debugging, and review what the TV's segment could reach.
+- **The household's public IP address:** proxy botnets route other people's traffic through it. Watch for
+  ISP notices, service blocks, or CAPTCHAs that suggest the address is flagged.
+- **Platform accounts and anything linked to them:** a Google or Amazon account signed in on the TV may
+  also hold email, photos, smart-home devices, and payment methods. Check those accounts' device lists and
+  activity.
+- **Streaming-service accounts** signed in on the device: their device lists and profiles.
+- **Wi-Fi credentials:** a compromised device knows the password of the network it joined.
+- **The phone or computer used to sideload apps or enable ADB,** if that's how the malware arrived.
+
+## Eradication and recovery
+
+- **Branded, certified devices:** after evidence is preserved, uninstall unknown apps, turn off developer
+  options, debugging, and unknown sources, update the OS, and then factory reset if anything suspicious
+  remains or the user prefers a clean start. Re-add only apps from the official store.
+- **Uncertified boxes, or any device with suspected preinstalled or firmware-level malware:** factory reset
+  may not remove it. Replace the device, and dispose of it rather than reusing it.
+- Rotate the Wi-Fi password for the network the device was on if it may have been compromised, and
+  re-join the remaining devices.
+- Change passwords and review 2SV for the platform account and any streaming accounts signed in on the
+  device; remove the old device entry from each account.
+- Before reconnecting: the device is on the intended isolated segment, port-state checks show no debugging
+  port open, Play Protect is on (Android-based), automatic updates are on, and the router shows normal
+  traffic.
+- Report fraud or unauthorized charges to the platform; for botnet involvement, the core references list
+  reporting channels (for example the FBI's IC3).
+
+## Quick checklist tailored for smart TVs
+
+Start with the core quick checklist, plus:
+
+- [ ] Rule out benign causes for "the TV did it by itself" (HDMI-CEC, schedules, household apps,
+      automations), but don't dismiss debugging enabled or unknown apps.
+- [ ] Quarantine or disconnect the device at the network; don't factory reset yet.
+- [ ] Photograph developer options, installed apps, Play Protect status, and accounts.
+- [ ] Export router logs and DNS queries for the device; check for UPnP mappings.
+- [ ] Secure the platform account from a clean device; check purchases and signed-in devices.
+- [ ] Check other Android-based devices on the LAN for enabled ADB.
+- [ ] Replace uncertified or preloaded-malware boxes; don't clean them.

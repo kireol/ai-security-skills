@@ -1,0 +1,57 @@
+# Media Automation: References
+
+Always prefer current project documentation; settings move between major versions (for example Sonarr v4
+and v5). Re-verify links and contents when updating this skill.
+
+Last verified: 2026-10-30
+
+## Vendor (authoritative)
+
+- Servarr wiki (Sonarr, Radarr, Lidarr, Readarr, Prowlarr; settings, FAQ, Docker guide):
+  https://wiki.servarr.com/
+- Sonarr settings, including Security (authentication, Authentication Required, Trusted Networks, API
+  key, certificate validation), Updates, and Backups: https://wiki.servarr.com/sonarr/settings
+- Sonarr v4 FAQ, forced authentication: https://wiki.servarr.com/sonarr/faq-v4
+- Prowlarr settings: https://wiki.servarr.com/prowlarr/settings
+- Security advisories (GitHub; check each project, not just one):
+  - Sonarr: https://github.com/Sonarr/Sonarr/security/advisories
+  - Radarr: https://github.com/Radarr/Radarr/security/advisories
+  - Prowlarr: https://github.com/Prowlarr/Prowlarr/security/advisories
+  - Lidarr: https://github.com/Lidarr/Lidarr/security/advisories
+  - Bazarr: https://github.com/morpheus65535/bazarr/security/advisories
+  - Seerr: https://github.com/seerr-team/seerr/security/advisories
+  - Tautulli: https://github.com/Tautulli/Tautulli/security/advisories
+  - SABnzbd: https://github.com/sabnzbd/sabnzbd/security/advisories
+  - NZBGet: https://github.com/nzbgetcom/nzbget/security/advisories
+  - qBittorrent: https://github.com/qbittorrent/qBittorrent/security/advisories
+  - Transmission: https://github.com/transmission/transmission/security/advisories
+  - FlareSolverr: https://github.com/FlareSolverr/FlareSolverr/security/advisories
+- Release notes: each project's GitHub releases page (for example https://github.com/Sonarr/Sonarr/releases).
+- Readarr (archived June 2025; retirement notice in the README): https://github.com/Readarr/Readarr
+- Overseerr (archived): https://github.com/sct/overseerr
+- Seerr (successor with migration guide for Overseerr and Jellyseerr): https://github.com/seerr-team/seerr
+- SABnzbd configuration, General (host, external internet access, API and NZB keys, HTTPS):
+  https://sabnzbd.org/wiki/configuration/
+- NZBGet documentation (security settings, certificate verification, extension scripts):
+  https://nzbget.com/documentation/ and the commented sample configuration
+  https://github.com/nzbgetcom/nzbget/blob/develop/nzbget.conf
+- qBittorrent wiki (web UI password recovery, 4.6.1 removal of default credentials):
+  https://github.com/qbittorrent/qBittorrent/wiki
+- qBittorrent changelog: https://www.qbittorrent.org/news
+- Transmission configuration file reference (RPC authentication and whitelists, bind addresses):
+  https://github.com/transmission/transmission/blob/main/docs/Editing-Configuration-Files.md
+- Tautulli wiki: https://github.com/Tautulli/Tautulli/wiki
+- FlareSolverr README (port, "do not expose to the internet" warning):
+  https://github.com/FlareSolverr/FlareSolverr
+
+Generic vulnerability and incident sources (CISA KEV, NVD, CVE, CISA ransomware guidance, IC3) are listed in
+the core documents.
+
+## Third-party (not authoritative)
+
+- TRaSH Guides: https://trash-guides.info/
+  Widely used setup guides, including folder layout, hardlinks, and container user/permission patterns.
+  Focused on correctness and quality more than security; check each step against this skill and the
+  project docs.
+- Docker documentation, published ports and bind addresses: https://docs.docker.com/engine/network/
+  Useful for confirming which host addresses a published port listens on.

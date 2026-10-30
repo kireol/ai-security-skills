@@ -1,0 +1,92 @@
+# Frigate NVR: Respond (Incident Response)
+
+Use with the core playbook, [incident-response.md](../../../core/incident-response.md), which always
+applies. This file adds only Frigate-specific steps.
+
+A compromised NVR is a privacy incident as well as a security one: an attacker may have watched live
+video, downloaded recordings, and read every camera's credentials. Recordings are also the evidence you
+need to investigate, so **don't delete or overwrite them**, and don't let retention purge them while you
+work.
+
+## Triage and containment
+
+- **Indicators that point at Frigate:** Frigate users nobody created or role changes; configuration
+  changes nobody made (new cameras, changed stream URLs, new go2rtc streams, especially `exec:` sources);
+  `GO2RTC_ALLOW_ARBITRARY_EXEC` appearing in the environment; recording, detection, or snapshots turned
+  off for some cameras (possibly over MQTT); retention shortened; unexpected exports; unfamiliar ffmpeg or
+  shell processes inside the container; unexpected outbound connections from the Frigate host; logins
+  from unknown addresses in proxy or Frigate logs; reports of live views opened when nobody was watching.
+- **Cut the exposure path first, from outside Frigate:** remove the port forward, disable the tunnel or
+  proxy route, or block the Frigate host at the firewall for the affected segment. Prefer this over
+  stopping Frigate, so recording (and evidence collection) continues where it's safe to.
+- **If the container or host may be compromised** (code execution, a privileged container, unknown
+  processes): isolate the host from the network at the switch or firewall, keeping console access. Stop
+  the container only if the attacker is actively doing damage (deleting recordings, attacking other
+  hosts); record that you did and why.
+- **Stop retention from destroying evidence:** if the incident window is close to the retention limit,
+  copy the relevant recordings and the database to protected storage before anything else (with the
+  user's approval, because copies of footage are sensitive), or pause cleanup by the safest available
+  means. Don't edit retention settings on a possibly compromised instance without capturing the current
+  configuration first.
+- **The cameras are in scope immediately:** their credentials were readable. Block their internet egress
+  if it isn't already (see the [ip-cameras](../ip-cameras/incident-response.md) Respond steps).
+
+## Evidence to preserve (Frigate-specific)
+
+Collect from the host console or a clean admin workstation, before changing anything. Treat all of it as
+secret and personal data.
+
+- A copy of `/config`: `config.yml`, any configuration backups Frigate made, the SQLite database (users,
+  events, review items, export records), and the `.jwt_secret` file if present. Hash the copies.
+- Container metadata, filtered: image, tag and digest, creation time, published ports, privileges, mounts
+  (`docker inspect` with `--format`), plus a separate, protected copy of the environment variables.
+- Container and nginx logs (`docker logs <frigate-container>` saved straight to a protected file, not
+  printed): logins, failed logins, API calls, configuration saves, restarts.
+- Reverse proxy, tunnel, VPN, and firewall logs for connections to Frigate's ports.
+- MQTT broker logs and any retained messages on Frigate topics (who sent commands).
+- Process list and network connections inside the container (`docker top <frigate-container>`, host
+  `ss -tupn`).
+- The recordings, snapshots, and exports covering the incident window, plus a file listing (names,
+  sizes, times) of `/media/frigate` so later deletions can be detected.
+- Home Assistant: the Frigate integration configuration and Home Assistant logins, if Frigate was
+  reached through it.
+
+## Scope checks specific to Frigate
+
+- **Every camera:** its credentials were in the configuration. Check each camera for changed settings,
+  new users, firmware changes, and enabled cloud or debug features.
+- **The MQTT broker** and everything that subscribes to Frigate topics; Frigate's broker credentials.
+- **Generative AI providers and Frigate+:** API keys were exposed; check provider usage logs for
+  unexpected calls.
+- **The host:** with a privileged container or past code-execution advisories in the running version,
+  assume possible host compromise and assess the host (and other containers on it).
+- **Storage:** NAS shares or volumes used for recordings, and their credentials if mounted from the
+  Frigate host.
+- **Home Assistant** if Frigate is integrated with it, and the reverse proxy or tunnel host.
+- **People:** who appears in footage that may have been viewed or downloaded; this may create
+  notification obligations for work or shared environments (core: reporting, privacy).
+
+## Eradication and recovery
+
+- Recreate the container from the official image at the current release (check the release notes for
+  fixed advisories). Don't keep a container that ran attacker commands; reuse only reviewed configuration.
+- Review `config.yml` line by line against a known-good backup before reuse; remove anything you can't
+  explain (streams, exec sources, environment flags, proxy settings, GenAI base URLs).
+- **Rotate every secret Frigate held:** each camera's password (on the camera, then in Frigate), MQTT
+  credentials, the JWT secret (invalidates all sessions), all Frigate user passwords, `proxy.auth_secret`,
+  go2rtc RTSP credentials, generative AI and Frigate+ API keys, and any storage credentials.
+- Remove unknown users; re-create accounts with the least role needed.
+- Before reconnecting: 5000 and 1984 not published, 8971 only reachable from intended segments or through
+  an authenticated proxy or VPN, cameras' internet egress blocked, monitoring for recording gaps in place.
+
+## Quick checklist tailored for Frigate
+
+Start with the core quick checklist, plus:
+
+- [ ] Remove the internet or cross-network path to Frigate at the firewall, proxy, or tunnel, not by
+      deleting anything in Frigate.
+- [ ] Copy `/config` (with the database), logs, and the incident window's recordings to protected storage
+      before retention or a restart can remove them.
+- [ ] List Frigate users and roles, published ports, and go2rtc streams; screenshot anything unexpected.
+- [ ] Treat every camera, MQTT, and API credential in the configuration as exposed, and plan to rotate
+      them all.

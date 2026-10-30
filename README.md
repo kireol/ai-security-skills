@@ -58,35 +58,35 @@ tools/dashboard/          Local live dashboard that agents report progress to
 
 ## Catalog
 
-Status: ✅ available · ⏳ planned
-
-| Domain | Skill | Status |
+| Domain | Skill | Covers |
 |---|---|---|
-| orchestration | Full assessment (kick-off: inventory the network and run every matching skill) | ✅ |
-| storage | Synology DSM (including DSM on non-Synology hardware) | ✅ |
-| network | OPNsense firewall | ✅ |
-| network | pfSense firewall | ⏳ |
-| network | WireGuard / OpenVPN | ⏳ |
-| network | DNS filtering (AdGuard Home, Pi-hole) | ⏳ |
-| network | Consumer Wi-Fi mesh and managed switches | ⏳ |
-| edge | Cloudflare (tunnels, DNS, Zero Trust) | ⏳ |
-| virtualization | Proxmox VE | ⏳ |
-| operating-systems | macOS | ⏳ |
-| operating-systems | Linux (servers, VMs, LXC) | ⏳ |
-| operating-systems | Windows | ⏳ |
-| containers | Docker / Docker Desktop / NAS container managers | ⏳ |
-| home-automation | Home Assistant | ⏳ |
-| home-automation | MQTT brokers (Mosquitto) | ⏳ |
-| surveillance | NVR software (Frigate) | ⏳ |
-| surveillance | IP cameras (per-vendor appendices) | ⏳ |
-| surveillance | Video doorbells and cloud camera systems | ⏳ |
-| consumer-devices | Smart TVs and streaming devices | ⏳ |
-| media | Media automation (*arr stack, downloaders) | ⏳ |
-| media | Media servers (Plex, Jellyfin) and transcoding (Tdarr) | ⏳ |
-| ai | Local LLM and generative-AI servers | ⏳ |
-| ai | MCP / RAG servers | ⏳ |
-| web-apps | Small self-hosted web apps and dashboards | ⏳ |
-| web | Web servers (Apache, nginx) and reverse proxies | ⏳ |
+| orchestration | [`full-assessment`](skills/orchestration/full-assessment/SKILL.md) | Full assessment: kick-off that inventories the network and runs every matching skill |
+| network | [`opnsense`](skills/network/opnsense/SKILL.md) | OPNsense firewall |
+| network | [`pfsense`](skills/network/pfsense/SKILL.md) | pfSense firewall (CE and Plus) |
+| network | [`vpn-servers`](skills/network/vpn-servers/SKILL.md) | WireGuard and OpenVPN servers (including wg-easy, PiVPN, Access Server) |
+| network | [`dns-filtering`](skills/network/dns-filtering/SKILL.md) | DNS filtering (AdGuard Home, Pi-hole) |
+| network | [`wifi-and-switches`](skills/network/wifi-and-switches/SKILL.md) | Consumer Wi-Fi mesh systems and managed switches |
+| edge | [`cloudflare`](skills/edge/cloudflare/SKILL.md) | Cloudflare (Tunnels, DNS, Zero Trust Access, proxied sites) |
+| storage | [`synology-dsm`](skills/storage/synology-dsm/SKILL.md) | Synology DSM (including DSM on non-Synology hardware) |
+| virtualization | [`proxmox-ve`](skills/virtualization/proxmox-ve/SKILL.md) | Proxmox VE (including server BMCs) |
+| operating-systems | [`macos`](skills/operating-systems/macos/SKILL.md) | macOS (including Macs used as home servers) |
+| operating-systems | [`linux`](skills/operating-systems/linux/SKILL.md) | Linux (servers, VMs, LXC, Raspberry Pi) |
+| operating-systems | [`windows`](skills/operating-systems/windows/SKILL.md) | Windows 10/11 and small Windows Server installs |
+| containers | [`docker`](skills/containers/docker/SKILL.md) | Docker, Docker Desktop, Podman, NAS container managers |
+| home-automation | [`home-assistant`](skills/home-automation/home-assistant/SKILL.md) | Home Assistant |
+| home-automation | [`mqtt`](skills/home-automation/mqtt/SKILL.md) | MQTT brokers (Mosquitto) |
+| surveillance | [`frigate-nvr`](skills/surveillance/frigate-nvr/SKILL.md) | NVR software (Frigate) |
+| surveillance | [`ip-cameras`](skills/surveillance/ip-cameras/SKILL.md) | IP cameras (with vendor-family notes) |
+| surveillance | [`video-doorbells`](skills/surveillance/video-doorbells/SKILL.md) | Video doorbells and cloud camera systems |
+| consumer-devices | [`smart-tvs`](skills/consumer-devices/smart-tvs/SKILL.md) | Smart TVs and streaming devices |
+| media | [`media-automation`](skills/media/media-automation/SKILL.md) | Media automation (*arr apps, downloaders) |
+| media | [`media-servers`](skills/media/media-servers/SKILL.md) | Media servers (Plex, Jellyfin, Emby) and Tdarr |
+| ai | [`local-llm`](skills/ai/local-llm/SKILL.md) | Local LLM and generative-AI servers |
+| ai | [`mcp-servers`](skills/ai/mcp-servers/SKILL.md) | MCP and RAG servers, vector databases |
+| web-apps | [`self-hosted-web-apps`](skills/web-apps/self-hosted-web-apps/SKILL.md) | Small self-hosted web apps and dashboards |
+| web | [`web-servers`](skills/web/web-servers/SKILL.md) | Web servers and reverse proxies (Apache, nginx, Caddy, Traefik, HAProxy, NPM) |
+
+Suggestions for new skills are welcome; start from `templates/skill-template/`.
 
 ## Live dashboard
 

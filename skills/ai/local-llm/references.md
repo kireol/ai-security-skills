@@ -1,0 +1,57 @@
+# Local LLM and Generative-AI Servers: References
+
+Always prefer current vendor documentation. These projects release often and change defaults, flags, and
+ports between versions. Re-verify links and contents when updating this skill.
+
+Last verified: 2026-10-30
+
+## Vendor (authoritative)
+
+- Ollama
+  - FAQ (bind address, `OLLAMA_HOST`, `OLLAMA_ORIGINS`, proxies, model storage, cloud features):
+    https://docs.ollama.com/faq
+  - Troubleshooting (log locations): https://docs.ollama.com/troubleshooting
+  - API reference: https://github.com/ollama/ollama/blob/main/docs/api.md
+  - Security advisories: https://github.com/ollama/ollama/security/advisories
+- llama.cpp server
+  - Server README (host, port, `--api-key`, endpoints, tools/MCP warnings):
+    https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md
+  - Security advisories: https://github.com/ggml-org/llama.cpp/security/advisories
+- vLLM
+  - Security guide (API key scope, unauthenticated endpoints, dev mode, multi-node, media fetching):
+    https://docs.vllm.ai/en/latest/usage/security.html
+  - Security advisories: https://github.com/vllm-project/vllm/security/advisories
+- LM Studio
+  - Server settings (authentication, local network, CORS, MCP options):
+    https://lmstudio.ai/docs/developer/core/server/settings
+  - Integration page documenting the default port and token headers:
+    https://lmstudio.ai/docs/integrations/claude-code
+- Open WebUI
+  - Environment variable reference (signup, roles, auth, API keys, CORS, persistent config, admin
+    posture): https://docs.openwebui.com/reference/env-configuration
+  - Roles and permissions: https://docs.openwebui.com/features/authentication-access/rbac/roles
+  - Security advisories: https://github.com/open-webui/open-webui/security/advisories
+- ComfyUI
+  - Documentation: https://docs.comfy.org/
+  - ComfyUI-Manager configuration (`security_level`, `network_mode`): https://docs.comfy.org/manager/configuration
+  - ComfyUI-Manager: https://github.com/Comfy-Org/ComfyUI-Manager
+  - Security advisories: https://github.com/Comfy-Org/ComfyUI/security/advisories
+- AUTOMATIC1111 Stable Diffusion web UI
+  - Command-line arguments (`--listen`, `--share`, `--api-auth`, extension and unpickle flags):
+    https://github.com/AUTOMATIC1111/stable-diffusion-webui/wiki/Command-Line-Arguments-and-Settings
+  - Security advisories: https://github.com/AUTOMATIC1111/stable-diffusion-webui/security/advisories
+- Hugging Face
+  - Pickle scanning and its limits: https://huggingface.co/docs/hub/security-pickle
+  - safetensors format: https://github.com/huggingface/safetensors
+
+For forks and other Gradio apps (Forge, SD.Next, text-to-speech UIs), use the project's own README,
+launch flags, and GitHub security advisories for the installed version.
+
+Generic vulnerability and incident sources (CISA KEV, NVD, CVE, CISA ransomware guidance, IC3) are listed in
+the core documents.
+
+## Third-party (not authoritative)
+
+- OWASP Top 10 for LLM Applications (2025): https://genai.owasp.org/llm-top-10/
+  Risk categories (prompt injection, supply chain, excessive agency, unbounded consumption, vector and
+  embedding weaknesses). Useful for naming risks; it doesn't describe any product's settings.

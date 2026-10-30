@@ -1,0 +1,534 @@
+---
+name: local-llm
+description: >-
+  Security assessment, hardening, remediation, and incident response for self-hosted LLM and generative-AI
+  servers: Ollama, llama.cpp server, LM Studio's server, vLLM, Open WebUI, ComfyUI, Stable Diffusion web
+  UIs (AUTOMATIC1111, Forge, and similar Gradio apps), and text-to-speech web apps. Use when auditing a
+  machine that serves models, reviewing its API exposure, bind addresses, tunnels, accounts, model and
+  extension supply chain, stored cloud API keys, GPU abuse, or prompt and chat privacy, or when one of these
+  servers may have been compromised.
+license: CC-BY-4.0
+metadata:
+  version: "1.0"
+  last_reviewed: "2026-10-30"
+  applies_to: "Ollama, llama.cpp server, LM Studio, vLLM, Open WebUI, ComfyUI, Gradio-based image and speech web UIs (verify each live version; defaults change often)"
+  audience: "home, work, homelab"
+  finding_prefix: "LLM"
+  modes: "discover, recommend, remediate, respond"
+---
+
+# Local LLM and Generative-AI Server Security
+
+Act as a careful, evidence-driven security engineer for machines that run AI models locally. These servers
+are usually installed for convenience, by one person, on a powerful machine with a GPU, and they are often
+exposed to the network with no authentication because the defaults assume a single trusted user. Their
+plugins, custom nodes, and some model formats run arbitrary code, and their chat histories and uploaded
+documents can hold the most private data in the house or office. Identify, explain, prioritize, remediate
+(only when authorized), and verify weaknesses in the model servers, the web front ends on top of them, and
+the host that runs them.
+
+## How to use this skill
+
+This skill holds only guidance specific to local LLM and generative-AI servers. It builds on the shared
+core, which always applies:
+
+| Core document | Covers |
+|---|---|
+| [modes-and-authorization.md](../../../core/modes-and-authorization.md) | The four modes, transitions, operation classes (R/C1/C2/C3), standing authorization |
+| [operating-principles.md](../../../core/operating-principles.md) | Principles, capability discovery, scope, communication, untrusted data |
+| [vulnerability-triage.md](../../../core/vulnerability-triage.md) | Lifecycle, CVE/KEV validation, P0–P4 priority scale |
+| [evidence-and-reporting.md](../../../core/evidence-and-reporting.md) | Evidence labels, statuses, finding template, report format, cadence |
+| [tool-use-contract.md](../../../core/tool-use-contract.md) | Rules for commands, APIs, MCP tools, and third-party integrations |
+| [reporting-protocol.md](../../../core/reporting-protocol.md) | Optional live progress reporting to a dashboard |
+| [incident-response.md](../../../core/incident-response.md) | The generic Respond playbook |
+
+Local-LLM-specific Respond steps are in [incident-response.md](incident-response.md). Vendor documentation
+and advisories are in [references.md](references.md). For MCP servers, tool integrations, RAG pipelines,
+and vector databases, also use the [mcp-servers](../mcp-servers/SKILL.md) skill.
+
+## Local-LLM-specific principles
+
+- **Assume every API is unauthenticated until you've checked.** Defaults differ by product and change
+  between releases. Re-check each one against the live version:
+  - **Ollama:** the vendor FAQ describes no built-in authentication. Anyone who can reach the port can
+    use, pull, create, copy, push, and delete models.
+  - **llama.cpp server:** no API key by default (`--api-key` / `--api-key-file` add one). `GET /health`
+    stays public even with a key.
+  - **vLLM:** `--api-key` protects only some path prefixes. The vendor security page lists endpoints it
+    does not protect, including `/metrics`, `/tokenize`, `/health`, `/version`, and some operational
+    endpoints, and says not to rely on `--api-key` alone.
+  - **LM Studio:** "Require Authentication" is an opt-in server setting.
+  - **ComfyUI and AUTOMATIC1111-style Gradio UIs:** no login by default.
+  - **Open WebUI:** has accounts, but whoever creates the first account becomes admin.
+- **The bind address is the main control, and containers can override it.** Most of these servers listen
+  only on loopback by default, but one setting changes that. Examples: `OLLAMA_HOST=0.0.0.0:11434`,
+  ComfyUI `--listen` with no value (all IPv4 and IPv6 interfaces), A1111 `--listen`, LM Studio "Serve on
+  Local Network". A container port published with `-p <port>:<port>` listens on all host interfaces
+  whatever the app inside binds. On Linux, Docker's published ports can bypass host firewall front ends
+  such as ufw (verify on the host).
+- **Plugins, custom nodes, extensions, and some model files are code.**
+  - ComfyUI custom nodes, A1111 extensions and scripts, and vLLM plugins are Python running in the
+    server process.
+  - Open WebUI Functions (which the vendor says execute arbitrary Python at import, in the application
+    process) and Tools (which run `exec()` on the server) are also server-side Python.
+  - Pickle-based weights (`.ckpt`, `.pt`, `.pth`, `.bin`, `.pkl`) can run code when loaded.
+  - `safetensors` and GGUF were designed as data-only formats. That makes them much safer, but parsers can
+    still have bugs. Treat "safer" as "not safe".
+- **An Open WebUI admin is root-equivalent on the deployment.** The vendor says so directly: admins can
+  reach all data, run Functions, and grant themselves Tools access. The `ENABLE_ADMIN_*` toggles hide UI
+  features but are not a security boundary. Count Open WebUI admins as host administrators.
+- **Many endpoints that look harmless have side effects.**
+  - Generation requests use the GPU, are logged, and can trigger tools, web search, or code execution
+    when a front end attaches them.
+  - ComfyUI `POST /prompt` runs a workflow, including any custom node in it.
+  - Ollama `POST /api/pull` downloads code-adjacent artifacts, and `DELETE /api/delete` destroys data.
+  - Read only with documented `GET` endpoints or the product's own read-only CLI commands.
+- **Prompts, outputs, uploads, and chat histories are sensitive data.** Handle them like email. Read
+  metadata (counts, sizes, dates, owners), not content, unless the user asks and the data is theirs.
+- **These apps hold other systems' credentials.** Examples: cloud model provider API keys (OpenAI-style
+  connections in Open WebUI), Hugging Face tokens, tunnel tokens, web-search API keys, and an Ollama
+  account sign-in. Exposing the app exposes those credentials and the bills they run up.
+
+## Deployment variants
+
+| Variant | How to recognize it | What changes |
+|---|---|---|
+| **Desktop app** (Ollama app, LM Studio, desktop builds of ComfyUI) | App in the menu bar or system tray; runs as the logged-in user. | Runs with the user's full file access. Exposure is usually one toggle or environment variable. The laptop may move between networks, so LAN exposure is also exposure on public Wi-Fi. |
+| **Linux service** (systemd) | `ollama.service` or similar; settings in the unit or a drop-in override. | Bind address and other settings live in `Environment=` lines. Check overrides as well as the main unit. Logs go to the journal. |
+| **Containers** (Docker/Compose/Podman) | `docker ps` shows `ollama/ollama`, `ghcr.io/open-webui/open-webui`, ComfyUI images, and similar. | Exposure is set by published ports, not the app's bind. Secrets often sit in environment variables or `.env` files. Data lives in volumes. GPU passthrough, and any mount of the Docker socket, widen the blast radius. |
+| **Bundled stack** (Open WebUI image with Ollama inside, Compose files from tutorials) | One Compose project or image tagged with Ollama. | The model API may be published to the host as well as the UI. Check every published port, not just the UI port. |
+| **Python virtual environment** (ComfyUI, A1111, Forge, TTS apps) | `venv`/`conda` directory; launched with `python main.py`, `webui.sh`, or similar scripts. | Launch flags are the configuration: read the launch script and the running command line. Extensions install packages into the same environment. |
+| **Rented GPU or cloud instance** | Public IP; provider console; template images. | Everything bound to all interfaces is on the internet unless the provider firewall says otherwise. Template images may pre-enable listeners, tunnels, or notebooks. |
+| **Published through a reverse proxy, tunnel, or share link** | Proxy config, a tunnel client (Cloudflare Tunnel, ngrok, Tailscale Funnel), a Gradio `*.gradio.live` link, or a router port forward. | The real exposure is whatever the proxy, tunnel, or forward publishes. A proxy without authentication adds nothing. Some tunnels require specific Host-header handling (the Ollama FAQ notes this). |
+
+## Detection
+
+Hints for recognizing this product during a network inventory (used by the `full-assessment` skill).
+Defaults can be changed, so confirm with the user before relying on a match.
+
+- **Ollama:** TCP 11434. `GET /` returns the plain text `Ollama is running`. `GET /api/version` returns a
+  JSON version with no authentication. `GET /api/tags` lists local models.
+- **llama.cpp server (`llama-server`):** 127.0.0.1:9931 in current builds. Older builds and many Docker
+  examples use 8080. `GET /health` is public even with an API key. `GET /props` includes a `build_info`
+  field (it may require the key when one is set). A built-in web chat UI is enabled by default.
+- **vLLM:** OpenAI-compatible server; vendor examples commonly use port 8000 (check the live command
+  line). `/version`, `/health`, and `/metrics` answer without the API key.
+- **LM Studio:** port 1234 by default; OpenAI-compatible `GET /v1/models`.
+- **Open WebUI:** port 8080 inside the container. Vendor Docker examples publish it on host port 3000.
+  The page title is "Open WebUI". `GET /api/version` returns its version.
+- **ComfyUI:** TCP 8188. `GET /system_stats` returns ComfyUI, Python, and PyTorch versions and GPU/VRAM
+  details. `GET /object_info` lists every loaded node, which also reveals installed custom nodes.
+- **AUTOMATIC1111, Forge, and similar Gradio apps (many TTS apps too):** TCP 7860 (Gradio's default; the
+  next free port if it is taken). Gradio page markup. With `--api`, `/sdapi/v1/...` endpoints. A
+  `*.gradio.live` URL means a public share link.
+- **Vector databases often installed alongside:** Qdrant 6333 (REST) and 6334 (gRPC), Chroma 8000. See
+  the [mcp-servers](../mcp-servers/SKILL.md) skill.
+- These servers don't announce themselves over mDNS/SSDP by default. MAC vendors only identify the host
+  (often a workstation or GPU server), not the software.
+
+---
+
+## Discover
+
+All operations in this mode are class **R** (read-only). Confirm scope and access first (core: operating
+principles). Mark anything you can't inspect **Not assessed**.
+
+### Baseline commands
+
+Prefer the products' own read-only CLI commands and documented `GET` endpoints, run on the host itself or
+by the user. The examples below are *candidates*. Each is labeled. Check that the tool exists first
+(core: tool-use contract), and redact anything secret before recording output.
+
+```sh
+# Host: what is listening, and on which addresses (not yet verified on every OS)
+ss -ltnp                                   # Linux
+lsof -nP -iTCP -sTCP:LISTEN                # macOS
+docker ps --format '{{.Names}}\t{{.Image}}\t{{.Ports}}'   # published ports per container
+
+# Ollama (vendor-documented API; CLI observed on recent releases)
+ollama --version
+ollama list                                # local models, sizes, modified dates
+ollama ps                                  # models loaded in memory
+curl -s http://127.0.0.1:11434/api/version
+curl -s http://127.0.0.1:11434/api/tags
+systemctl show ollama -p Environment       # Linux service settings; may contain secrets, redact
+
+# llama.cpp server (vendor-documented endpoints)
+curl -s http://127.0.0.1:9931/health
+curl -s http://127.0.0.1:9931/props        # read-only GET; POST /props is a write
+
+# vLLM (vendor-documented unauthenticated endpoints)
+curl -s http://127.0.0.1:8000/version
+
+# ComfyUI (observed; endpoints in the ComfyUI server source)
+curl -s http://127.0.0.1:8188/system_stats
+curl -s http://127.0.0.1:8188/object_info | head -c 2000   # node list; large output
+
+# Reachability from another host on the LAN, with authorization (read-only)
+curl -s --max-time 5 http://<llm-host>:11434/api/version
+```
+
+- Read container configuration selectively. `docker inspect` output includes the full environment
+  (API keys, tokens). Extract only port bindings, mounts, and the user, for example
+  `docker inspect --format '{{json .HostConfig.PortBindings}} {{json .Mounts}} {{.Config.User}}'
+  <container>` (not yet verified on every Docker version).
+- Read launch flags from the running process (`ps -o args= -p <pid>`) or the launch script. Redact any
+  token passed on the command line (for example an ngrok authtoken); a token there is itself a finding.
+
+**Never do any of these during Discover:**
+
+- Pull, push, create, copy, or delete models (`ollama pull/push/create/cp/rm`, `POST /api/pull`,
+  `/api/push`, `/api/create`, `/api/copy`, `/api/blobs/...`, `DELETE /api/delete`), or download any model
+  or LoRA to "test" it.
+- Send generation, chat, embedding, or speech requests. In particular, never send a prompt that can call
+  tools, run code, search the web, or reach an agent. Never queue a ComfyUI workflow (`POST /prompt`).
+- Upload files (ComfyUI `/upload/image`, Open WebUI document uploads, A1111 image endpoints).
+- Install, update, enable, or remove custom nodes, extensions, Functions, Tools, or pipelines. Don't
+  click "Update all" in ComfyUI-Manager.
+- Change settings, including `POST /props` on llama.cpp, any vLLM operational or dev-mode endpoint, and
+  any Open WebUI admin setting.
+- Export the Open WebUI database or chats, or open other users' chats.
+- Sign the server out of, or into, any account (Ollama has sign-in and sign-out endpoints).
+- Print API keys, tokens, `WEBUI_SECRET_KEY`, Hugging Face tokens, `.env` files, or private key files
+  such as the Ollama key in `~/.ollama/`.
+- Try default credentials, guess passwords, or run exploit code against these apps.
+
+### Assessment domains
+
+Every domain must end with a status in the report (Pass / Finding / Not assessed / Not applicable /
+Accepted risk).
+
+#### A. Inventory, versions, and update path
+
+- Every AI service on the host: product, version, install method (app, package, container image and tag,
+  virtual environment), who installed it, and whether anyone still uses it. Forgotten test installs are
+  common and are usually the exposed ones.
+- How each one updates: auto-update (desktop apps), image tag (`:main`, `:latest`, or pinned), or manual
+  `git pull`. Note anything not updated in months. These projects ship security fixes often, and several
+  have had serious advisories (remote code execution, path traversal, account and session flaws).
+  Validate against each project's GitHub security advisories and release notes, per core triage. Don't
+  rely on a remembered list.
+- Python and PyTorch versions in each virtual environment (`/system_stats` shows them for ComfyUI).
+  Older PyTorch versions load pickles less safely.
+
+#### B. Network exposure and binding
+
+- For each service: the actual listening address (`ss`/`lsof`), the configured bind (for example
+  `OLLAMA_HOST`, `--host`, `--listen`, "Serve on Local Network"), and every published container port.
+  IPv4 and IPv6 separately; ComfyUI's bare `--listen` binds both.
+- Reachability from other segments (guest, IoT, VPN) and from the internet. Check router port forwards,
+  UPnP mappings, DMZ settings, and IPv6 firewall rules. Test from outside only with explicit
+  authorization.
+- Tunnels and share links: Cloudflare Tunnel, ngrok (A1111 `--ngrok`), Tailscale Funnel, Gradio
+  `--share`. Each publishes the app to the internet, usually without the app gaining authentication.
+- Reverse proxies: which paths they publish (the whole API, or only the UI), whether they add
+  authentication, TLS, and whether they forward the model API port as well as the UI.
+- CORS: Ollama allows only the origins listed in its defaults plus `OLLAMA_ORIGINS`; check for `*` or
+  broad browser-extension patterns. llama.cpp reflects any `Origin` with credentials by default
+  (restricted to localhost when tools, agent, or MCP options are on). ComfyUI's
+  `--enable-cors-header` with no value allows `*`. Open WebUI's `CORS_ALLOW_ORIGIN` defaults to `*`, and
+  the vendor says to set it. A permissive CORS policy lets any website the user visits call the API from
+  the user's browser.
+- If an API listens only on loopback, note that other local users and local processes can still reach
+  it. On a shared host, that matters.
+
+#### C. Authentication on each API
+
+- **Ollama:** no built-in authentication. If it must be reachable by other hosts, check what fronts it
+  (an authenticating reverse proxy, firewall rules limited to the Open WebUI host, or a VPN).
+- **llama.cpp:** `--api-key` or `--api-key-file` set? Keys per client or one shared key? Key passed on
+  the command line (visible in the process list) or in a file with tight permissions?
+- **vLLM:** `--api-key` set, *and* a proxy allowlisting only the endpoints meant to be exposed (vendor
+  guidance). `VLLM_SERVER_DEV_MODE` must not be set. Ray dashboards, distributed ports, and gRPC must not
+  be reachable from untrusted networks.
+- **LM Studio:** "Require Authentication" on if "Serve on Local Network" is on. "Allow calling servers
+  from mcp.json" should be off unless authentication is on (vendor guidance), because it lets API
+  clients drive the local MCP servers.
+- **ComfyUI and Gradio UIs:** no built-in login unless configured (A1111 `--gradio-auth`, `--api-auth`).
+  Credentials on the command line or in a world-readable file are findings.
+- **Open WebUI:** see domain D.
+
+#### D. Open WebUI accounts and administration
+
+- **Signup:** `ENABLE_SIGNUP` defaults to on and `DEFAULT_USER_ROLE` to `pending`. Is signup still open?
+  Is the default role still `pending` (new users wait for approval) rather than `user` or `admin`? Check
+  the effective value in Admin Panel → Settings, not only the environment. With `ENABLE_PERSISTENT_CONFIG`
+  (default on), values saved in the database override environment variables.
+- **First-user takeover:** the first account on a fresh install becomes admin. An instance published
+  before anyone signed up could have been claimed by a stranger. Check the creation date and owner of the
+  first admin.
+- **Admins:** list every admin and check that each is a known person. Remember admins are host
+  administrators (principles).
+- **Authentication methods:** `WEBUI_AUTH` must stay on (it can only be turned off on an empty install).
+  Check LDAP, OAuth/OIDC (`ENABLE_OAUTH_SIGNUP` and its group/role mapping), and trusted-header login
+  (`WEBUI_AUTH_TRUSTED_EMAIL_HEADER`). Trusted-header login is only safe when nothing but the
+  authenticating proxy can reach Open WebUI. Otherwise anyone can send the header.
+- **API keys:** `ENABLE_API_KEYS` (off by default). If on, check who has keys, whether
+  `ENABLE_API_KEYS_ENDPOINT_RESTRICTIONS` limits them, and their age. A key acts with its owner's role.
+- **Session and secret key:** `WEBUI_SECRET_KEY` signs sessions and encrypts stored secrets. It should be
+  generated and persisted (the vendor's launch methods do this), not a value copied from a tutorial.
+  `WEBUI_SESSION_COOKIE_SECURE` defaults to off; it should be on behind HTTPS.
+- **Permissions:** user permissions for workspace Tools, Functions, models, and knowledge.
+  `USER_PERMISSIONS_WORKSPACE_TOOLS_ACCESS` defaults to off; anyone granted it can run code on the server.
+  `BYPASS_MODEL_ACCESS_CONTROL` should stay off.
+- **Connections:** which model backends are configured (Ollama URLs, OpenAI-compatible endpoints, tool
+  servers, MCP servers). Is `ENABLE_DIRECT_CONNECTIONS` on, letting users point the app at arbitrary model
+  servers? The vendor's advisories include an attack chain through a malicious model server.
+- **Local web fetch:** `ENABLE_LOCAL_WEB_FETCH` (alias `ENABLE_RAG_LOCAL_WEB_FETCH`, default off). When
+  off, Open WebUI blocks fetches to private addresses from web retrieval, webhooks, and URL imports. On
+  means server-side requests to the LAN are possible (SSRF).
+
+#### E. Code-execution surfaces: custom nodes, extensions, Functions, Tools
+
+- **ComfyUI custom nodes:** list them (`custom_nodes/` directory, `/object_info`, or ComfyUI-Manager).
+  For each, record the source repository, commit or version, last update, and whether the repository
+  still exists and is maintained. A node installed from an unknown or deleted repository is a finding.
+- **ComfyUI-Manager `security_level`** (in Manager's `config.ini`; the startup log shows its path):
+  `strong`, `normal`, `normal-`, or `weak`. `weak` allows installing from git URLs and pip on a
+  network-listening instance. `normal-` blocks high-risk installs only when ComfyUI listens on a
+  non-loopback address. Note `network_mode` too (`public`, `private`, `offline`).
+- **A1111 and forks:** extensions list (Extensions tab or `extensions/` directory) with sources.
+  `--enable-insecure-extension-access` (extension installs from the UI, even when listening on the
+  network), `--allow-code` (custom script execution from the UI), and `--disable-safe-unpickle` (turns off
+  the pickle check) are all findings on a networked instance.
+- **Open WebUI Functions, Tools, and pipelines:** list them, who created each, its source (community site,
+  URL, hand-written), and whether it is enabled. Functions run as Python in the app. Check code execution
+  and code interpreter settings (`ENABLE_CODE_EXECUTION` and `ENABLE_CODE_INTERPRETER` default on with the
+  in-browser `pyodide` engine; a `jupyter` engine runs code on a server, so check where it runs and with
+  what access).
+- **llama.cpp:** `--tools`, `--agent`, `--mcp-servers-config`, `--mcp-servers-json`, and `--ui-mcp-proxy`
+  are marked by the vendor "do not enable in untrusted environments". MCP child processes run with the
+  server's privileges.
+- **vLLM:** endpoint and model plugins are trusted code. Model options that run code shipped with a model
+  repository (Hugging Face "remote code" options) should be off unless the repository is trusted and
+  pinned.
+- Any extension or node that downloads more code at runtime (auto-updaters, "install requirements"
+  buttons).
+
+#### F. Model supply chain
+
+- Where models come from: Ollama library, Hugging Face, Civitai, direct URLs, shared drives. Who may add
+  models (anyone who can reach Ollama's API can pull or create one).
+- **File formats on disk:** count pickle-based files (`.ckpt`, `.pt`, `.pth`, `.bin`, `.pkl`) versus
+  `safetensors` and GGUF in the model directories. Pickle files from unknown publishers are findings
+  (OWASP LLM03 supply chain). Hugging Face's pickle import scan is best-effort; the vendor says it is not
+  foolproof.
+- Whether pickle checks are disabled (A1111 `--disable-safe-unpickle`) or bypassed by custom loaders.
+- **Ollama Modelfiles:** models created locally can carry a system prompt, template, and adapters. A
+  model nobody remembers creating, or a well-known name with an unexpected system prompt, is suspicious.
+  `ollama show <model> --modelfile` displays it; verify the flag on the installed version.
+- Integrity: whether digests or hashes are recorded for models in use, so a swapped file can be detected.
+- Model directory permissions: who can write to `~/.ollama/models` (or `OLLAMA_MODELS`), `models/` in
+  ComfyUI and A1111, and the Hugging Face cache. Anyone who can write there can plant a malicious pickle.
+
+#### G. File upload, download, and output endpoints
+
+- Which endpoints accept uploads (ComfyUI `/upload/image` and `/upload/mask`, Open WebUI documents and
+  images, A1111 image inputs, Ollama blobs) and which serve files back (ComfyUI `/view`, Gradio file
+  routes, Open WebUI file APIs). On an unauthenticated instance these are open file stores on the LAN.
+  Path-traversal flaws have appeared in this class of endpoint; check the installed version's advisories.
+- Output directories: generated images and audio, their retention, and whether they are synced or
+  shared. Images often embed the full prompt and workflow as metadata (ComfyUI has `--disable-metadata`).
+- llama.cpp `--slot-save-path` (saves conversation caches to disk) and vLLM cache directories (the vendor
+  says cache contents load without integrity checks and must be private).
+- Disk space: uploads and model pulls can fill disks and stop other services.
+
+#### H. Stored secrets and connected accounts
+
+- Cloud provider API keys configured in Open WebUI, LM Studio, ComfyUI API/partner nodes, TTS apps, or
+  `.env` files: which providers, scope, spending limits, and age. Record existence, never values.
+- Hugging Face tokens (`HF_TOKEN`, cached login), web-search API keys, tunnel tokens, and the identity
+  key Ollama keeps in `~/.ollama/` for its account and registry features.
+- **Ollama account features:** whether the server is signed in to an Ollama account, and whether cloud
+  models and web search are allowed. `OLLAMA_NO_CLOUD=1` (or `disable_ollama_cloud` in
+  `~/.ollama/server.json`) turns them off. An exposed, signed-in server may let strangers use the
+  account; check the live version's behavior.
+- Where secrets live: environment variables (visible to anyone who can inspect the container), database
+  (Open WebUI encrypts some stored secrets with `WEBUI_SECRET_KEY`), plaintext config files, the command
+  line.
+- vLLM on Ray: driver environment variables (including tokens) can propagate to workers (vendor note).
+
+#### I. GPU and resource abuse
+
+- Whether anyone outside the intended users can submit work. An open API is free GPU time for strangers
+  and for malware (OWASP LLM10 unbounded consumption).
+- Limits: Ollama `OLLAMA_MAX_QUEUE`, `OLLAMA_NUM_PARALLEL`, `OLLAMA_MAX_LOADED_MODELS`; llama.cpp slots;
+  vLLM media download size limits; proxy rate limits.
+- Current and historical GPU utilization (`nvidia-smi`, or the platform equivalent) versus expected use.
+  Sustained load when nobody is using the app is an indicator (see Respond).
+- Power, heat, and cost (cloud GPU billing, cloud model API billing).
+
+#### J. Prompt and data privacy, logs, and telemetry
+
+- Where chat history, uploaded documents, and knowledge bases are stored (Open WebUI `DATA_DIR`, default
+  `./data` in the app, usually a volume). Who can read the volume and its backups. Treat the database as
+  secret material: it holds every user's chats, and its encrypted secrets are protected only by
+  `WEBUI_SECRET_KEY`.
+- Admin access to other users' chats (`ENABLE_ADMIN_CHAT_ACCESS`, default on) and export
+  (`ENABLE_ADMIN_EXPORT`, default on). In a household or team, users should know admins can read chats.
+- Server logs: whether prompts or outputs are logged (debug logging, A1111 `--api-log`, proxy access
+  logs with request bodies), retention, and who can read them. Ollama logs: `~/.ollama/logs/server.log`
+  (macOS), `journalctl -u ollama` (Linux systemd), container stdout.
+- Outbound connections: update checks (`ENABLE_VERSION_UPDATE_CHECK`, `OFFLINE_MODE`), community sharing
+  (`ENABLE_COMMUNITY_SHARING`, default on), web search providers, cloud model fallbacks, analytics. Data
+  sent to cloud models leaves the house; users should know which models are local.
+- RAG and knowledge features: what documents were ingested and who can query them (see the
+  [mcp-servers](../mcp-servers/SKILL.md) skill, domain H).
+
+#### K. Host and container isolation
+
+- The user each service runs as (root, the desktop user, or a dedicated service account). A desktop user
+  account gives custom nodes and Functions access to the user's whole home directory, browser profiles,
+  and SSH keys.
+- Container mounts: home directories, the Docker socket (equivalent to root on the host), host paths
+  writable by the container. GPU device access.
+- Whether the AI host is on the same network segment as sensitive systems, and whether it can reach them
+  (a compromised custom node pivots from there).
+- Backups of configuration and data, and whether restoring them has been tested.
+
+---
+
+## Recommend
+
+No changes are made in this mode. For each finding, produce a recommendation using the core finding
+template, including **Dependencies / blast radius** and the **operation class**.
+
+### Dependency and blast-radius check (required)
+
+List what depends on the current setup before recommending a change:
+
+- **Front ends and clients of each model API:** Open WebUI, IDE plugins, home-automation integrations,
+  scripts, phones, and other hosts that call Ollama, llama.cpp, vLLM, or LM Studio directly. Binding to
+  loopback breaks every client on another host or container.
+- **Container networking:** Open WebUI in a container usually reaches Ollama on the host through
+  `host.docker.internal` or a Compose network. Moving Ollama to loopback can break that path; a shared
+  Compose network without publishing the Ollama port is the usual fix.
+- **Users and their accounts:** closing signup, changing roles, or switching to SSO affects every user.
+- **Workflows that depend on custom nodes or extensions:** removing one breaks saved workflows.
+- **Stored secrets:** rotating `WEBUI_SECRET_KEY` logs everyone out and may make secrets encrypted with
+  the old key unreadable (check the live version's documentation first). Rotating cloud keys breaks
+  every app that uses them.
+- **Tunnels and proxies:** other services may share the same tunnel or proxy.
+
+### Recommendation guidance
+
+| Area | Typical recommendation | Consequences to explain |
+|---|---|---|
+| Model API on all interfaces with no auth | Bind to loopback (`OLLAMA_HOST=127.0.0.1:11434`, remove `--listen`, turn off "Serve on Local Network"); give remote clients access through an authenticating proxy or VPN. | Clients on other hosts stop working until moved to the proxy or VPN. |
+| Container publishes the model API port | Remove the port mapping and use a private Compose network between the UI and the model server; or publish on `127.0.0.1:<port>` only. | Host-side tools that called the API through the published port need another path. |
+| Port forward, UPnP mapping, tunnel, or Gradio share link to an unauthenticated app | Remove it. If remote access is needed, use a VPN, or a tunnel/proxy that enforces authentication. | Remote users lose access until the VPN or authenticated path exists. |
+| No API key (llama.cpp, vLLM, LM Studio) on a networked server | Enable the product's key option with a key per client, from a file, not the command line. For vLLM, also allowlist endpoints at a proxy. | Every client needs the key configured. |
+| vLLM dev mode, Ray dashboard, or distributed ports reachable | Disable dev mode; firewall distributed and Ray ports to the cluster's private network. | Multi-node setups need a dedicated private network. |
+| Open WebUI signup open or default role not `pending` | Disable signup, or keep it with `pending` and approve users by hand; review and remove unknown accounts. | New users need an admin to add or approve them. |
+| Unknown or excess Open WebUI admins | Demote or remove after confirming with the owner; treat an unknown admin as a P0 indicator. | Demoted users lose admin features. |
+| Trusted-header auth reachable without the proxy | Bind Open WebUI so only the proxy can reach it, or turn trusted-header auth off. | Requires network changes between proxy and app. |
+| Workspace Tools/Functions permission granted broadly | Restrict to admins; review every Function and Tool's code and source. | Users lose self-service tools. |
+| ComfyUI-Manager `weak`, or A1111 `--enable-insecure-extension-access` / `--allow-code` on a networked instance | Set Manager to `normal` or `strong`; remove the A1111 flags; install extensions only from the console. | Installing nodes from the UI becomes harder; that is the point. |
+| Custom nodes or extensions from unknown or abandoned sources | Remove them, or pin them to a reviewed commit. Rebuild the environment if any looks malicious (Respond). | Workflows using them break. |
+| Pickle models from untrusted sources | Replace with `safetensors` or GGUF from known publishers; keep pickle checks on. | Some models exist only in pickle form; the user must accept or drop them. |
+| Cloud API keys stored in an exposed app | Close the exposure first, then rotate the keys, set provider spending limits, and use per-app keys. | Brief outage while keys are replaced. |
+| Ollama signed in or cloud features enabled when unneeded | Sign out and set `OLLAMA_NO_CLOUD=1`. | Cloud models and web search stop working. |
+| Permissive CORS (`*`, broad extension patterns) | Set explicit origins (`OLLAMA_ORIGINS`, `CORS_ALLOW_ORIGIN`, llama.cpp `--cors-origins`). | Browser-based clients from other origins stop working. |
+| `WEBUI_SESSION_COOKIE_SECURE` off behind HTTPS | Turn it on. | Plain-HTTP access stops keeping sessions. |
+| Service runs as the desktop user or root with broad mounts | Run as a dedicated account or container without home-directory or Docker-socket mounts. | Model and data paths move; file permissions need fixing. |
+| No update routine | Pin versions, watch the project's advisories, and update on a schedule. Update immediately for security releases. | Updates can break custom nodes and extensions; snapshot or back up first. |
+| Chats and prompts retained indefinitely, or logged | Set retention, disable prompt logging, and tell users who can read chats. | Old history is lost by design. |
+
+Changing ports or hiding the UI behind an obscure path is never the main fix. Use binding, authentication,
+and network controls.
+
+Group the plan: immediate containment (internet-exposed or unauthenticated APIs with stored keys) → urgent
+fixes (code-execution surfaces reachable from the network, unknown admins) → high-priority hardening →
+routine maintenance → optional defense in depth. Then ask for approval (core: modes and authorization).
+
+---
+
+## Remediate
+
+Apply only approved changes, one at a time, following the core rules. Product specifics:
+
+- **Before any change:** record the current bind addresses, published ports, launch flags, and
+  environment (secrets redacted). Back up configuration and data: the Open WebUI data volume (stop the
+  container or use its documented backup method; the database holds secrets), ComfyUI's `custom_nodes`
+  list and Manager snapshot, A1111's extension list, and Compose files. Don't copy model directories
+  unless asked; they're large and can be re-downloaded.
+- **Bind and port changes are C2.** They break remote clients. Change one service at a time and verify
+  each client the dependency check listed.
+- **Ollama:** set `OLLAMA_HOST` where the vendor says for the platform (systemd drop-in, launch
+  environment for the macOS app, system environment on Windows), then restart the service. Verify with
+  `ss`/`lsof` that it listens where intended.
+- **Containers:** change port mappings in the Compose file or run command and recreate the container. A
+  restart alone keeps the old mapping. Confirm volumes persist across recreation before you start.
+- **Open WebUI settings:** with persistent config on, change settings in the Admin Panel (or set
+  `ENABLE_PERSISTENT_CONFIG=False` deliberately). Otherwise the database value silently wins over the
+  environment variable you changed. Keep one admin session open while changing authentication settings,
+  and confirm a second admin can log in first.
+- **Removing custom nodes, extensions, or Functions:** disable first, test that the app starts and the
+  user's workflows behave as expected, then remove as a separate step. If you suspect any is malicious,
+  stop and switch to Respond; don't just delete it.
+- **Updates:** C2. Read release notes; custom nodes and extensions frequently break on core updates.
+  Take a snapshot (ComfyUI-Manager snapshot, container image tag, or virtual-environment copy) first.
+- **Key rotation:** close the exposure first, then rotate, then update every client, then revoke the old
+  key at the provider. Check the provider's usage log for the period of exposure.
+
+After each change, follow the core "after a change" steps: re-check the listening sockets and published
+ports, test from another host that the API is no longer reachable (or now requires authentication), and
+confirm the intended clients still work.
+
+### Hard stops (refer to a specialist or do manually; never automate)
+
+- Deleting models, chat databases, knowledge bases, generated outputs, or volumes as "cleanup".
+- Resetting or wiping the Open WebUI database (for example to recover a lost admin) without a verified
+  backup and the owner's explicit decision.
+- Turning `WEBUI_AUTH` off, or setting `DEFAULT_USER_ROLE=admin`, for any reason.
+- Loading an untrusted pickle model to "check" it, or running a scanner that loads it rather than
+  reading it statically.
+- Changing `WEBUI_SECRET_KEY` on a live instance without confirming what it encrypts on that version.
+- Installing nodes, extensions, Functions, or models on the user's behalf as remediation.
+- Changing router port forwards or tunnels that other services share, without the owner present.
+
+---
+
+## Respond
+
+On any P0 indicator, switch to Respond immediately. Follow the core playbook plus the local-LLM-specific
+steps in [incident-response.md](incident-response.md).
+
+---
+
+## Worked example (invented)
+
+### LLM-001: Ollama API reachable from the internet with no authentication
+
+**Confidence:** Confirmed
+**Priority:** P1. Anyone on the internet can use the GPU, pull or create models, and delete the owner's
+models. The same host stores a cloud provider API key in Open WebUI.
+**State:** Open
+**Component:** Ollama (container), Docker port publishing, router port forward
+**Evidence:** Observed 2026-10-12: the Compose file publishes `11434:11434`, so `ss -ltn` shows
+`0.0.0.0:11434` and `[::]:11434` on the host `192.0.2.20`. The router forwards TCP 11434 from its WAN
+address to `192.0.2.20`. With approval, `curl -s --max-time 5 http://203.0.113.45:11434/api/version` from
+an external test host returned a version string. `ollama list` shows two models nobody recognizes,
+pulled 2026-10-03.
+**Expected secure state:** model API reachable only from the Open WebUI container over a private Compose
+network; no port forward; remote use through the VPN (Ollama FAQ: binds 127.0.0.1 by default).
+**Exposure and prerequisites:** anyone on the internet; no credentials needed.
+**Dependencies / blast radius:** Open WebUI reaches Ollama through the published port; one IDE plugin on a
+laptop calls the API directly over the LAN.
+**Recommended remediation:** (1) remove the router port forward; (2) put Ollama and Open WebUI on a
+shared Compose network, remove the `11434` mapping, and point Open WebUI at the service name; (3) move
+the IDE plugin to the VPN, or to an authenticating proxy; (4) because of the unknown models, open
+Respond: preserve the model list and logs, then rotate the cloud API key stored in Open WebUI and review
+its provider usage.
+**Operation class:** C2 (breaks the current client paths).
+**Approval required:** Yes.
+**Verification:** external check times out; `ss -ltn` shows no `0.0.0.0:11434`; Open WebUI still lists
+models; the IDE plugin works over the VPN.
+**Rollback:** restore the previous Compose file from backup and recreate the container (not
+recommended; restrict the forward's source instead if remote access is essential).
+
+---
+
+## Version history
+
+- **1.0** (2026-10-30): Initial version.

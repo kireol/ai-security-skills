@@ -1,0 +1,83 @@
+# Linux Hosts: References
+
+Always prefer current distribution documentation; lifecycles, defaults, and tooling change between
+releases. Re-verify links and contents when updating this skill.
+
+Last verified: 2026-10-30
+
+## Vendor (authoritative)
+
+### Debian (also the base of Raspberry Pi OS)
+
+- Release list and support dates (stable, oldstable, LTS, ELTS): https://www.debian.org/releases/
+- Debian Security Advisories (DSA) and security tracker: https://www.debian.org/security/ and
+  https://security-tracker.debian.org/tracker/
+- Debian LTS (releases, dates, supported architectures) and LTS advisories (DLA):
+  https://wiki.debian.org/LTS and https://www.debian.org/lts/security/
+- Securing Debian manual: https://www.debian.org/doc/manuals/securing-debian-manual/
+- Automatic updates (unattended-upgrades): https://wiki.debian.org/UnattendedUpgrades
+- AppArmor on Debian: https://wiki.debian.org/AppArmor/HowToUse
+- Release notes (per release; e.g. bookworm's notes on rsyslog no longer installed by default and journal
+  persistence): https://www.debian.org/releases/bookworm/amd64/release-notes/ch-information.en.html
+
+### Ubuntu
+
+- Release cycle and support windows (LTS, interim, ESM): https://ubuntu.com/about/release-cycle
+- Ubuntu Security Notices (USN) and CVE tracker: https://ubuntu.com/security/notices and
+  https://ubuntu.com/security/cves
+- Server documentation, automatic updates: https://ubuntu.com/server/docs/how-to/software/automatic-updates/
+- OpenSSH socket activation (22.10 and later; behavior changed in 24.04):
+  https://discourse.ubuntu.com/t/sshd-now-uses-socket-based-activation-ubuntu-22-10-and-later/30189
+- Ubuntu Security Guide (CIS and DISA-STIG auditing with Ubuntu Pro):
+  https://ubuntu.com/security/certifications/docs/usg
+
+### Red Hat Enterprise Linux and rebuilds
+
+- RHEL life cycle and update policies: https://access.redhat.com/support/policy/updates/errata
+- Red Hat security advisories (RHSA) and CVE database: https://access.redhat.com/security/security-updates/
+- Security hardening guide (RHEL 9; check the guide for the installed major version):
+  https://docs.redhat.com/en/documentation/red_hat_enterprise_linux/9/html/security_hardening/
+- Using SELinux (states, modes, relabeling):
+  https://docs.redhat.com/en/documentation/red_hat_enterprise_linux/9/html/using_selinux/
+- Automating updates with dnf-automatic:
+  https://docs.redhat.com/en/documentation/red_hat_enterprise_linux/9/html/managing_software_with_the_dnf_tool/assembly_automating-software-updates-in-rhel-9_managing-software-with-the-dnf-tool
+- Rocky Linux release and support information: https://wiki.rockylinux.org/rocky/version/
+- AlmaLinux release information: https://wiki.almalinux.org/release-notes/
+- Fedora release life cycle: https://docs.fedoraproject.org/en-US/releases/lifecycle/
+
+### Raspberry Pi
+
+- Removal of the default `pi` user (April 2022 update):
+  https://www.raspberrypi.com/news/raspberry-pi-bullseye-update-april-2022/
+- Remote access (SSH disabled by default, mDNS `.local` names):
+  https://www.raspberrypi.com/documentation/computers/remote-access.html
+- Raspberry Pi OS documentation and updates: https://www.raspberrypi.com/documentation/computers/os.html
+
+### Containers
+
+- LXC security (privileged vs. unprivileged containers): https://linuxcontainers.org/lxc/security/
+- Proxmox VE Linux Container documentation (unprivileged default, bind mounts, AppArmor):
+  https://pve.proxmox.com/wiki/Linux_Container
+
+### Upstream components
+
+- OpenSSH server configuration (`sshd_config(5)`): https://man.openbsd.org/sshd_config
+- systemd journald configuration (`journald.conf(5)`):
+  https://www.freedesktop.org/software/systemd/man/latest/journald.conf.html
+- OpenSCAP and the SCAP Security Guide: https://www.open-scap.org/ and
+  https://github.com/ComplianceAsCode/content
+
+Generic vulnerability and incident sources (CISA KEV, NVD, CVE, CISA ransomware guidance, IC3) are listed in
+the core documents.
+
+## Third-party (not authoritative)
+
+- CIS Benchmarks for Linux distributions: https://www.cisecurity.org/cis-benchmarks
+  Detailed, distribution-specific hardening checklists (free PDF download with registration). Useful as a
+  checklist; many items are optional or need tuning for home and homelab use. Check against the
+  distribution's own guidance.
+- IEEE OUI registry (MAC address vendor lookup):
+  https://regauth.standards.ieee.org/standards-ra-web/pub/view.html#registries
+  Authoritative for who registered a prefix, not for what OS a device runs.
+- endoflife.date (aggregated lifecycle dates): https://endoflife.date/
+  Convenient cross-check of release support dates; always confirm against the distribution's own page.

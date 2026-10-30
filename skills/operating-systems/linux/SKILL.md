@@ -1,0 +1,626 @@
+---
+name: linux
+description: >-
+  Security assessment, hardening, remediation, and incident response for Linux hosts: servers, VMs, LXC
+  containers, and Raspberry Pi-class devices, with distribution-aware guidance for Debian, Ubuntu,
+  RHEL-family (RHEL, Rocky, AlmaLinux, Fedora), and others. Use when auditing a Linux host's support status,
+  automatic updates, users and sudo, SSH, listening services, host firewall, AppArmor/SELinux, secrets on
+  disk, cron and systemd persistence, third-party repositories, logging, NFS/SMB, containers, or backups,
+  or when a Linux host may have been compromised.
+license: CC-BY-4.0
+metadata:
+  version: "1.0"
+  last_reviewed: "2026-10-30"
+  applies_to: "systemd-based Linux distributions: Debian 12-13, Ubuntu LTS 22.04-26.04, RHEL-family 8-10, Raspberry Pi OS, and similar (verify the live release and its support status)"
+  audience: "home, work, homelab, web"
+  finding_prefix: "LNX"
+  modes: "discover, recommend, remediate, respond"
+---
+
+# Linux Host Security
+
+Act as a careful, evidence-driven Linux systems security engineer. A Linux host is often the place where
+everything else runs: containers, web apps, databases, home automation, backup jobs, and the agent's own
+SSH session. A weakness here exposes every service and secret on the host, and a bad change here (SSH,
+firewall, sudo, a reboot) can lock out the user and the agent together. Identify, explain, prioritize,
+remediate (only when authorized), and verify weaknesses in the operating system and its configuration.
+Application-level hardening of the services the host runs belongs to those services' own skills.
+
+## How to use this skill
+
+This skill holds only Linux-specific guidance. It builds on the shared core, which always applies:
+
+| Core document | Covers |
+|---|---|
+| [modes-and-authorization.md](../../../core/modes-and-authorization.md) | The four modes, transitions, operation classes (R/C1/C2/C3), standing authorization |
+| [operating-principles.md](../../../core/operating-principles.md) | Principles, capability discovery, scope, communication, untrusted data |
+| [vulnerability-triage.md](../../../core/vulnerability-triage.md) | Lifecycle, CVE/KEV validation, P0–P4 priority scale |
+| [evidence-and-reporting.md](../../../core/evidence-and-reporting.md) | Evidence labels, statuses, finding template, report format, cadence |
+| [tool-use-contract.md](../../../core/tool-use-contract.md) | Rules for commands, APIs, MCP tools, and third-party integrations |
+| [reporting-protocol.md](../../../core/reporting-protocol.md) | Optional live progress reporting to a dashboard |
+| [incident-response.md](../../../core/incident-response.md) | The generic Respond playbook |
+
+Linux-specific Respond steps are in [incident-response.md](incident-response.md). Distribution
+documentation and advisories are in [references.md](references.md).
+
+## Linux-specific principles
+
+- **Identify the distribution first; commands and defaults depend on it.** Read `/etc/os-release` before
+  anything else. Package managers (`apt`, `dnf`), firewall front ends (`ufw`, `firewalld`), MAC systems
+  (AppArmor, SELinux), and update tooling (`unattended-upgrades`, `dnf-automatic`) differ by family. Never
+  apply a Debian answer to a RHEL host or the reverse.
+- **Support status is about the release, not the package.** A fully updated host on an end-of-life
+  release still misses security fixes. Check the release against the distribution's own lifecycle page,
+  and note whether it relies on a paid or volunteer extension (Ubuntu Pro ESM, Debian LTS/ELTS, Red Hat
+  extended offerings) and whether that extension is actually enabled.
+- **Installed is not running.** A patched kernel or library does nothing until the host reboots or the
+  service restarts. Always compare the running kernel with the newest installed one.
+- **Config files are not the effective configuration.** Drop-in directories (`/etc/ssh/sshd_config.d/`,
+  `/etc/sudoers.d/`, `/etc/systemd/system/*.d/`, `/etc/apt/apt.conf.d/`) override the main file, and the
+  first or last value wins depending on the program. Prefer tools that print the effective configuration
+  (`sshd -T`, `systemctl cat`, `nft list ruleset`) over reading one file.
+- **SSH and firewall changes are C2 and can lock everyone out.** The agent usually works over SSH. Keep an
+  existing session open, have console access (physical, IPMI/BMC, hypervisor, or LXC host `pct enter`)
+  confirmed, and test from a second session before closing the first.
+- **Secrets live in plain files.** `.env` files, compose files, application configs, shell history, and
+  backup scripts often hold credentials. Report that a secret exists, where, and who can read it. Never
+  print its value.
+- **A container is not a host.** Inside an LXC container, the kernel, the firewall that matters, the
+  hardware, and often the backups belong to the host. Some checks move to the host; say which.
+
+## Deployment variants
+
+| Variant | How to recognize it | What changes |
+|---|---|---|
+| **Debian / Ubuntu family** (incl. Raspberry Pi OS, Linux Mint server installs) | `ID`/`ID_LIKE` in `/etc/os-release` is `debian` or `ubuntu`; `apt`, `dpkg`. | `unattended-upgrades` for automatic updates; AppArmor by default; `ufw` common on Ubuntu. Ubuntu LTS releases may be on ESM through Ubuntu Pro. |
+| **RHEL family** (RHEL, Rocky, AlmaLinux, CentOS Stream, Oracle Linux, Fedora) | `ID_LIKE` contains `rhel` or `fedora`; `dnf`/`rpm`. | `dnf-automatic` for automatic updates; SELinux enforcing by default; `firewalld` by default. Fedora and CentOS Stream have much shorter lifecycles than RHEL and its rebuilds. |
+| **Other distributions** (Arch, openSUSE, Alpine, Gentoo, NixOS) | `/etc/os-release`. | Rolling or differently packaged; lifecycle and update tooling differ. Use this skill's domains, but verify every command and default against that distribution's documentation and mark gaps **Not assessed**. |
+| **Bare metal server or desktop** | Physical hardware in `lscpu`/`dmidecode` (read-only); no hypervisor flag in `systemd-detect-virt`. | Physical access, firmware/BMC, and disk encryption are part of the trust boundary. |
+| **Virtual machine** | `systemd-detect-virt` reports `kvm`, `vmware`, `microsoft`, `oracle`, `xen`, etc. | The **hypervisor is part of the trust boundary**: its admins control the VM's disks and console. Snapshots are a useful rollback and evidence tool. |
+| **LXC / system container** (e.g. on Proxmox VE, Incus/LXD) | `systemd-detect-virt -c` reports `lxc`; no own kernel (`uname -r` matches the host's). | Kernel, kernel updates, and reboots are the host's. Privileged vs. unprivileged matters greatly (domain M). The host can read and change everything inside. |
+| **Raspberry Pi-class / ARM single-board computer** | `/proc/device-tree/model` names the board; Raspberry Pi OS or a vendor image. | SD cards fail and are easy to remove or copy; default-account history (domain O); often runs home automation or DNS filtering with broad network access. |
+| **Cloud instance** | Cloud-init present; provider metadata service. | Security groups or cloud firewalls sit in front of the host firewall; the metadata service and instance role may expose credentials. Assess the cloud side with the provider's guidance. |
+
+## Detection
+
+Hints for recognizing this product during a network inventory (used by the `full-assessment` skill).
+Defaults can be changed, so confirm with the user before relying on a match.
+
+- SSH on TCP 22 is the most common sign. The OpenSSH banner usually includes a distribution suffix, for
+  example `SSH-2.0-OpenSSH_<version> Debian-<package-revision>` or `... Ubuntu-<package-revision>`, which
+  hints at the distribution and sometimes the release. RHEL-family banners usually show only
+  `OpenSSH_<version>`. Banners can be changed and say nothing about patch level beyond the package
+  revision; never treat them as proof of a vulnerability.
+- Other typical ports, depending on role: 80/443 (web), 9090 (Cockpit on RHEL-family and some others),
+  111 and 2049 (NFS), 139/445 (Samba), 5353/UDP (mDNS), 3389 (xrdp) or 5900+ (VNC) on desktops.
+- mDNS/DNS-SD via Avahi: Linux desktops and Raspberry Pi OS often announce `<hostname>.local` and
+  services such as `_ssh._tcp`, `_sftp-ssh._tcp`, `_smb._tcp`, or `_workstation._tcp`. A fresh Raspberry
+  Pi OS install answers to `raspberrypi.local` until renamed.
+- MAC address vendors (OUIs): Raspberry Pi boards use OUIs registered to Raspberry Pi (for example
+  `B8:27:EB`, `DC:A6:32`, `E4:5F:01`, `D8:3A:DD`, `2C:CF:67`; check the IEEE registry for the current
+  list). Virtual machines often carry hypervisor default prefixes: `52:54:00` (QEMU/KVM, libvirt),
+  `BC:24:11` (Proxmox VE), `00:50:56` and `00:0C:29` (VMware), `00:15:5D` (Hyper-V), `08:00:27`
+  (VirtualBox), `00:16:3E` (Xen). A generic NIC vendor (Intel, Realtek, Broadcom) says nothing about the
+  OS.
+- These hints don't apply when MAC addresses are randomized or set by hand, when the host sits behind NAT
+  or a reverse proxy (you see the proxy), when SSH is disabled or moved, or for LXC containers on a bridge
+  (they get their own MAC, often from the hypervisor's prefix). Many appliances (NAS, routers, cameras)
+  also run Linux; prefer their product skill when one matches.
+
+---
+
+## Discover
+
+All operations in this mode are class **R** (read-only). Confirm scope and access first (core: operating
+principles). Mark anything you can't inspect **Not assessed**. Many checks need root; if the user prefers,
+give them the command to run and ask for the output (redacted where noted).
+
+### Baseline commands
+
+These are *candidate* read-only commands, **not yet verified** on every distribution and release. Check
+that each exists (`command -v`) and read its `--help` before relying on a flag. Commands marked
+*(Debian/Ubuntu)* or *(RHEL)* apply only to that family.
+
+```sh
+cat /etc/os-release; uname -r; uptime          # distribution, release, running kernel, uptime
+hostnamectl                                    # hostname, virtualization, OS (systemd hosts)
+systemd-detect-virt; systemd-detect-virt -c    # VM type; container type (lxc, docker, none)
+ls /boot/vmlinuz-* 2>/dev/null                 # installed kernels, to compare with uname -r
+apt list --upgradable 2>/dev/null              # (Debian/Ubuntu) pending updates; reads cached lists
+ls -l /var/run/reboot-required*                # (Debian/Ubuntu) reboot-pending flag, if present
+pro status                                     # (Ubuntu) Ubuntu Pro / ESM / Livepatch status
+dnf check-update; dnf updateinfo list --security   # (RHEL) pending and security updates
+needs-restarting -r                            # (RHEL, dnf-utils/dnf-plugins-core) reboot needed?
+systemctl list-timers --all                    # update timers, backup timers, unknown timers
+getent passwd | awk -F: '$3==0 || $7 !~ /(nologin|false)$/'   # UID 0 accounts and login shells
+getent group sudo wheel adm docker lxd incus libvirt          # privileged groups and members
+sudo -l -U <user>                              # effective sudo rights for one user
+sshd -T                                        # effective sshd configuration (needs root)
+ss -tulpn                                      # listening TCP/UDP sockets and owning processes
+nft list ruleset; iptables -S; ip6tables -S    # loaded firewall rules (needs root)
+ufw status verbose; firewall-cmd --list-all-zones   # firewall front ends, if installed
+aa-status; getenforce; sestatus                # AppArmor (Debian/Ubuntu) or SELinux (RHEL) state
+systemctl list-unit-files --state=enabled      # enabled units (persistence review)
+ls -la /etc/cron.* /var/spool/cron/ 2>/dev/null   # cron jobs (list; read individual files)
+grep -rh '^[^#]' /etc/apt/sources.list /etc/apt/sources.list.d/ 2>/dev/null   # (Debian/Ubuntu) repos
+dnf repolist -v                                # (RHEL) enabled repositories
+journalctl --disk-usage; systemd-analyze cat-config systemd/journald.conf   # journal size, settings
+timedatectl                                    # time sync state
+findmnt -t nfs,nfs4,cifs; cat /etc/exports; exportfs -v   # network mounts and NFS exports
+testparm -s                                    # effective Samba configuration, if installed
+```
+
+- `apt list --upgradable` uses the cached package lists; `apt update` refreshes them (it changes only the
+  package cache, not installed software, but ask first on metered or fragile systems).
+- `unattended-upgrade --dry-run` simulates a run without installing (check `--help` on the installed
+  version first). Never run `unattended-upgrade` without `--dry-run` during Discover: it installs updates.
+- For a CIS-style or distribution baseline, OpenSCAP (`oscap xccdf eval` with the SCAP Security Guide
+  content) is read-only **without** `--remediate`; Ubuntu Pro offers the Ubuntu Security Guide (`usg`) for
+  CIS and DISA-STIG audits. Both are optional and need installing (C1); propose them, don't assume them.
+
+**Never run these during Discover** (most are C2 or C3, and some print secrets):
+
+- `cat /etc/shadow`, `getent shadow`, or anything that prints password hashes. To check for empty or
+  locked passwords, use `passwd -S <user>` or `passwd -S -a` (status only) where available.
+- Printing private keys or secrets: `cat ~/.ssh/id_*` (non-`.pub`), `cat /etc/ssh/ssh_host_*_key`,
+  `cat .env`, `env` or `/proc/<pid>/environ` of services, `docker inspect` output with environment
+  variables, `wg showconf`, or shell history files. Use `ls -l` and `stat` to check existence and
+  permissions instead; grep for variable *names* only (e.g. `grep -o '^[A-Z_]*=' <file>`), never values.
+- Package changes: `apt remove/purge/autoremove`, `apt upgrade`, `dnf remove/upgrade`, `rpm -e`, `snap
+  remove`, `unattended-upgrade` (real run).
+- Firewall changes: `iptables -F`, `nft flush ruleset`, `ufw disable/reset`, `systemctl stop firewalld`,
+  `firewall-cmd --panic-off` or any `--add`/`--remove` option.
+- Service, account, and boot changes: `systemctl stop/disable/mask`, `kill` of unknown processes,
+  `usermod`, `passwd`, `userdel`, `setenforce 0`, `aa-disable`, `reboot`, `shutdown`.
+- `exportfs -ra`/`-ua`, `umount`, `mount -o remount`, or any filesystem, LVM, RAID, or partition tool.
+- `oscap ... --remediate`, `usg fix`, or any hardening script run in apply mode.
+- Anything piped from the internet (`curl ... | sh`), and any exploit, brute-force, or password-guessing
+  tool, against this host or any other.
+
+### Assessment domains
+
+Every domain must end with a status in the report (Pass / Finding / Not assessed / Not applicable /
+Accepted risk).
+
+#### A. Distribution, release, and support status
+
+- Distribution, release, and codename from `/etc/os-release`; architecture from `uname -m`.
+- Whether the release still receives security updates, checked on the distribution's live lifecycle page
+  (references.md), not from memory. Examples of what to look for (verify current dates):
+  - **Debian:** about three years of security support from the Security Team, then LTS (volunteer and
+    sponsored, limited architectures and packages) to about five years, then commercial ELTS. Debian 12
+    "bookworm" moved from the Security Team to LTS in mid-2026; Debian 11 "bullseye" LTS ended in
+    August 2026.
+  - **Ubuntu:** LTS releases get five years of standard security maintenance for the `main` component;
+    ESM through Ubuntu Pro extends this and adds `universe`. Interim (non-LTS) releases get nine months.
+    A host on an LTS past its standard window is supported only if ESM is actually attached (`pro
+    status`).
+  - **RHEL:** ten-year lifecycle (Full Support, then Maintenance Support), with paid extensions after.
+    Rebuilds (Rocky, AlmaLinux) follow their own published schedules. Fedora releases are short-lived.
+  - **Raspberry Pi OS:** follows the Debian release it is based on; older-base images keep working long
+    after their Debian base loses security support.
+- Packages from `universe` (Ubuntu) or EPEL (RHEL-family) don't get the same security coverage as the
+  core repositories. Note which important services come from them.
+- Mixed releases: sources pointing at a different release than the installed one (a "Frankendebian"), or
+  pinned old packages (`apt-mark showhold`, `dnf versionlock list`).
+
+#### B. Updates, kernel, and reboot state
+
+- Automatic security updates:
+  - **Debian/Ubuntu:** `unattended-upgrades` installed and enabled (`/etc/apt/apt.conf.d/20auto-upgrades`
+    with `Update-Package-Lists` and `Unattended-Upgrade` set to `"1"`), allowed origins in
+    `50unattended-upgrades` and any local override file include the security repository, and logs under
+    `/var/log/unattended-upgrades/` show recent successful runs. Ubuntu enables it by default; Debian may
+    or may not, depending on how it was installed.
+  - **RHEL-family:** `dnf-automatic` installed, which timer is enabled (`dnf-automatic-install.timer`
+    installs; `-download` and `-notifyonly` don't; plain `dnf-automatic.timer` follows
+    `/etc/dnf/automatic.conf`), and whether `upgrade_type` is `security` or `default`.
+  - Other distributions: whatever the distribution documents; rolling releases need regular manual
+    updates.
+- Pending updates now, and especially pending security updates. A long list means updates aren't running.
+- **Running vs. installed kernel:** compare `uname -r` with the newest installed kernel. Note uptime; a
+  host up for months is almost certainly running an old kernel and old libraries.
+- Reboot-pending flags: `/var/run/reboot-required` (Debian/Ubuntu, created by some packages),
+  `needs-restarting -r` (RHEL). Services still running deleted (replaced) libraries: `needrestart -b` if
+  installed (not yet verified on every release).
+- Automatic reboot policy (`Unattended-Upgrade::Automatic-Reboot`, default `false` on Ubuntu; dnf-automatic
+  `reboot` option on newer releases; verify on the installed version), and whether anyone reboots
+  manually.
+- Live kernel patching (Ubuntu Livepatch, RHEL kpatch): enabled? It reduces, but doesn't remove, the
+  need to reboot.
+- Firmware updates (`fwupdmgr get-updates` on supported hardware; Raspberry Pi bootloader EEPROM via
+  `rpi-eeprom-update`, read-only without `-a`/`-d`; verify on the installed version).
+- Software outside the package manager: language package managers run as root (`pip` system installs,
+  `npm -g`), `/usr/local/bin` and `/opt` binaries, AppImages, and container images all need their own
+  update path. Note which ones the user updates and how.
+
+#### C. Users, groups, sudo, and root
+
+- Every account with UID 0 (only `root` should have it).
+- Accounts with a login shell, and which of them are human. Unknown or unexplained accounts are a P0
+  candidate (switch to Respond if they can't be explained).
+- Password status per account (`passwd -S`): empty passwords, unlocked service accounts, and whether
+  `root` has a usable password (often locked on Ubuntu by default; Debian sets one only if the installer
+  was given one).
+- `sudo` rules in `/etc/sudoers` and `/etc/sudoers.d/`: `NOPASSWD: ALL` grants, rules for groups with
+  many members, rules allowing editors, shells, interpreters, or `systemctl`/`docker`/package managers
+  (each is effectively full root), and files with wrong ownership or permissions.
+- **Groups that equal root:** `sudo`/`wheel`, `docker`, `lxd`/`incus`, `libvirt`, and `disk`. Membership
+  in `docker` lets a user start a privileged container that mounts `/`. `adm` and `systemd-journal` can
+  read all logs (which may contain secrets).
+- Shared accounts used by several people, or the agent itself running as `root` when a less privileged
+  account would do.
+- Login policy: password quality (`pam_pwquality`), lockout (`pam_faillock`), and whether direct root
+  login is possible on the console and over SSH.
+- Dormant accounts: last login (`lastlog` or `lastlog2`, availability varies by release).
+
+#### D. SSH server and keys
+
+- Read the **effective** configuration with `sshd -T`, not just `/etc/ssh/sshd_config`; drop-ins in
+  `/etc/ssh/sshd_config.d/` are included and, for most options, the first value read wins.
+- `permitrootlogin` (`no`, or `prohibit-password` if root key login is truly needed), `passwordauthentication`
+  and `kbdinteractiveauthentication` (`no` where keys are workable), `pubkeyauthentication yes`,
+  `permitemptypasswords no`, `x11forwarding`, `allowtcpforwarding` and `permittunnel` (needed?), and any
+  `AllowUsers`/`AllowGroups` restriction.
+- `Match` blocks that loosen settings for some users or addresses.
+- **Ubuntu 22.10 and later use socket activation** (`ssh.socket`) by default. The listening port and
+  address are owned by the socket unit; on 24.04 and later a systemd generator reads `Port` and
+  `ListenAddress` from the SSH configuration. Check `systemctl status ssh.socket` and `ss -tlnp` for what
+  actually listens.
+- **authorized_keys review** for every account with a login shell, and for `root`: `~/.ssh/authorized_keys`
+  and any extra files set by `AuthorizedKeysFile` or an `AuthorizedKeysCommand`. For each key, record the
+  type, fingerprint (`ssh-keygen -lf <file>`), comment, and any options (`command=`, `from=`). Ask the
+  user to identify each one. Unknown keys are a P0 candidate. Old key types (DSA, short RSA) are findings.
+- Permissions: `~/.ssh` and `authorized_keys` not writable by others; host private keys readable by root
+  only.
+- Who can reach SSH: from the internet (port forward, cloud security group, IPv6), from IoT or guest
+  segments, or only from admin hosts or a VPN. Brute-force protection (fail2ban, sshguard, or firewall
+  rate limits) where it is exposed.
+- Private keys stored on this host that open *other* systems (`~/.ssh/id_*` for users and root, deploy
+  keys, backup keys): list them (names and permissions only), and whether they have passphrases or are
+  limited on the far side.
+
+#### E. Listening services and network exposure
+
+- Every listening socket from `ss -tulpn`, mapped to its process, package, and purpose. Note services
+  listening on all addresses (`0.0.0.0`, `[::]`, `*`) that only need localhost.
+- IPv6: services reachable over a global IPv6 address bypass NAT; check the IPv6 firewall too.
+- Container-published ports: Docker and Podman publish ports by writing their own firewall rules, which
+  can **bypass ufw and firewalld** policies. Compare `docker ps` port mappings with the firewall.
+- Management interfaces: Cockpit (9090), Webmin, database ports, Redis, Elasticsearch, message brokers,
+  and development servers listening on the network without authentication.
+- Remote desktop and file transfer: VNC, xrdp, FTP, rsync daemon, TFTP.
+- Avahi/mDNS, CUPS, rpcbind, and similar daemons on servers that don't need them.
+- Outbound: unexpected long-lived outbound connections (`ss -tnp state established`), remote-access
+  agents (tunnels, remote-support tools), and whether egress is filtered anywhere.
+
+#### F. Host firewall
+
+- Which firewall layer is in use: nftables directly, `iptables` (on modern releases often the
+  `iptables-nft` compatibility layer, so `nft list ruleset` shows everything), `ufw`, or `firewalld`.
+  More than one active front end is a finding; they overwrite each other.
+- Default inbound policy: drop/deny with explicit allows, or accept everything.
+- Rules for IPv4 and IPv6 both.
+- Allowed services and their source restrictions; rules left over from old services.
+- Whether the rules persist across reboot (enabled `nftables`/`ufw`/`firewalld` service, or a saved
+  ruleset), and whether a container runtime or VPN rewrites them at start.
+- Logging of dropped traffic, at least for exposed hosts.
+- For LXC containers and VMs: whether the hypervisor's firewall (e.g. the Proxmox VE firewall) is the
+  enforcement point instead; record which one and assess it there.
+
+#### G. Mandatory access control and kernel hardening
+
+- **AppArmor** (Debian since 10, Ubuntu, SUSE): enabled (`aa-status`), how many profiles are in enforce vs.
+  complain mode, and whether exposed services have profiles.
+- **SELinux** (RHEL-family, Fedora): `getenforce` should be `Enforcing`. `Permissive` or `Disabled` is a
+  finding; Red Hat advises against disabling it and recommends permissive mode only for temporary
+  debugging. Check for `selinux=0` or `enforcing=0` on the kernel command line (`cat /proc/cmdline`).
+  Recent denials (`ausearch -m avc -ts recent`, if `audit` is installed).
+- Kernel and sysctl settings (`sysctl -a` is read-only): `kernel.unprivileged_bpf_disabled`,
+  `kernel.kptr_restrict`, `kernel.dmesg_restrict`, `fs.protected_*`, `net.ipv4.ip_forward` (should be
+  off unless the host routes or runs containers), and source-route/redirect acceptance. Compare with the
+  distribution's or CIS guidance; don't treat every deviation as a finding.
+- Secure Boot state (`mokutil --sb-state`, where available) and kernel lockdown, on hardware that
+  supports them.
+- Disk encryption (LUKS) for laptops and devices that could be stolen: `lsblk -f` shows `crypto_LUKS`.
+
+#### H. Secrets and file permissions
+
+- `.env` files, compose files, application configs, and backup or deploy scripts: find them
+  (`find / -xdev -name '.env*' -o -name '*.env' 2>/dev/null`, adjust paths), then record owner, group, and
+  mode with `stat`. World-readable (`o+r`) or group-readable by a broad group is a finding. Don't print
+  contents.
+- World-writable files and directories outside `/tmp`-style locations (`find / -xdev -perm -0002 -type f`),
+  and world-writable directories without the sticky bit.
+- Configs that commonly contain credentials: database client files (`~/.my.cnf`, `~/.pgpass`), cloud CLI
+  credentials (`~/.aws/`, `~/.config/gcloud/`), `~/.netrc`, `~/.docker/config.json`, `~/.kube/config`,
+  CIFS credential files referenced in `/etc/fstab`, and web app configs under `/var/www` or `/opt`.
+- Secrets in places other users can read: process command lines (`ps -eo args` shows arguments to every
+  user), systemd unit `Environment=` lines (`systemctl show` is readable by all users), cron files, and
+  shell history.
+- SUID/SGID binaries (`find / -xdev -perm -4000 -o -perm -2000`) compared with what the distribution
+  ships (`dpkg -S` / `rpm -qf` to see whether a package owns each). Unowned SUID files are a P0
+  candidate.
+- Home directory permissions: other users able to read `/home/<user>/`.
+- Integrity check of package-owned files: `debsums -s` if installed (Debian/Ubuntu) or `rpm -Va`
+  (RHEL). Changed configuration files are normal; changed binaries are not.
+
+#### I. Persistence surfaces: cron, timers, units, and startup
+
+Attackers persist through the same mechanisms administrators use. List each one and ask the user to
+recognize every entry:
+
+- Cron: `/etc/crontab`, `/etc/cron.d/`, `/etc/cron.{hourly,daily,weekly,monthly}/`, and per-user crontabs
+  (`crontab -l -u <user>` or `/var/spool/cron/`). Also `at` jobs (`atq`) and anacron.
+- systemd: enabled units and timers, especially unit files in `/etc/systemd/system/` and
+  `~/.config/systemd/user/` that no package owns, and lingering users (`loginctl list-users`, `ls
+  /var/lib/systemd/linger/`) whose user services run without a login. `systemctl cat <unit>` shows the
+  file and its drop-ins.
+- Shell startup files (`/etc/profile.d/`, `~/.bashrc`, `~/.profile`) with network commands, and
+  `/etc/rc.local` if present.
+- Dynamic linker preload: `/etc/ld.so.preload` should normally be absent or empty. Any entry there is a
+  P0 candidate.
+- PAM modules and NSS changes not from packages (`/etc/pam.d/`, `/lib/security/` or
+  `/usr/lib64/security/`), udev rules, kernel modules (`lsmod`, `/etc/modules-load.d/`), and
+  `/etc/update-motd.d/` scripts (run as root on login on Debian/Ubuntu).
+- Scripts referenced by cron or units that are writable by non-root users: a root job running a
+  user-writable script is a privilege-escalation path.
+
+#### J. Software sources and supply chain
+
+- Every configured package repository (Debian/Ubuntu: `/etc/apt/sources.list` and
+  `/etc/apt/sources.list.d/*.list` or `*.sources`; RHEL: `dnf repolist -v`). For each third-party
+  repository: who publishes it, whether it is still needed, whether it uses HTTPS and a signing key, and
+  how that key is trusted (a key scoped with `signed-by` to one repository is better than one trusted for
+  all; on RHEL, `gpgcheck=1`).
+- PPAs (Ubuntu) and COPR (Fedora) repositories: individually maintained; each is a supply-chain trust
+  decision.
+- Software installed by `curl ... | sh` or downloaded binaries: look in `/usr/local/bin`, `/opt`, and
+  home directories, and ask the user. Each needs a known source and an update path.
+- Snap and Flatpak: which packages, and which publisher.
+- Container images: where they come from, whether they are pinned to versions, and how they're updated
+  (assess with the container runtime's own skill where one exists).
+- Packages no longer available from any configured repository (orphaned, not receiving updates):
+  `apt list '?obsolete'` on recent apt, or `dnf list --extras`. Verify syntax on the installed version.
+
+#### K. Logging, auditing, and time
+
+- **journald:** whether storage is persistent (`/var/log/journal/` exists, or `Storage=persistent`); on
+  volatile storage logs are lost at reboot. Size limits and retention (`SystemMaxUse`, `MaxRetentionSec`)
+  versus how far back an investigation would need to look. Debian 12 and later no longer install rsyslog
+  by default, so the journal may be the only local log.
+- rsyslog or syslog-ng, if present: what it writes and forwards.
+- **Remote logging:** are logs sent to a separate system (syslog over TLS, `systemd-journal-upload`, or
+  an agent)? Without it, an attacker with root can erase the only copy.
+- auditd (`auditctl -l` lists rules read-only): installed and with rules for identity files, sudoers,
+  SSH configuration, and privileged commands on hosts that warrant it.
+- Authentication logs reviewed or alerted on (`journalctl -u ssh -u sshd`, `/var/log/auth.log` or
+  `/var/log/secure`): failed and successful logins from unexpected addresses.
+- Log file permissions (logs can contain secrets) and log rotation.
+- **Time sync:** `timedatectl` shows `System clock synchronized: yes` and an active service
+  (`systemd-timesyncd` or `chronyd`). Wrong time breaks TLS validation, TOTP, and log correlation. Note
+  whether NTP sources are trusted and whether the host serves NTP to others.
+
+#### L. File sharing: NFS and SMB
+
+- **NFS exports** (`/etc/exports`, `/etc/exports.d/`, `exportfs -v`): which paths, to which clients, and
+  with which options. Findings include exports to `*` or a whole LAN when a few hosts need them, `rw`
+  where `ro` would do, `no_root_squash` (a client's root becomes root on the export), `insecure`, and
+  `sec=sys` on networks where clients aren't trusted (NFS with `sec=sys` trusts the client's claimed
+  UID).
+- **Samba** (`testparm -s` for the effective configuration): guest access (`guest ok`, `map to guest`),
+  minimum protocol (SMB1 should be off), shares writable by everyone, `smb encrypt`, and which interfaces
+  it binds to.
+- **Client mounts** (`findmnt`, `/etc/fstab`, systemd `.mount`/`.automount` units): what this host
+  mounts, with what credentials (credential files must be root-only), and what a compromise of this host
+  would reach. A mounted backup destination is reachable by ransomware on this host.
+- `nosuid`, `nodev`, and `noexec` on mounts from less trusted sources.
+
+#### M. Containers and virtualization on or around this host
+
+- **If this host is an LXC container:** ask the user (or read from the host, if in scope) whether it is
+  **privileged** or **unprivileged** (on Proxmox VE, the container config shows `unprivileged: 1` for
+  unprivileged; verify on the installed version). The LXC project states privileged containers are not
+  root-safe: root in the container is root on the host, held back only by AppArmor/SELinux, seccomp, and
+  dropped capabilities. Also check features that weaken isolation (nesting, `keyctl`, device
+  passthrough, `lxc.apparmor.profile = unconfined`, raw `lxc.*` options) and bind mounts from the host
+  (which host paths, read-write or read-only; system directories like `/`, `/etc`, `/var` must never be
+  bind-mounted).
+- **What the host can see:** the host (and anyone with hypervisor admin) can read the container's
+  filesystem, enter it, and change it without logging in. Unprivileged container files appear on the
+  host under shifted UIDs (commonly 100000 and up). Container secrets are only as safe as the host.
+- **If this host runs containers or VMs:** the runtime's socket (`/var/run/docker.sock`) is root
+  equivalent; containers mounting it, running `--privileged`, or using host networking or PID namespace
+  are findings to explain. Rootless Podman or Docker reduces this. Assess the hypervisor or runtime with
+  its own skill where one exists.
+- Nested trust: a container that runs the backup job, the reverse proxy, or DNS for the whole network
+  deserves the same care as a host.
+
+#### N. Backups and recovery
+
+- What is backed up: system configuration (`/etc`), application data, databases (consistent dumps, not
+  just live files), and secrets needed to restore.
+- How: tool, schedule (cron or timer), destination, and whether the last run succeeded (logs or the
+  tool's status).
+- Whether backups are **off-host** and **not writable or deletable** from this host (pull-based backups,
+  append-only repositories, immutable snapshots on the destination). A backup destination mounted
+  read-write on this host is reachable by anyone who compromises it.
+- Encryption of backups that leave the host, and where the key is kept (not only on this host).
+- For VMs and containers: hypervisor-level backups or snapshots, and that bind-mounted data is included
+  (some hypervisor backup tools skip bind mounts).
+- Whether a restore has ever been tested. A rebuild plan (what to reinstall, where the config lives).
+
+#### O. Physical access, boot, and Raspberry Pi specifics
+
+- Console access: who has physical, BMC/IPMI, serial, or hypervisor console access. A bootloader without
+  a password lets anyone at the console boot into single-user mode; full-disk encryption protects data at
+  rest on portable devices.
+- BMC/IPMI interfaces (on servers) on a management network only, with changed credentials and current
+  firmware; assess them as separate devices.
+- **Raspberry Pi default-account history: ask, never test.** Before April 2022, Raspberry Pi OS images
+  shipped a default `pi` user with a well-known password. Newer images require creating a user at first
+  boot, but upgraded older installs keep the `pi` account. Ask the user whether this device started from
+  an older image, whether a `pi` account exists (`getent passwd pi` is enough; it doesn't test the
+  password), and whether its password was ever changed. Never try logging in with the default password,
+  on this or any device. If the user isn't sure, recommend setting a new password or locking the account.
+- On Raspberry Pi: whether SSH was enabled by an `ssh` file on the boot partition, whether a
+  `userconf.txt` or Wi-Fi credentials were left on it (the boot partition is readable by anyone holding
+  the SD card), the SD card's health and backup, and whether the GPIO/serial console is reachable.
+- Power protection and what stops working if the host fails (DNS, home automation, backups).
+
+---
+
+## Recommend
+
+No changes are made in this mode. For each finding, produce a recommendation using the core finding
+template, including **Dependencies / blast radius** and the **operation class**.
+
+### Dependency and blast-radius check (required)
+
+List what depends on the setting before recommending a change:
+
+- **The access path:** how the user and the agent reach the host (SSH user, key, port, source address,
+  VPN). SSH, firewall, sudo, and PAM changes can remove it.
+- **Services on the host:** what each listening service serves, and who uses it; a firewall or binding
+  change can cut them off.
+- **Automation:** backup jobs, deploy pipelines, monitoring, configuration management (Ansible, etc.),
+  and scripts that log in with passwords, as root, or through `sudo NOPASSWD`.
+- **Containers and VMs** on the host: a reboot, kernel update, or firewall change affects all of them;
+  container runtimes rewrite firewall rules.
+- **Clients of shares and mounts:** NFS/SMB clients that rely on current export options or guest access.
+- **Other systems that trust this host:** keys stored here, mounts it provides, DNS or NTP it serves.
+- **Reboot impact:** on single-board computers and hosts running DNS or home automation, a reboot can
+  take the network's DNS or automations offline.
+
+### Recommendation guidance
+
+| Area | Typical recommendation | Consequences to explain |
+|---|---|---|
+| End-of-life release | Upgrade to a supported release (or attach the vendor's extended support while planning); rebuild if an in-place upgrade is not supported. | Major change: release-note review, backups, maintenance window; third-party repos and software may break. Isolation is a compensating control only. |
+| No automatic security updates | Enable `unattended-upgrades` (security origin) or `dnf-automatic` with `upgrade_type = security`. | Updates install unattended; a bad update can affect services. Logs must be watched. |
+| Old running kernel / reboot pending | Schedule a reboot (and consider a regular reboot window or automatic reboot at a set time). | Downtime for the host and everything on it, including containers. Confirm console access first in case it doesn't come back. |
+| Root SSH login or password auth | `PermitRootLogin no` (or `prohibit-password`), `PasswordAuthentication no` and `KbdInteractiveAuthentication no`, via a drop-in. | Users and automation without keys are locked out; test a key login in a second session first. |
+| SSH exposed to the internet | Remove the exposure and use a VPN; if it must stay, keys only plus brute-force protection and source restrictions. | Remote access needs the VPN working first. |
+| Unknown authorized_keys entry | Treat as a possible compromise (Respond) until explained; then remove it. | The key's owner, if legitimate, loses access. |
+| `NOPASSWD: ALL` or root-equivalent groups | Narrow sudo rules to specific commands; remove users from `docker`/`lxd` who don't need it; prefer rootless containers. | Workflows that depend on passwordless root break; some tools need reconfiguration. |
+| Services listening on all addresses | Bind to localhost or a specific interface; or firewall them. | Remote clients of that service lose access. |
+| No host firewall / default accept | Enable one front end with a default-deny inbound policy and explicit allows (SSH first). | High lockout risk; C2. Container port publishing needs separate handling. |
+| Docker bypassing the firewall | Publish container ports on `127.0.0.1` behind a reverse proxy, or use the runtime's documented firewall integration. | Clients reaching containers directly lose access. |
+| SELinux permissive/disabled | Move to enforcing (permissive first, review denials, then enforcing). | Re-enabling from disabled triggers a full relabel on reboot (slow); misconfigured apps may fail until policies or labels are fixed. |
+| AppArmor disabled / profiles in complain | Re-enable; move profiles to enforce one service at a time. | The service may fail where its profile is too strict. |
+| World-readable secrets | `chmod 600` (or `640` with a dedicated group) and correct ownership; move secrets out of world-readable places. Rotate secrets that were exposed to other users. | The service must still be able to read the file; check the user it runs as. |
+| Unknown cron jobs, units, or preload entries | Respond first; remove only after evidence is preserved and the entry is understood. | Removing a legitimate job breaks whatever it did. |
+| Unneeded third-party repositories | Remove the repo and its key; replace the software with a supported source. | Software from it stops updating, or must be replaced or removed. |
+| `curl \| sh` installs | Replace with a packaged or signed source and a documented update path. | Reinstall effort; version may change. |
+| Volatile or short journal; no remote logs | Make the journal persistent with sized limits; forward to a separate log host. | Disk use; needs a log receiver. |
+| Time not synchronized | Enable `systemd-timesyncd` or `chronyd` with trusted sources. | Clock may jump; time-sensitive services can briefly misbehave. |
+| NFS `no_root_squash` / broad exports | Restrict clients to specific hosts, `root_squash`, `ro` where possible; consider Kerberos (`sec=krb5p`) on untrusted networks. | Clients relying on root access or broad access break. |
+| Samba guest or SMB1 | Disable guest access and SMB1; require authenticated users. | Old devices (scanners, media players) that only speak SMB1 stop working. |
+| Privileged LXC container | Migrate the workload to an unprivileged container (or a VM) where possible. | Migration needs ownership shifting of data and may break device or mount access; plan it. |
+| Backups writable from host / untested | Move to pull-based or append-only/immutable backups off the host; test a restore. | Needs a separate backup system or service. |
+| Raspberry Pi `pi` account of unknown history | Set a new password, or lock the account if unused (after confirming another admin account works). | Scripts or tutorials assuming `pi` may break. |
+
+Changing the SSH port, disabling ping, and hiding banners are supplementary only. Never recommend them as
+the main fix.
+
+Group the plan: immediate containment (if any) → urgent fixes (internet-exposed services, end-of-life
+release, missing security updates on exposed hosts) → high-priority hardening → routine maintenance →
+optional defense in depth. Then ask for approval (core: modes and authorization).
+
+---
+
+## Remediate
+
+Apply only approved changes, one at a time, following the core rules. Linux specifics:
+
+- **Before any change:** back up the files you will touch (`cp -a <file> <file>.bak-<date>`), or take a VM
+  or container snapshot on the hypervisor. Record the current state (`sshd -T`, `nft list ruleset`,
+  `sudo -l`) so you can compare after.
+- **Keep a way back in.** Keep one SSH session open, confirm console access, and test each SSH, PAM,
+  sudo, or firewall change from a **new** session before closing the old one. For firewall changes on a
+  remote host, consider a timed automatic rollback (e.g. `firewall-cmd` runtime-only changes before
+  `--permanent`, or a scheduled restore of the saved ruleset) and confirm before making it permanent.
+- **Validate before reload:** `sshd -t` before reloading SSH; `visudo -c` (and always edit sudoers with
+  `visudo -f /etc/sudoers.d/<file>`); `nft -c -f <file>` before loading an nftables file; `testparm`
+  before reloading Samba; `exportfs -v` after changing exports.
+- **Prefer drop-in files** (`/etc/ssh/sshd_config.d/`, `/etc/sudoers.d/`, systemd overrides with
+  `systemctl edit`) over editing distribution files, so package updates don't conflict.
+- **Ubuntu SSH socket activation:** after changing `Port` or `ListenAddress` on a socket-activated host,
+  run `systemctl daemon-reload` and restart `ssh.socket`, then confirm with `ss -tlnp`. Behavior differs
+  between 22.10-23.10 and 24.04+, so check the installed release's documentation first.
+- **Updates:** security updates within a release are C2 (services restart; may need a reboot). Release
+  upgrades are a separate, planned change: read the release notes, check third-party repositories,
+  back up, and use only the distribution's supported upgrade tool (`do-release-upgrade` on Ubuntu, the
+  documented `apt` procedure on Debian, `leapp` for RHEL major upgrades where supported).
+- **Reboots:** confirm what runs on the host, that console access works, and that services start at boot.
+  Check afterwards that the new kernel is running and all expected services and containers are up.
+- **SELinux:** go from disabled to permissive (one reboot with relabel), review denials, then enforcing.
+  Fix labels with `restorecon` and booleans with `setsebool -P`; don't write broad custom policy modules
+  from `audit2allow` without review.
+- **Permissions:** change one file or directory at a time; confirm the service still starts and reads it.
+- **Accounts and keys:** lock accounts (`usermod -L`, `chage -E 0`, or set the shell to `nologin`) before
+  deleting them, so the change is reversible.
+
+After each change, follow the core "after a change" steps: re-read the effective configuration, check the
+access path, the affected services, and logs, and record before and after.
+
+### Hard stops (refer to a specialist or do manually; never automate)
+
+- `iptables -F`, `nft flush ruleset`, or disabling the firewall as a troubleshooting step on a remote host.
+- Removing packages with their data (`apt purge`, `autoremove` on a host you don't fully understand), or
+  removing the package that provides remote access, networking, or the firewall.
+- Disk, partition, LVM, RAID, filesystem repair, or encryption (LUKS) operations as security remediation.
+- Release upgrades or kernel changes on a host without a tested backup or snapshot and console access.
+- Changing the bootloader, kernel command line, or Secure Boot keys remotely.
+- Deleting logs, journal files, shell history, or backups, even to "clean up" after an incident.
+- Running hardening scripts or compliance tools in apply mode (`oscap --remediate`, `usg fix`, CIS
+  scripts) across a whole host in one step.
+- Changing LXC privileged/unprivileged mode or ID mapping in place (it requires recreating or
+  remapping the container and its data).
+
+---
+
+## Respond
+
+On any P0 indicator, switch to Respond immediately. Follow the core playbook plus the Linux-specific
+steps in [incident-response.md](incident-response.md).
+
+---
+
+## Worked example (invented)
+
+### LNX-001: Root password login over SSH reachable from the internet over IPv6
+
+**Confidence:** Confirmed
+**Priority:** P1. A root login exposed to the internet with password authentication allows brute force
+directly against the most privileged account, and the host also runs the reverse proxy for other
+services.
+**State:** Open
+**Component:** OpenSSH server, Debian 13; host firewall (nftables)
+**Evidence:** Observed 2026-10-12: `sshd -T` reports `permitrootlogin yes` and `passwordauthentication
+yes`; the setting comes from `/etc/ssh/sshd_config.d/50-local.conf`. `ss -tlnp` shows sshd on `[::]:22`.
+`nft list ruleset` has an IPv4 input policy of `drop` with SSH allowed only from `192.0.2.0/24`, but no
+`ip6` or `inet` rules, so IPv6 input is accepted. The host has the global address `2001:db8:0:1::20`.
+The journal shows repeated failed root logins from `2001:db8:ffff::7` and `203.0.113.45`.
+**Expected secure state:** no root login with a password; keys only; SSH reachable only from admin
+networks or a VPN, for IPv4 and IPv6 (sshd_config(5); Debian and CIS-style SSH guidance).
+**Exposure and prerequisites:** anyone on the internet over IPv6; needs only the root password.
+**Dependencies / blast radius:** the user logs in as `<admin-user>` with a key; a nightly backup job on
+`<backup-host>` logs in as root with a key (not a password). No one uses root passwords.
+**Recommended remediation:** (1) Add IPv6 rules to the firewall matching the IPv4 policy (convert to an
+`inet` table). (2) Set `PermitRootLogin prohibit-password` (kept for the backup key; restrict that key with
+`from=` and `command=` options) and `PasswordAuthentication no` in the drop-in. (3) Review successful
+root logins in the journal before closing the finding, because the password was exposed to guessing.
+**Operation class:** C2 for each step (SSH and firewall changes can cut off access).
+**Approval required:** Yes.
+**Verification:** `sshd -T` shows the new values; a password login from a test client fails; the key
+login works in a new session; from outside, the IPv6 address no longer accepts SSH connections (with
+authorization); the backup job's next run succeeds.
+**Rollback:** restore the saved drop-in and ruleset backups and reload, from the still-open session or
+the console.
+
+---
+
+## Version history
+
+- **1.0** (2026-10-30): Initial version.
