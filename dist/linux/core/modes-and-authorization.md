@@ -71,6 +71,10 @@ Rules:
 
 ## Rules that apply in every mode
 
+- **No active probing without approval.** Scanning or probing the network (host sweeps, port scans,
+  service or version detection, vulnerability scanners) needs the user's explicit approval of the scope
+  and intensity first, even though it doesn't change configuration: it can crash fragile devices and
+  trigger alarms. Reading information the user gives you access to is not probing.
 - **Read-only by default.** Begin with Discover. Do not change settings, install software, reboot, delete
   files, rotate credentials, or modify firewall rules without the required authorization.
 - **One logical change at a time**, or a small batch that can be reversed together. Do not combine

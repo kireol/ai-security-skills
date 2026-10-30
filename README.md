@@ -57,7 +57,9 @@ into your AI assistant from inside the collection's folder:
 
 ```text
 Use the full-assessment skill (skills/orchestration/full-assessment/SKILL.md) to run a complete security
-assessment of my network. Start with the kick-off questions. Don't change anything without my approval.
+assessment of my network. Follow its "Before anything else" rules: set up the run folder first, then ask
+me the kick-off questions, and don't scan or probe my network until I've answered them. Don't change
+anything without my approval.
 ```
 
 ### Option 3: check just one device

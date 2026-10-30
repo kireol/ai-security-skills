@@ -51,7 +51,10 @@ function renderList(state) {
   const nav = document.getElementById("assessments");
   nav.replaceChildren(el("h2", {}, "Assessments"));
   if (state.assessments.length === 0) {
-    nav.append(el("p", { class: "muted" }, "No events yet. Agents write to the events folder or POST to /api/events."));
+    nav.append(el("p", { class: "muted" }, "No assessments yet. The dashboard is watching:"),
+      el("ul", { class: "small mono sources" }, (state.sources || []).map((s) => el("li", {}, s))),
+      el("p", { class: "muted small" }, "If an assessment is running but nothing shows here, ask the agent for "
+        + "the path of its run folder and whether it has written any events."));
   }
   const byId = new Map(state.assessments.map((a) => [a.id, a]));
   const item = (a, child) => el("button", {
@@ -63,6 +66,7 @@ function renderList(state) {
   a.children.length ? null : el("span", { class: "row muted" }, a.target || "unknown target"),
   el("span", { class: "row" }, a.completed ? badge("mode", "completed") : badge("mode", a.mode),
     counts(a, a.children.length ? "rollup_counts" : "open_counts")),
+  a.completed ? null : statusLine(a, true),
   el("span", { class: "row muted small" }, `updated ${when(a.updated)}`));
   for (const a of state.assessments.filter((x) => !x.parent)) {
     nav.append(item(a, false));
@@ -73,6 +77,16 @@ function renderList(state) {
       el("summary", {}, `${state.rejected.length} rejected event(s)`),
       el("ul", {}, state.rejected.map((r) => el("li", {}, `${r.file}:${r.line}: ${r.reason}`)))));
   }
+}
+
+const WAITING = { user: "Waiting for you", background_task: "Background task running" };
+
+function statusLine(a, compact) {
+  if (!a.status) return null;
+  const waiting = WAITING[a.status.waiting_on];
+  return el("div", { class: `status-line${compact ? " small" : ""}${a.status.waiting_on === "user" ? " waiting-user" : ""}` },
+    waiting ? el("span", { class: `badge wait-${a.status.waiting_on}` }, waiting) : null,
+    ` ${a.status.activity} `, el("span", { class: "muted small" }, `(${when(a.status.time)})`));
 }
 
 function select(id) {
@@ -127,6 +141,7 @@ function renderDetail(a) {
     a.incident && a.incident.status !== "closed" ? el("div", { class: "incident" },
       el("strong", {}, `Incident: ${label(a.incident.status)}`), a.incident.summary ? ` ${a.incident.summary}` : "",
       a.incident.containment ? el("ul", {}, a.incident.containment.map((c) => el("li", {}, c))) : null) : null,
+    a.completed ? null : statusLine(a, false),
     a.parent ? el("p", {}, el("button", { class: "link", onclick: () => select(a.parent) }, "← back to run")) : null,
     a.children.length ? el("p", {}, "Open findings across this run: ", counts(a, "rollup_counts")) : null,
     a.completed ? el("div", { class: "completed" }, el("strong", {}, "Completed. "), a.summary || "") : modeStrip(a),

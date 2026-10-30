@@ -1,8 +1,9 @@
 # Live Dashboard
 
 A small local web page that shows what AI agents running these skills have found, live: each
-assessment's current mode, the status of every domain, findings by priority and state, changes made, and
-any active incident.
+assessment's current mode, what the agent is doing right now (highlighted when it's waiting for you), the
+status of every domain, findings by priority and state, changes made, and any active incident. When it
+has nothing to show, it lists the folders it's watching.
 
 Agents report using the [live reporting protocol](../../core/reporting-protocol.md). The dashboard is one
 Python file with no dependencies (Python 3.9+).

@@ -634,6 +634,10 @@ Rules:
 
 ## Rules that apply in every mode
 
+- **No active probing without approval.** Scanning or probing the network (host sweeps, port scans,
+  service or version detection, vulnerability scanners) needs the user's explicit approval of the scope
+  and intensity first, even though it doesn't change configuration: it can crash fragile devices and
+  trigger alarms. Reading information the user gives you access to is not probing.
 - **Read-only by default.** Begin with Discover. Do not change settings, install software, reboot, delete
   files, rotate credentials, or modify firewall rules without the required authorization.
 - **One logical change at a time**, or a small batch that can be reversed together. Do not combine
@@ -1072,6 +1076,7 @@ owner-only permissions. It holds:
 |---|---|
 | `events.jsonl` | Every event below, one per line, appended as you work. |
 | `run-state.md` | For phased runs: what's done, what's next, and the scope and choices from kick-off, so a later session can resume. |
+| `raw/` | Raw tool output the findings are based on (scan results, command output), redacted of secrets. Keep it here, not in a temporary or scratch folder, so it survives as evidence. |
 | `report.md`, `report.html` | The final reports, generated at the end. |
 
 The run folder contains the user's real hostnames, addresses, and weaknesses. Never place it inside this
@@ -1093,9 +1098,16 @@ class **R**: it doesn't change the target system, so it needs no further approva
 
 - **No secrets, ever.** Events follow the same redaction rules as reports. A dashboard rejects events that
   look like they contain keys, tokens, or passwords, but don't rely on that.
-- **Report as you go,** not only at the end: when the assessment starts, when the mode changes, when a
-  domain starts and finishes, when a finding is created or changes state, when a change is made, and when
-  incident status changes.
+- **Start recording first.** Create the run folder and send `assessment.started` before anything else,
+  including before the first kick-off question, so the user can always see the run exists.
+- **Report as you go,** not only at the end: when the mode changes, when a domain starts and finishes,
+  when each system is found (`asset.upserted`, as soon as you know about it, not after the inventory is
+  complete), when a finding is created or changes state, when a change is made, and when incident status
+  changes.
+- **Say what you're doing.** Send `status.updated` at the start of each phase, before and after anything
+  that may take more than a minute (such as a scan running in the background, with `waiting_on:
+  background_task`), and every time you stop to wait for the user (`waiting_on: user`). The user should
+  always be able to tell "working" from "waiting for me" from "stuck".
 - **Events are facts, not plans.** Report a change as `verified` only after verification succeeds.
 - **Reporting failure is not a blocker.** If a write or POST fails, tell the user once and carry on with
   the assessment.
@@ -1140,6 +1152,7 @@ Enumerated values are case-insensitive, and spaces or hyphens may be used instea
 | `change.recorded` | `description`, `operation_class`, `result`: `planned` · `verified` · `failed` · `unverified` · `rolled_back` | `finding_id`, `approved_by`, `rollback` |
 | `incident.status` | `status`: `suspected` · `likely` · `confirmed` · `closed` | `summary`, `containment` (list of strings) |
 | `asset.upserted` | `id` (stable slug for the asset, e.g. `nas-1`) | `label`, `kind` (e.g. "NAS", "firewall", "IP camera"), `addresses` (list), `services` (list, e.g. "tcp/443 https admin UI"), `exposure` (`internet` · `vpn` · `lan` · `isolated` · `unknown`), `skill` (matching skill name), `coverage` (`pending` · `in_progress` · `assessed` · `no_skill` · `out_of_scope` · `skipped`), `assessment_id` (the per-asset assessment), `note` |
+| `status.updated` | `activity` (one short line: what you're doing or waiting for) | `waiting_on`: `nothing` · `user` · `background_task` (default `nothing`) |
 | `assessment.completed` | none | `summary` (for a run: the overall summary that opens the final report) |
 
 The first `finding.upserted` for an ID should include `title`, `priority`, `confidence`, and `state`, and

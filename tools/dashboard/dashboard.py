@@ -49,6 +49,7 @@ OPERATION_CLASS = ("R", "C1", "C2", "C3")
 EVIDENCE = ("observed", "vendor_documented", "third_party_documented", "user_reported", "inferred", "unknown")
 CHANGE_RESULT = ("planned", "verified", "failed", "unverified", "rolled_back")
 INCIDENT = ("suspected", "likely", "confirmed", "closed")
+WAITING_ON = ("nothing", "user", "background_task")
 EXPOSURE = ("internet", "vpn", "lan", "isolated", "unknown")
 COVERAGE = ("pending", "in_progress", "assessed", "no_skill", "out_of_scope", "skipped")
 CLOSED_STATES = ("resolved", "accepted_risk")
@@ -71,6 +72,7 @@ EVENT_FIELDS = {
                         "result": (CHANGE_RESULT, True), "finding_id": (FINDING_ID, False),
                         "approved_by": ("text", False), "rollback": ("text", False)},
     "incident.status": {"status": (INCIDENT, True), "summary": ("text", False), "containment": ("list", False)},
+    "status.updated": {"activity": ("text", True), "waiting_on": (WAITING_ON, False)},
     "asset.upserted": {"id": (ASSET_ID, True), "label": ("text", False), "kind": ("text", False),
                        "addresses": ("list", False), "services": ("list", False), "exposure": (EXPOSURE, False),
                        "skill": (SKILL_NAME, False), "coverage": (COVERAGE, False),
@@ -212,6 +214,13 @@ class EventStore:
         self._cache[path] = (key, events, rejected)
         return events, rejected
 
+    def sources(self):
+        """Where the dashboard looks for events, so an empty dashboard can say so."""
+        found = [str(self.events_dir / "*.jsonl")]
+        if self.reports_dir:
+            found.append(str(self.reports_dir / "<run-id>" / "events*.jsonl"))
+        return found
+
     def load(self):
         events, rejected = [], []
         paths = sorted(self.events_dir.glob("*.jsonl"))
@@ -228,7 +237,7 @@ class EventStore:
 def _new_assessment(aid):
     return {"id": aid, "skill": None, "skill_version": None, "target": None, "scope": None, "agent": None,
             "parent": None, "assets": {}, "mode": None, "modes_visited": [], "completed": False, "summary": None, "started": None, "updated": None,
-            "domains": {}, "findings": {}, "changes": [], "incident": None}
+            "domains": {}, "findings": {}, "changes": [], "incident": None, "status": None}
 
 
 def aggregate(events, rejected=()):
@@ -259,6 +268,8 @@ def aggregate(events, rejected=()):
             asset["updated"] = time
         elif etype == "change.recorded":
             a["changes"].append({**data, "time": time})
+        elif etype == "status.updated":
+            a["status"] = {"activity": data["activity"], "waiting_on": data.get("waiting_on", "nothing"), "time": time}
         elif etype == "incident.status":
             a["incident"] = {**data, "time": time}
         elif etype == "assessment.completed":
@@ -294,7 +305,7 @@ def aggregate(events, rejected=()):
             for p, n in by_id[child_id]["open_counts"].items():
                 rollup[p] += n
         a["rollup_counts"] = rollup
-    return {"generated": _now(), "assessments": result, "rejected": list(rejected)[-100:]}
+    return {"generated": _now(), "assessments": result, "rejected": list(rejected)[-100:], "sources": []}
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -353,7 +364,9 @@ class Handler(BaseHTTPRequestHandler):
             self._send(HTTPStatus.OK, (STATIC_DIR / name).read_bytes(), content_type)
         elif path == "/api/state":
             if self._authorized():
-                self._json(HTTPStatus.OK, aggregate(*self.server.store.load()))
+                state = aggregate(*self.server.store.load())
+                state["sources"] = self.server.store.sources()
+                self._json(HTTPStatus.OK, state)
         else:
             self._json(HTTPStatus.NOT_FOUND, {"error": "not found"})
 

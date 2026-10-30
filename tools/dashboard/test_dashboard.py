@@ -160,6 +160,10 @@ class ServerTests(unittest.TestCase):
         self.assertIn("script-src 'self'", response.getheader("Content-Security-Policy"))
         self.assertEqual(response.getheader("X-Content-Type-Options"), "nosniff")
 
+    def test_state_lists_watched_folders(self):
+        state = json.loads(self.request("GET", "/api/state")[1])
+        self.assertTrue(any(s.endswith("*.jsonl") for s in state["sources"]))
+
     def test_api_requires_token(self):
         self.assertEqual(self.request("GET", "/api/state", token=None)[0].status, 401)
         self.assertEqual(self.request("GET", "/api/state", token="wrong")[0].status, 401)
@@ -261,3 +265,21 @@ class ReportTests(unittest.TestCase):
 
     def test_empty_run_fails(self):
         self.assertEqual(self.quiet_main(), 1)
+
+
+class StatusTests(unittest.TestCase):
+    def test_status_validation_and_latest_wins(self):
+        events = [dashboard.validate_event(event("assessment.started", skill="x", target="y")),
+                  dashboard.validate_event(event("status.updated", activity="scanning", waiting_on="Background task")),
+                  dashboard.validate_event(event("status.updated", time="2026-01-15T14:05:00Z",
+                                                 activity="need an answer", waiting_on="user"))]
+        a = dashboard.aggregate(events)["assessments"][0]
+        self.assertEqual((a["status"]["activity"], a["status"]["waiting_on"]), ("need an answer", "user"))
+        with self.assertRaises(dashboard.InvalidEvent):
+            dashboard.validate_event(event("status.updated", activity="x", waiting_on="lunch"))
+        with self.assertRaises(dashboard.InvalidEvent):
+            dashboard.validate_event(event("status.updated"))
+
+    def test_waiting_on_defaults_to_nothing(self):
+        a = dashboard.aggregate([dashboard.validate_event(event("status.updated", activity="checking"))])["assessments"][0]
+        self.assertEqual(a["status"]["waiting_on"], "nothing")

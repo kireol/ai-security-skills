@@ -8,7 +8,7 @@ description: >-
   dashboard.
 license: CC-BY-4.0
 metadata:
-  version: "1.1"
+  version: "1.2"
   last_reviewed: "2026-10-30"
   applies_to: "Any network the user owns or is authorized to assess"
   audience: "home, work, homelab"
@@ -21,6 +21,27 @@ metadata:
 Coordinate a complete assessment of the user's environment. This skill doesn't replace the product
 skills; it finds what's on the network, decides which skill applies to each system, runs them one at a
 time, adds network-wide checks no single product skill can see, and merges the results.
+
+## Before anything else (non-negotiable)
+
+1. **Set up the run first.** Unless you're resuming a run, your first actions are: create the run folder
+   (owner-only permissions) with a new `assessment_id` such as `<date>-<short label>-run`, send
+   `assessment.started` (`skill: full-assessment`) to its `events.jsonl`, and send `status.updated` with
+   `activity: "Kick-off: waiting for your answers"` and `waiting_on: user`. If the user can't give you a
+   writable folder, say so and continue without events.
+2. **Ask the kick-off questions and wait for the answers.** Do not probe the network in any way (no ping
+   or ARP sweeps, port scans, `nmap`, service or version detection, or vulnerability tools) until the user
+   has confirmed the scope and chosen a discovery level. A request for a "complete" or "full" assessment
+   is not approval to scan. If the user says "just use the defaults", the default is discovery level 0
+   (passive, no probing).
+3. **Keep the record current while you work.** Record each system with `asset.upserted` as soon as you
+   know about it, send `status.updated` at each phase and around anything long-running or any wait for
+   the user, and keep raw tool output (redacted) in the run folder's `raw/` folder, never only in a
+   temporary or scratch folder.
+
+If you find you've broken one of these (for example, you started scanning before the kick-off), stop,
+tell the user plainly what you did, and put it right: set up the run folder, record what you've found so
+far, move raw output into `raw/`, and then ask the kick-off questions before doing anything more.
 
 ## How to use this skill
 
@@ -131,9 +152,8 @@ run ahead.
 
 ### Starting the run
 
-Create the run folder (owner-only permissions) with a new `assessment_id` such as
-`<date>-<short label>-run`, then send `assessment.started` with `skill: full-assessment` to its
-`events.jsonl`.
+The run folder and its first events already exist (see "Before anything else"). Once the user has
+answered, write the kick-off choices to `run-state.md` and send `status.updated` saying what's next.
 
 If the user wants the dashboard started and you can run commands on their machine, start it in the
 background from the collection's folder (this is class R on the user's own machine, but say what you're
@@ -178,7 +198,10 @@ Rules for active discovery (levels 1–2):
 - Check that a tool exists and read its help before using it (core tool-use contract). Record exact
   commands and options used.
 
-Report each asset with `asset.upserted` as you find it (`coverage: pending`).
+Report each asset with `asset.upserted` as you find it (`coverage: pending`): from the first scan results
+or lease table, not after the whole inventory is finished. For anything that runs in the background,
+send `status.updated` with `waiting_on: background_task` when it starts and an update when it finishes.
+Save raw scan output in the run folder's `raw/` folder.
 
 ### Network-wide facts to collect while inventorying
 
@@ -365,6 +388,9 @@ NVR.
 
 ## Version history
 
+- **1.2** (2026-10-30): "Before anything else" rules: set up the run and record events before the first
+  question, never probe the network before the kick-off answers, report systems and status as you go,
+  and keep raw output in the run folder.
 - **1.1** (2026-10-30): Kick-off asks whether to give the agent its own (read-only) access, how many
   agents to use, and whether to run in phases; run folder with
   `run-state.md` for resuming; dashboard can be started from the kick-off; final report with totals and

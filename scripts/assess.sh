@@ -120,7 +120,8 @@ fi
 
 PROMPT="Use the full-assessment skill from the ai-security-skills collection at $REPO \
 (skills/orchestration/full-assessment/SKILL.md; product skills are in dist/) to run a complete security \
-assessment of my network. Start with the kick-off questions. Put the run folder under $REPORTS.$DASHBOARD_NOTE \
+assessment of my network. Follow its \"Before anything else\" rules: set up the run folder under $REPORTS first, \
+then ask me the kick-off questions, and don't scan or probe my network until I've answered them.$DASHBOARD_NOTE \
 Don't change anything without my approval."
 
 cd "$REPO"
