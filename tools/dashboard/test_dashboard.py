@@ -1,0 +1,188 @@
+"""Tests for dashboard.py. Run: python3 -m unittest discover tools/dashboard"""
+import http.client
+import json
+import sys
+import tempfile
+import threading
+import unittest
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import dashboard  # noqa: E402
+
+SAMPLE = Path(__file__).resolve().parent / "examples" / "sample-events.jsonl"
+
+
+def event(etype, aid="test-1", time="2026-01-15T14:00:00Z", **data):
+    return {"schema": dashboard.SCHEMA, "assessment_id": aid, "time": time, "type": etype, "data": data}
+
+
+class ValidationTests(unittest.TestCase):
+    def test_enums_are_normalized(self):
+        clean = dashboard.validate_event(event("domain.status", domain="C", status="Not assessed"))
+        self.assertEqual(clean["data"]["status"], "not_assessed")
+        clean = dashboard.validate_event(event("finding.upserted", id="NAS-001", priority="p2", state="Open"))
+        self.assertEqual((clean["data"]["priority"], clean["data"]["state"]), ("P2", "open"))
+
+    def test_unknown_fields_are_dropped(self):
+        clean = dashboard.validate_event(event("mode.changed", mode="recommend", extra="x"))
+        self.assertEqual(clean["data"], {"mode": "recommend"})
+
+    def test_rejections(self):
+        bad = [
+            event("mode.changed", mode="sleeping"),
+            event("mode.changed"),
+            event("finding.upserted", id="../etc/passwd"),
+            event("unknown.type"),
+            {**event("mode.changed", mode="discover"), "assessment_id": "../escape"},
+            {**event("mode.changed", mode="discover"), "schema": "other"},
+            {**event("mode.changed", mode="discover"), "time": "2026-01-15T14:00:00"},
+            event("assessment.started", skill="x", target="y" * (dashboard.MAX_TEXT + 1)),
+        ]
+        for raw in bad:
+            with self.subTest(raw=raw), self.assertRaises(dashboard.InvalidEvent):
+                dashboard.validate_event(raw)
+
+    def test_secrets_are_rejected_without_echoing_them(self):
+        # Assembled at runtime so scripts/check-content.sh doesn't flag these fake secrets in the source.
+        secrets = [
+            "-----BEGIN " + "OPENSSH PRIVATE KEY-----",
+            "token " + "ghp" + "_abcdefghijklmnopqrstuvwxyz0123",
+            "password: hunter22",
+            "url https://admin:s3cret@192.0.2.1/",
+            "AK" + "IAABCDEFGHIJKLMNOP",
+        ]
+        for text in secrets:
+            with self.subTest(text=text):
+                with self.assertRaises(dashboard.InvalidEvent) as ctx:
+                    dashboard.validate_event(event("finding.upserted", id="NAS-001", summary=text))
+                self.assertNotIn(text, str(ctx.exception))
+
+    def test_redacted_placeholders_are_allowed(self):
+        for text in ("password: <redacted>", "api_key = ***", "token: [REDACTED]"):
+            dashboard.validate_event(event("finding.upserted", id="NAS-001", summary=text))
+
+    def test_sample_file_is_valid(self):
+        for line in SAMPLE.read_text().splitlines():
+            dashboard.validate_event(json.loads(line))
+
+
+class AggregateTests(unittest.TestCase):
+    def setUp(self):
+        events = [dashboard.validate_event(json.loads(line)) for line in SAMPLE.read_text().splitlines()]
+        state = dashboard.aggregate(events)
+        self.by_id = {a["id"]: a for a in state["assessments"]}
+        self.state = state
+
+    def test_newest_assessment_first(self):
+        self.assertEqual(self.state["assessments"][0]["id"], "2026-01-16-example-firewall")
+
+    def test_partial_finding_update_merges(self):
+        nas = self.by_id["2026-01-15-example-nas"]
+        finding = next(f for f in nas["findings"] if f["id"] == "NAS-002")
+        self.assertEqual(finding["state"], "resolved")
+        self.assertEqual(finding["title"], "Built-in admin account enabled")
+
+    def test_open_counts_exclude_resolved(self):
+        nas = self.by_id["2026-01-15-example-nas"]
+        self.assertEqual(nas["open_counts"]["P2"], 1)
+        self.assertEqual(nas["open_counts"]["P3"], 0)
+
+    def test_latest_domain_status_and_mode(self):
+        nas = self.by_id["2026-01-15-example-nas"]
+        self.assertEqual({d["domain"]: d["status"] for d in nas["domains"]}["A"], "pass")
+        self.assertEqual(nas["mode"], "remediate")
+
+    def test_incident_and_priority_order(self):
+        fw = self.by_id["2026-01-16-example-firewall"]
+        self.assertEqual(fw["incident"]["status"], "suspected")
+        self.assertEqual(fw["modes_visited"], ["discover", "respond"])
+        self.assertEqual([f["id"] for f in fw["findings"]], ["FW-002", "FW-001"])
+
+
+class ServerTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.data = Path(self.tmp.name)
+        self.server = dashboard.make_server("127.0.0.1", 0, self.data, "test-token")
+        self.port = self.server.server_address[1]
+        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+
+    def tearDown(self):
+        self.server.shutdown()
+        self.server.server_close()
+        self.tmp.cleanup()
+
+    def request(self, method, path, body=None, token="test-token", host=None, content_type="application/json"):
+        conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
+        headers = {"Host": host or f"127.0.0.1:{self.port}"}
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+        if body is not None:
+            headers["Content-Type"] = content_type
+            body = json.dumps(body).encode() if not isinstance(body, bytes) else body
+        conn.request(method, path, body=body, headers=headers)
+        response = conn.getresponse()
+        payload = response.read()
+        conn.close()
+        return response, payload
+
+    def test_static_page_has_security_headers(self):
+        response, body = self.request("GET", "/", token=None)
+        self.assertEqual(response.status, 200)
+        self.assertIn(b"AI Security Skills", body)
+        self.assertIn("script-src 'self'", response.getheader("Content-Security-Policy"))
+        self.assertEqual(response.getheader("X-Content-Type-Options"), "nosniff")
+
+    def test_api_requires_token(self):
+        self.assertEqual(self.request("GET", "/api/state", token=None)[0].status, 401)
+        self.assertEqual(self.request("GET", "/api/state", token="wrong")[0].status, 401)
+        self.assertEqual(self.request("GET", "/api/state")[0].status, 200)
+
+    def test_unexpected_host_is_refused(self):
+        self.assertEqual(self.request("GET", "/api/state", host="attacker.example")[0].status, 421)
+        self.assertEqual(self.request("GET", f"/api/state", host=f"localhost:{self.port}")[0].status, 200)
+
+    def test_post_then_read(self):
+        response, _ = self.request("POST", "/api/events", [
+            event("assessment.started", skill="synology-dsm", target="example NAS"),
+            event("finding.upserted", id="NAS-001", title="t", priority="P2", confidence="confirmed", state="open"),
+        ])
+        self.assertEqual(response.status, 202)
+        state = json.loads(self.request("GET", "/api/state")[1])
+        self.assertEqual(state["assessments"][0]["open_counts"]["P2"], 1)
+        self.assertTrue((self.data / "events" / "test-1.jsonl").exists())
+
+    def test_invalid_batch_stores_nothing(self):
+        response, body = self.request("POST", "/api/events", [
+            event("mode.changed", mode="discover"),
+            event("finding.upserted", id="NAS-001", summary="password: hunter22"),
+        ])
+        self.assertEqual(response.status, 400)
+        self.assertNotIn(b"hunter22", body)
+        self.assertEqual(list((self.data / "events").glob("*.jsonl")), [])
+
+    def test_post_limits(self):
+        self.assertEqual(self.request("POST", "/api/events", b"{}", content_type="text/plain")[0].status, 415)
+        # Announce an oversized body without sending it; the server must refuse before reading.
+        conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
+        conn.putrequest("POST", "/api/events", skip_host=True)
+        for name, value in (("Host", f"127.0.0.1:{self.port}"), ("Authorization", "Bearer test-token"),
+                            ("Content-Type", "application/json"), ("Content-Length", str(dashboard.MAX_BODY + 1))):
+            conn.putheader(name, value)
+        conn.endheaders()
+        self.assertEqual(conn.getresponse().status, 413)
+        conn.close()
+        self.assertEqual(self.request("POST", "/api/events", b"{not json")[0].status, 400)
+
+    def test_folder_ingest_and_rejected_lines(self):
+        lines = [json.dumps(event("mode.changed", aid="folder-1", mode="recommend")), "not json",
+                 json.dumps(event("mode.changed", aid="folder-1", mode="bogus"))]
+        (self.data / "events" / "agent.jsonl").write_text("\n".join(lines) + "\n")
+        state = json.loads(self.request("GET", "/api/state")[1])
+        self.assertEqual(state["assessments"][0]["mode"], "recommend")
+        self.assertEqual(len(state["rejected"]), 2)
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -28,6 +28,7 @@ skills/<domain>/<product>/
   references.md           Vendor documentation and advisories, with last-verified dates
 dist/                     Generated standalone single-file bundles (core + skill)
 scripts/                  Tooling, including the content check
+tools/dashboard/          Local live dashboard that agents report progress to
 ```
 
 ## Using a skill
@@ -68,6 +69,12 @@ Status: ✅ available · ⏳ planned
 | ai | MCP / RAG servers | ⏳ |
 | web-apps | Small self-hosted web apps and dashboards | ⏳ |
 | web | Web servers (Apache, nginx) and reverse proxies | ⏳ |
+
+## Live dashboard
+
+Run `python3 tools/dashboard/dashboard.py serve` to get a private local web page showing what your agents
+have found as they work: mode, domain status, findings, changes, and incidents. See
+[tools/dashboard/README.md](tools/dashboard/README.md).
 
 ## Contributing
 

@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>AI Security Skills Dashboard</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <header>
+    <h1>AI Security Skills</h1>
+    <span id="status" class="status">connecting…</span>
+  </header>
+
+  <section id="login" hidden>
+    <p>Paste the dashboard token. It's printed when the dashboard starts, and stored in
+       <code>token</code> in the data directory.</p>
+    <form id="login-form">
+      <input id="token-input" type="password" autocomplete="off" placeholder="token" aria-label="Token">
+      <button type="submit">Connect</button>
+    </form>
+  </section>
+
+  <main id="app" hidden>
+    <nav id="assessments" aria-label="Assessments"></nav>
+    <article id="detail"></article>
+  </main>
+</body>
+</html>

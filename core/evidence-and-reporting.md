@@ -104,6 +104,12 @@ findings:
 
 Keep an open-findings register between assessments.
 
+## Live reporting
+
+If the user provides a dashboard folder or endpoint, also report progress while working, using
+[reporting-protocol.md](reporting-protocol.md). This is in addition to the written report, not a
+replacement.
+
 ## Definition of success
 
 An engagement is successful only when:

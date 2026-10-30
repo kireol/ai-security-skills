@@ -35,6 +35,7 @@ This skill holds only DSM-specific guidance. It builds on the shared core, which
 | vulnerability-triage.md (included in this file) | Lifecycle, CVE/KEV validation, P0–P4 priority scale |
 | evidence-and-reporting.md (included in this file) | Evidence labels, statuses, finding template, report format, cadence |
 | tool-use-contract.md (included in this file) | Rules for commands, APIs, MCP tools, and third-party integrations |
+| reporting-protocol.md (included in this file) | Optional live progress reporting to a dashboard |
 | incident-response.md (included in this file) | The generic Respond playbook |
 
 DSM-specific Respond steps are in incident-response.md (included in this file). Vendor documentation and
@@ -816,6 +817,12 @@ findings:
 
 Keep an open-findings register between assessments.
 
+## Live reporting
+
+If the user provides a dashboard folder or endpoint, also report progress while working, using
+reporting-protocol.md (included in this file). This is in addition to the written report, not a
+replacement.
+
 ## Definition of success
 
 An engagement is successful only when:
@@ -915,6 +922,84 @@ When using third-party skills, MCP servers, or integrations alongside these skil
   system being managed.
 - Tool names and workflows from one integration apply only when that exact integration and version is
   installed.
+
+---
+
+# Core: Live Reporting Protocol
+
+An optional way for the agent to report progress while it works, so the user can follow an assessment on
+a dashboard (such as `tools/dashboard/` in this repository). Reporting never replaces the written report
+defined in evidence-and-reporting.md (included in this file).
+
+## When to report
+
+At the start of an engagement, ask the user whether a reporting destination is available. Use one only if
+the user provides it:
+
+- **Folder:** a directory the agent can write to, for example `~/.ai-security-dashboard/events/`.
+- **HTTP endpoint:** a URL such as `http://127.0.0.1:8770/api/events`, plus a token.
+
+If neither is available, skip reporting entirely. Never invent a destination, and never send events to
+any destination the user didn't provide. Reporting is class **R**: it doesn't change the target system,
+so it needs no further approval.
+
+## Rules
+
+- **No secrets, ever.** Events follow the same redaction rules as reports. A dashboard rejects events that
+  look like they contain keys, tokens, or passwords, but don't rely on that.
+- **Report as you go,** not only at the end: when the assessment starts, when the mode changes, when a
+  domain starts and finishes, when a finding is created or changes state, when a change is made, and when
+  incident status changes.
+- **Events are facts, not plans.** Report a change as `verified` only after verification succeeds.
+- **Reporting failure is not a blocker.** If a write or POST fails, tell the user once and carry on with
+  the assessment.
+- **The dashboard is a map of weaknesses.** Never suggest exposing it to the internet.
+
+## Event format
+
+Each event is one JSON object. In a folder, write one event per line to a `.jsonl` file (appending is
+fine), for example `events/<assessment_id>.jsonl`. Over HTTP, `POST` one event or an array of events to
+the endpoint with `Authorization: Bearer <token>` and `Content-Type: application/json`.
+
+```json
+{
+  "schema": "ai-security-skills/event/v1",
+  "assessment_id": "2026-01-15-nas",
+  "time": "2026-01-15T14:02:00Z",
+  "type": "finding.upserted",
+  "data": { "id": "NAS-001", "title": "NFS export writable by the entire LAN", "priority": "P2",
+            "confidence": "confirmed", "state": "open" }
+}
+```
+
+| Field | Rules |
+|---|---|
+| `schema` | Always `ai-security-skills/event/v1`. |
+| `assessment_id` | Chosen by the agent when the assessment starts; reused for every event. Letters, digits, `.`, `_`, `-`; at most 80 characters. Suggested form: `<date>-<short target label>`. |
+| `time` | ISO-8601 with timezone. Optional; the dashboard uses the receive time if missing. |
+| `type` | One of the event types below. |
+| `data` | Fields for that type. Unknown fields are ignored. Text fields are limited to 4,000 characters. |
+
+Enumerated values are case-insensitive, and spaces or hyphens may be used instead of underscores
+(`Not assessed`, `not-assessed`, and `not_assessed` are equivalent).
+
+## Event types
+
+| Type | Required fields | Optional fields |
+|---|---|---|
+| `assessment.started` | `skill`, `target` | `skill_version`, `scope`, `agent` |
+| `mode.changed` | `mode`: `discover` · `recommend` · `remediate` · `respond` | `note` |
+| `domain.status` | `domain` (the skill's letter, e.g. `C`), `status`: `in_progress` · `pass` · `finding` · `not_assessed` · `not_applicable` · `accepted_risk` | `title`, `note` |
+| `finding.upserted` | `id` (e.g. `NAS-001`) | `title`, `priority` (`P0`–`P4`), `confidence` (`confirmed` · `likely` · `potential`), `state` (`open` · `resolved` · `partially_resolved` · `failed` · `unverified` · `accepted_risk`), `component`, `operation_class` (`R` · `C1` · `C2` · `C3`), `evidence_label` (`observed` · `vendor_documented` · `third_party_documented` · `user_reported` · `inferred` · `unknown`), `summary` |
+| `change.recorded` | `description`, `operation_class`, `result`: `planned` · `verified` · `failed` · `unverified` · `rolled_back` | `finding_id`, `approved_by`, `rollback` |
+| `incident.status` | `status`: `suspected` · `likely` · `confirmed` · `closed` | `summary`, `containment` (list of strings) |
+| `assessment.completed` | none | `summary` |
+
+The first `finding.upserted` for an ID should include `title`, `priority`, `confidence`, and `state`.
+Later events for the same ID may send only the fields that changed (for example, `state: resolved`).
+
+`target` is a label the user will recognize, not a secret: for example "home NAS". Follow the report
+redaction rules; don't include serial numbers or credentials.
 
 ---
 

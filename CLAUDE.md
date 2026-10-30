@@ -26,6 +26,9 @@ scripts/check-content.sh            # privacy check, whole repo; review every hi
 scripts/check-content.sh skills/x   # one path
 scripts/build-dist.py               # rebuild dist/ after changing core/ or skills/
 scripts/build-dist.py --check       # exit 1 if dist/ is stale
+python3 -m unittest discover -s tools/dashboard                 # dashboard tests
+python3 -m unittest tools/dashboard/test_dashboard.py -k Server  # one group of tests
+python3 tools/dashboard/dashboard.py serve                      # run the dashboard locally
 ```
 
 Run both checks before every commit. `.private-denylist` (git-ignored) holds the owner's identifiers for
@@ -52,5 +55,10 @@ the content check. Never commit it, and never copy its contents into a tracked f
   `version` and add a version-history entry on substantive changes. Versions never go in filenames.
 - Don't add static CVE or version tables, or executable storage/RAID/filesystem repair procedures. Skills
   must tell the agent to verify against live vendor sources.
+- `core/reporting-protocol.md` defines the live-event format; `tools/dashboard/dashboard.py` implements it
+  (stdlib only, Python 3.9+, so it runs on stock macOS Python). Change both together, and keep its
+  security properties: localhost by default, token auth, Host-header check, strict CSP, `textContent`-only
+  rendering of event text, and secret screening. Test fixtures that look like secrets must be assembled at
+  runtime so `check-content.sh` stays strict.
 - Keep skills tool-agnostic (Claude Code, Codex, local LLMs, MCP clients, humans). Scope MCP-server-specific
   guidance to the named server.

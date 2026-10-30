@@ -23,6 +23,7 @@ CORE_ORDER = [
     "vulnerability-triage.md",
     "evidence-and-reporting.md",
     "tool-use-contract.md",
+    "reporting-protocol.md",
     "incident-response.md",
 ]
 SKILL_PARTS = ["SKILL.md", "incident-response.md", "references.md"]

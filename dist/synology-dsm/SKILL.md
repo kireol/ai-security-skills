@@ -35,6 +35,7 @@ This skill holds only DSM-specific guidance. It builds on the shared core, which
 | [vulnerability-triage.md](core/vulnerability-triage.md) | Lifecycle, CVE/KEV validation, P0–P4 priority scale |
 | [evidence-and-reporting.md](core/evidence-and-reporting.md) | Evidence labels, statuses, finding template, report format, cadence |
 | [tool-use-contract.md](core/tool-use-contract.md) | Rules for commands, APIs, MCP tools, and third-party integrations |
+| [reporting-protocol.md](core/reporting-protocol.md) | Optional live progress reporting to a dashboard |
 | [incident-response.md](core/incident-response.md) | The generic Respond playbook |
 
 DSM-specific Respond steps are in [incident-response.md](incident-response.md). Vendor documentation and
