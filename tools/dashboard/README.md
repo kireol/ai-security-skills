@@ -10,7 +10,7 @@ Python file with no dependencies (Python 3.9+).
 ## Run it
 
 The easiest way is `scripts/assess.sh --dashboard`, which starts the dashboard, opens it, and starts the
-assessment in one command (`scripts/assess.sh --stop` stops it). To run the dashboard on its own:
+assessment in one command. `scripts/assess.sh --stop` stops the dashboard however it was started. To run the dashboard on its own:
 
 ```sh
 python3 tools/dashboard/dashboard.py serve --open

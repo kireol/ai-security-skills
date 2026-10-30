@@ -31,7 +31,7 @@ python3 -m unittest discover -s tools/dashboard                 # dashboard test
 python3 -m unittest tools/dashboard/test_dashboard.py -k Server  # one group of tests
 python3 tools/dashboard/dashboard.py serve --open               # run the dashboard locally
 python3 tools/dashboard/dashboard.py report <run folder>        # write report.md/report.html, print totals
-scripts/assess.sh [--dashboard] [--agent claude|codex|print]    # one-command kick-off (and --stop)
+scripts/assess.sh [--dashboard] [--agent claude|codex|gemini|print]  # asks which AI to use; --stop stops the dashboard
 ```
 
 Run the content check, the linter, and `build-dist.py --check` before every commit. `.private-denylist` (git-ignored) holds the owner's identifiers for

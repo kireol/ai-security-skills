@@ -17,29 +17,12 @@ Every skill covers four modes:
 | **Remediate** | Makes changes. | Explicit approval for each change, or a bounded standing authorization. |
 | **Respond** (incident response) | Walks the user through containment, evidence preservation, and recovery after a suspected compromise. | Urgent manual steps are advised immediately; disruptive actions still need approval. |
 
-## Quick start: assess everything
+## Quick start
 
 First, get the collection: `git clone https://github.com/kireol/ai-security-skills.git` and `cd` into it.
-There are two ways to run a full assessment.
+There are three ways to run it.
 
-### Option 1: just the AI (no dashboard)
-
-Run one command:
-
-```sh
-scripts/assess.sh
-```
-
-It starts Claude Code with the kick-off prompt (or, with `--agent codex`, Codex; with `--agent print`,
-it prints the prompt and copies it to your clipboard for any other assistant). You can also skip the
-script and paste this into your AI assistant from inside the collection's folder:
-
-```text
-Use the full-assessment skill (skills/orchestration/full-assessment/SKILL.md) to run a complete security
-assessment of my network. Start with the kick-off questions. Don't change anything without my approval.
-```
-
-### Option 2: with a live dashboard you can watch
+### Option 1: full assessment with a live dashboard you can watch
 
 Run one command:
 
@@ -47,13 +30,53 @@ Run one command:
 scripts/assess.sh --dashboard
 ```
 
-It starts the [dashboard](tools/dashboard/README.md) in the background, opens it in your browser, and
-starts your AI assistant with the kick-off prompt. As the agent works, the dashboard fills in with the
-inventory, each system's checks, findings, and changes. Stop the dashboard afterwards with
-`scripts/assess.sh --stop`. (Already in an AI session? Ask it to "start the dashboard" during the
-kick-off and it will do the same.)
+It asks which AI assistant to use (Claude Code, Codex, or Gemini CLI, whichever you have installed), or
+lets you print the prompt to paste into another assistant, or exit without doing anything. Then it starts
+the [dashboard](tools/dashboard/README.md) in the background, opens it in your browser, and starts the
+assistant with the kick-off prompt. As the agent works, the dashboard fills in with the inventory, each
+system's checks, findings, and changes. (Already in an AI session? Ask it to "start the dashboard" during
+the kick-off and it will do the same.)
 
-### What happens
+**When you're done,** stop the dashboard with:
+
+```sh
+scripts/assess.sh --stop
+```
+
+That stops it however it was started. (If you ran `tools/dashboard/dashboard.py serve` yourself in a
+terminal, Ctrl+C there also works.) Your reports stay in `~/ai-security-reports/`.
+
+### Option 2: full assessment, just the AI (no dashboard)
+
+```sh
+scripts/assess.sh
+```
+
+Same question about which assistant to use, without the dashboard. Or skip the script and paste this
+into your AI assistant from inside the collection's folder:
+
+```text
+Use the full-assessment skill (skills/orchestration/full-assessment/SKILL.md) to run a complete security
+assessment of my network. Start with the kick-off questions. Don't change anything without my approval.
+```
+
+### Option 3: check just one device
+
+No kick-off, no inventory: point your AI assistant at one system and the skill for it (see the
+[catalog](#catalog) below). From inside the collection's folder, ask for example:
+
+```text
+Use the synology-dsm skill (dist/synology-dsm.md) to run a Discover assessment of my Synology NAS at
+<nas address>. I'll run any commands you need and paste the output. Don't change anything, and finish
+with the report and totals.
+```
+
+Other examples: "Use the opnsense skill to check my firewall", "Use the phones skill to walk me through
+securing my iPhone", or "Use the ip-cameras skill to check the camera at <camera address>". The agent
+follows the same rules as a full run: read-only first, nothing changed without your approval, and a
+report at the end.
+
+### What happens in a full assessment
 
 1. **Kick-off.** The agent asks what's in scope, how far it may probe your network, whether you want to
    give it **its own access** (read-only SSH, API keys, or accounts) for a deeper look or run commands
