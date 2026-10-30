@@ -35,6 +35,8 @@ STATIC_FILES = {
 ASSESSMENT_ID = re.compile(r"^[A-Za-z0-9._-]{1,80}$")
 FINDING_ID = re.compile(r"^[A-Z][A-Z0-9]{0,9}-[0-9]{1,5}$")
 SHORT = re.compile(r"^[A-Za-z0-9._-]{1,20}$")
+ASSET_ID = re.compile(r"^[A-Za-z0-9._-]{1,80}$")
+SKILL_NAME = re.compile(r"^[a-z0-9-]{1,64}$")
 
 MODES = ("discover", "recommend", "remediate", "respond")
 DOMAIN_STATUS = ("in_progress", "pass", "finding", "not_assessed", "not_applicable", "accepted_risk")
@@ -45,12 +47,14 @@ OPERATION_CLASS = ("R", "C1", "C2", "C3")
 EVIDENCE = ("observed", "vendor_documented", "third_party_documented", "user_reported", "inferred", "unknown")
 CHANGE_RESULT = ("planned", "verified", "failed", "unverified", "rolled_back")
 INCIDENT = ("suspected", "likely", "confirmed", "closed")
+EXPOSURE = ("internet", "vpn", "lan", "isolated", "unknown")
+COVERAGE = ("pending", "in_progress", "assessed", "no_skill", "out_of_scope", "skipped")
 CLOSED_STATES = ("resolved", "accepted_risk")
 
 # type -> {field: (kind, required)}; kind is "text", "list", a regex, or a tuple of allowed values.
 EVENT_FIELDS = {
     "assessment.started": {"skill": ("text", True), "target": ("text", True), "skill_version": ("text", False),
-                           "scope": ("text", False), "agent": ("text", False)},
+                           "scope": ("text", False), "agent": ("text", False), "parent": (ASSESSMENT_ID, False)},
     "mode.changed": {"mode": (MODES, True), "note": ("text", False)},
     "domain.status": {"domain": (SHORT, True), "status": (DOMAIN_STATUS, True), "title": ("text", False),
                       "note": ("text", False)},
@@ -62,6 +66,10 @@ EVENT_FIELDS = {
                         "result": (CHANGE_RESULT, True), "finding_id": (FINDING_ID, False),
                         "approved_by": ("text", False), "rollback": ("text", False)},
     "incident.status": {"status": (INCIDENT, True), "summary": ("text", False), "containment": ("list", False)},
+    "asset.upserted": {"id": (ASSET_ID, True), "label": ("text", False), "kind": ("text", False),
+                       "addresses": ("list", False), "services": ("list", False), "exposure": (EXPOSURE, False),
+                       "skill": (SKILL_NAME, False), "coverage": (COVERAGE, False),
+                       "assessment_id": (ASSESSMENT_ID, False), "note": ("text", False)},
     "assessment.completed": {"summary": ("text", False)},
 }
 
@@ -208,7 +216,7 @@ class EventStore:
 
 def _new_assessment(aid):
     return {"id": aid, "skill": None, "skill_version": None, "target": None, "scope": None, "agent": None,
-            "mode": None, "modes_visited": [], "completed": False, "summary": None, "started": None, "updated": None,
+            "parent": None, "assets": {}, "mode": None, "modes_visited": [], "completed": False, "summary": None, "started": None, "updated": None,
             "domains": {}, "findings": {}, "changes": [], "incident": None}
 
 
@@ -221,7 +229,7 @@ def aggregate(events, rejected=()):
         if time and (a["updated"] is None or time > a["updated"]):
             a["updated"] = time
         if etype == "assessment.started":
-            a.update({k: data.get(k) for k in ("skill", "skill_version", "target", "scope", "agent")})
+            a.update({k: data.get(k) for k in ("skill", "skill_version", "target", "scope", "agent", "parent")})
             a["started"] = time
             a["mode"] = a["mode"] or "discover"
         elif etype == "mode.changed":
@@ -234,6 +242,10 @@ def aggregate(events, rejected=()):
             finding = a["findings"].setdefault(data["id"], {"id": data["id"], "first_seen": time})
             finding.update(data)
             finding["updated"] = time
+        elif etype == "asset.upserted":
+            asset = a["assets"].setdefault(data["id"], {"id": data["id"], "first_seen": time})
+            asset.update(data)
+            asset["updated"] = time
         elif etype == "change.recorded":
             a["changes"].append({**data, "time": time})
         elif etype == "incident.status":
@@ -253,8 +265,24 @@ def aggregate(events, rejected=()):
                 counts[f["priority"]] += 1
         result.append({**a, "findings": findings, "open_counts": counts,
                        "domains": sorted(a["domains"].values(), key=lambda d: d["domain"]),
-                       "changes": list(reversed(a["changes"]))})
+                       "assets": sorted(a["assets"].values(), key=lambda x: ((x.get("label") or x["id"]).lower())),
+                       "changes": list(reversed(a["changes"])), "children": []})
     result.sort(key=lambda a: a["updated"] or "", reverse=True)
+
+    # Group per-asset assessments under their run, and total open findings across the run.
+    by_id = {a["id"]: a for a in result}
+    for a in result:
+        parent = by_id.get(a["parent"]) if a["parent"] != a["id"] else None
+        if parent is None:
+            a["parent"] = None
+        else:
+            parent["children"].append(a["id"])
+    for a in result:
+        rollup = dict(a["open_counts"])
+        for child_id in a["children"]:
+            for p, n in by_id[child_id]["open_counts"].items():
+                rollup[p] += n
+        a["rollup_counts"] = rollup
     return {"generated": _now(), "assessments": result, "rejected": list(rejected)[-100:]}
 
 

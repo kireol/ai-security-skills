@@ -4,6 +4,8 @@
 For each skills/<domain>/<product>/SKILL.md this writes:
   dist/<product>/      an installable skill folder: the skill's files plus a copy of core/
   dist/<product>.md    a single file: skill + its incident response + references + all of core
+  dist/catalog.md      every product skill with its detection hints; also bundled with orchestration
+                       skills (skills/orchestration/*), which use it to match devices to skills
 
 Usage:
   scripts/build-dist.py           rebuild dist/
@@ -39,12 +41,69 @@ def add_banner(text):
     return GENERATED + "\n" + text
 
 
+def frontmatter(text):
+    """Parse the frontmatter subset skills use: scalars, '>-' folded text, and one level of nested keys."""
+    block = text[4:text.index("\n---\n", 4)]
+    result, folding, nested = {}, None, None
+    for line in block.splitlines():
+        if not line.strip():
+            continue
+        if line.startswith(" "):
+            if folding:
+                result[folding] = (result[folding] + " " + line.strip()).strip()
+            elif nested:
+                key, _, value = line.strip().partition(":")
+                result[nested][key] = value.strip().strip('"')
+            continue
+        folding = nested = None
+        key, _, value = line.partition(":")
+        value = value.split(" #", 1)[0].strip()
+        if value in (">-", ">", "|"):
+            folding, result[key] = key, ""
+        elif not value:
+            nested, result[key] = key, {}
+        else:
+            result[key] = value.strip('"')
+    return result
+
+
+def section(text, heading):
+    match = re.search(rf"^## {heading}\n(.*?)(?=^## |^---$)", text, re.M | re.S)
+    return match.group(1).strip() if match else None
+
+
+def catalog(skill_dirs):
+    parts = [
+        "# Skill Catalog",
+        "Every product skill in this collection, with hints for recognizing the product on a network. Used by "
+        "the `full-assessment` skill to match each discovered device to a skill. Load a skill from "
+        "`dist/<skill>.md` (single file) or the installed `<skill>/` folder.",
+    ]
+    for src in skill_dirs:
+        text = (src / "SKILL.md").read_text()
+        fm = frontmatter(text)
+        meta = fm.get("metadata", {})
+        parts += [
+            f"## {fm['name']}",
+            f"**Use for:** {fm.get('description', '')}",
+            f"**Applies to:** {meta.get('applies_to', 'not stated')} · **Finding prefix:** "
+            f"`{meta.get('finding_prefix', '?')}` · **Version:** {meta.get('version', '?')} · **Bundle:** "
+            f"`dist/{src.name}.md`",
+            "### Detection",
+            section(text, "Detection") or "No detection hints yet; confirm the product with the user.",
+        ]
+    return "\n\n".join(parts) + "\n"
+
+
 def build(out):
     core_dir = ROOT / "core"
     core_files = [core_dir / name for name in CORE_ORDER]
-    for skill_md in sorted(ROOT.glob("skills/*/*/SKILL.md")):
-        src = skill_md.parent
+    skill_dirs = [p.parent for p in sorted(ROOT.glob("skills/*/*/SKILL.md"))]
+    catalog_text = catalog([d for d in skill_dirs if d.parent.name != "orchestration"])
+    (out / "catalog.md").write_text(GENERATED + "\n" + catalog_text)
+    for src in skill_dirs:
         product = src.name
+        orchestration = src.parent.name == "orchestration"
 
         # Installable folder: core links point at the bundled core/ copy.
         folder = out / product
@@ -55,9 +114,12 @@ def build(out):
                 (folder / part).write_text(add_banner(text))
         for f in core_files:
             (folder / "core" / f.name).write_text(GENERATED + "\n" + f.read_text())
+        if orchestration:
+            (folder / "catalog.md").write_text(GENERATED + "\n" + catalog_text)
 
         # Single file: every local link refers to a section that is included below.
         sections = [(src / p).read_text() for p in SKILL_PARTS if (src / p).exists()]
+        sections += [catalog_text] if orchestration else []
         sections += [f.read_text() for f in core_files]
         body = "\n\n---\n\n".join(LOCAL_LINK.sub(r"\1 (included in this file)", s.strip()) for s in sections)
         (out / f"{product}.md").write_text(add_banner(body + "\n"))

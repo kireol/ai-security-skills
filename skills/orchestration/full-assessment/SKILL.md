@@ -1,0 +1,275 @@
+---
+name: full-assessment
+description: >-
+  Kick off a complete security assessment of a home, office, or homelab network: inventory devices and
+  services, match each one to an available skill in this collection, run each skill's Discover mode, check
+  network-wide weaknesses, and roll everything into one prioritized plan. Use when the user asks to "check
+  everything", run a full or complete assessment, a kick-off, a network-wide audit, or wants to fill the
+  dashboard.
+license: CC-BY-4.0
+metadata:
+  version: "1.0"
+  last_reviewed: "2026-10-30"
+  applies_to: "Any network the user owns or is authorized to assess"
+  audience: "home, work, homelab"
+  finding_prefix: "NET"
+  modes: "discover, recommend, remediate, respond"
+---
+
+# Full Assessment (Kick-off)
+
+Coordinate a complete assessment of the user's environment. This skill doesn't replace the product
+skills; it finds what's on the network, decides which skill applies to each system, runs them one at a
+time, adds network-wide checks no single product skill can see, and merges the results.
+
+## How to use this skill
+
+The shared core always applies:
+
+| Core document | Covers |
+|---|---|
+| [modes-and-authorization.md](../../../core/modes-and-authorization.md) | The four modes, transitions, operation classes (R/C1/C2/C3), standing authorization |
+| [operating-principles.md](../../../core/operating-principles.md) | Principles, capability discovery, scope, communication, untrusted data |
+| [vulnerability-triage.md](../../../core/vulnerability-triage.md) | Lifecycle, CVE/KEV validation, P0–P4 priority scale |
+| [evidence-and-reporting.md](../../../core/evidence-and-reporting.md) | Evidence labels, statuses, finding template, report format, cadence |
+| [tool-use-contract.md](../../../core/tool-use-contract.md) | Rules for commands, APIs, MCP tools, and third-party integrations |
+| [reporting-protocol.md](../../../core/reporting-protocol.md) | Live reporting to a dashboard, including runs and assets |
+| [incident-response.md](../../../core/incident-response.md) | The generic Respond playbook |
+
+The list of available product skills, with hints for recognizing each product, is in the **skill
+catalog** (`catalog.md`, generated alongside this skill in `dist/`). To run a product skill, load its file
+from the collection: `dist/<skill>.md` (single file) or the installed skill folder `<skill>/`. If you
+can't access a skill's file, ask the user to provide it; don't improvise its checks from memory.
+
+---
+
+## Phase 0: Kick-off
+
+Ask for anything below that the user hasn't already given, a few questions at a time. Offer this as a
+form they can fill in:
+
+```
+KICK-OFF
+Environment:        home / office / homelab / mixed
+In-scope networks:  <subnets or VLANs, e.g. 192.0.2.0/24>      Out of scope: <devices or ranges to skip>
+Internet edge:      <public IP or hostname to check from outside, or "skip">
+Known systems:      <anything you already know is there: firewall, NAS, hypervisor, cameras, ...>
+Discovery level:    0 / 1 / 2   (see below; default 0)
+Access available:   <SSH, web logins, API tokens, MCP tools: per system, or "I'll run commands myself">
+Fragile devices:    <devices that must not be probed: medical, industrial, old printers, ...>
+Time window:        <when probing and changes are allowed>
+Live dashboard:     <events folder or URL + token, or "none">
+Goal:               discover only / discover + recommend / allow remediation with approval
+```
+
+Confirm the run's scope back to the user in one short summary before starting. If the user doesn't own
+or administer a network, or can't confirm they're authorized to assess it, don't scan it.
+
+If a dashboard is available, start the run: send `assessment.started` with `skill: full-assessment` and a
+new `assessment_id` (for example `<date>-<short label>-run`).
+
+## Phase 1: Inventory
+
+Build a list of assets: every device or service in scope, with what it is, how to reach it, what it
+exposes, and where it sits (internet-facing, VPN-reachable, LAN, isolated).
+
+### Discovery levels
+
+The user picks the level. Each level includes the ones below it.
+
+| Level | What the agent may do | Operation class |
+|---|---|---|
+| **0: Passive** (default) | Use what the user tells you and what already exists: the user's own lists and documentation, the router/firewall's DHCP leases, ARP and neighbor tables, DNS records and port-forward rules (read through access the user grants), and the agent host's own ARP/neighbor cache and listening services. | R |
+| **1: Light discovery** | Host discovery (ARP or ping sweep) and TCP connection checks against common management and service ports on in-scope subnets, at a low rate. mDNS/DNS-SD and SSDP browsing. | R, but active: needs explicit approval |
+| **2: Service identification** | On ports found open: banner or version detection, fetching web page titles and TLS certificate details. | R, but active: needs explicit approval |
+
+Rules for active discovery (levels 1–2):
+
+- Only on subnets and hosts the user put in scope, during the agreed window. Honor the exclusion list.
+- Low and slow. Some cameras, IoT devices, printers, and older embedded systems crash or reboot under
+  scans. If a device stops responding, stop probing it and tell the user.
+- **Never**, at any level: vulnerability-exploitation scripts, password guessing or default-credential
+  testing, denial-of-service-prone scan types, or scanning anything outside scope. To check whether a
+  device still uses a default password, ask the user.
+- External exposure checks against the user's public address only with explicit approval, from a vantage
+  point the user approves, limited to confirming what is reachable. Note that IPv6 and tunnels are
+  separate paths.
+- Check that a tool exists and read its help before using it (core tool-use contract). Record exact
+  commands and options used.
+
+Report each asset with `asset.upserted` as you find it (`coverage: pending`).
+
+### Network-wide facts to collect while inventorying
+
+- Every path in from the internet: port forwards, UPnP/NAT-PMP mappings, tunnels (e.g. Cloudflare
+  Tunnel), VPN endpoints, cloud relay features, IPv6 firewall rules.
+- Network layout: VLANs or a flat network; where cameras, IoT, TVs, and guests sit relative to servers.
+- DNS and DHCP: which systems provide them and what depends on them.
+- What runs on what: VMs and containers on each host, so you can see single points of failure.
+
+## Phase 2: Match assets to skills
+
+For each asset, use the catalog's detection hints to pick a skill. Record the match and how confident
+you are.
+
+- **Clear match:** set `skill` on the asset.
+- **Uncertain match:** ask the user to confirm the product.
+- **No skill yet:** mark `coverage: no_skill`. It still gets the baseline checks in Phase 4.
+- **One device, several roles** (for example a NAS that also runs containers, or a host that runs a
+  hypervisor): assess it with each relevant skill, each as its own child assessment.
+
+## Phase 3: Plan
+
+Present the inventory and an order of work for approval. Default order, most exposed and most central
+first:
+
+1. Internet edge: firewall/router, tunnels, anything port-forwarded, VPN.
+2. Infrastructure others depend on: hypervisors, DNS, NAS/storage, identity, backup systems.
+3. Home automation, cameras, doorbells, NVRs.
+4. Servers and applications: media, web apps, AI services.
+5. Endpoints and consumer devices: computers, phones, TVs.
+
+For each asset, say what access the agent needs (or which commands the user will run for it). Large
+networks can be split into several sessions; the dashboard and the run's `assessment_id` let you resume.
+
+## Phase 4: Assess each asset (Discover)
+
+Work through the plan one asset at a time:
+
+1. Load that asset's skill and follow its Discover mode exactly, within this run's scope and access.
+2. Report it as a **child assessment**: `assessment.started` with `parent` set to the run's
+   `assessment_id`, using the skill's own finding prefix. Update the asset: `coverage: in_progress` and
+   its `assessment_id`; then `coverage: assessed` when done.
+3. Before moving to the next asset, write a short summary of what you found (findings, unknowns, and
+   anything relevant to other assets, such as a shared credential or a dependency). Keep the summary and
+   drop the detail from working memory; the dashboard and the child report keep it.
+
+**Agents that can run several sub-agents** may run Discover for different assets in parallel. Each
+sub-agent must load and follow the asset's skill, report as its own child assessment, and stay read-only.
+Never parallelize Remediate.
+
+### Baseline checks for assets without a skill
+
+Report these as findings in the run (prefix `NET`), using the core finding template:
+
+- What it is: make, model, firmware/OS version, and whether the vendor still ships security updates.
+- How it's administered: web UI, app, cloud account, SSH. Whether the admin password was changed from
+  the default (ask the user), and whether MFA is available and on for any cloud account.
+- Exposure: reachable from the internet (port forward, UPnP, cloud relay)? Which ports are open on the
+  LAN? Does it need internet access at all?
+- Remote access and cloud dependence: which vendor cloud it talks to, and whether local-only operation
+  is possible.
+- Data it holds (recordings, files, credentials for other systems) and whether its configuration and data
+  are backed up.
+- Mark everything else **Not assessed**, and note that a dedicated skill would cover it.
+
+## Phase 5: Network-wide domains
+
+These are the run's own assessment domains. Each needs a status, like any skill's domains.
+
+#### A. Inventory completeness
+
+- Every in-scope subnet covered at the agreed level; unknown devices identified or listed as unknown.
+- Devices the user didn't know about. Treat any unexplained device as a finding until identified.
+
+#### B. Internet exposure
+
+- One list of every path in from the internet, mapped to the asset it reaches, with authentication on
+  each. Anything exposed without a clear need is a finding.
+- IPv6 checked separately from IPv4. UPnP/NAT-PMP state on the router.
+
+#### C. Segmentation and egress
+
+- Whether cameras, IoT devices, TVs, and guest devices share a network with servers, NAS, and admin
+  workstations.
+- Whether devices that don't need the internet are blocked from it (common for cameras and TVs).
+- Management interfaces reachable from untrusted segments.
+
+#### D. Remote access
+
+- Every way in from outside (VPN, tunnels, vendor clouds, remote-desktop tools), who can use it, and
+  whether it requires MFA.
+
+#### E. Shared dependencies and single points of failure
+
+- Systems that many others depend on (DNS, DHCP, the hypervisor, the NAS, the firewall) and what fails if
+  each goes down. A hypervisor hosting DNS and the NAS, for example, takes both down with it.
+
+#### F. Backup coverage
+
+- For every asset that holds important data or configuration: is it backed up, where to, is a copy
+  outside its administrative boundary, and was a restore ever tested? Assets with no backup are findings.
+
+#### G. Credentials and identity across systems
+
+- Shared or reused admin passwords and service accounts across systems (ask the user; never request the
+  passwords themselves). Admin accounts without MFA. Where secrets are stored.
+
+#### H. Monitoring
+
+- Whether anything would notice a compromise: login alerts, log forwarding, update and backup failure
+  notifications.
+
+---
+
+## Recommend (consolidated)
+
+After all assets are assessed:
+
+1. Merge findings from all child assessments and the run. Group findings with a shared root cause (for
+   example, five devices exposed by one UPnP setting are one fix).
+2. Build a cross-system dependency view before recommending: a change on the firewall, DNS, or NAS
+   affects many assets.
+3. Produce one prioritized plan (P0 → P4), most exposed first, with each item linked to its finding IDs
+   and the skill that will carry out the change.
+4. Report the consolidated plan in the run's written report (core report structure), including the
+   inventory, a coverage table (assessed / no skill / out of scope / skipped), and the network-wide domain
+   checklist.
+
+## Remediate
+
+Remediation always happens through the asset's own skill and its Remediate rules, one change at a time,
+with approval per change or a standing authorization scoped to that asset. Run-level changes (for example,
+segmentation or router UPnP) go through the skill for the device being changed; if there's no skill for
+it, give the user manual steps and record the result. Update the asset's child assessment as changes are
+made.
+
+## Respond
+
+If any asset shows a P0 indicator, **stop the whole run**: no further discovery or changes on any asset.
+Switch to Respond (core playbook plus that asset's skill-specific steps), report `incident.status` on the
+affected asset's child assessment and on the run, and treat every other asset as possibly in scope for
+the incident until evidence says otherwise.
+
+---
+
+## Worked example (invented)
+
+### NET-001: Cameras and IoT devices share the LAN with servers
+
+**Confidence:** Confirmed
+**Priority:** P3. A compromised camera or smart TV can reach the NAS, hypervisor, and admin interfaces
+directly. Mitigated in part because cameras are blocked from the internet.
+**State:** Open
+**Component:** Network design, `192.0.2.0/24`
+**Evidence:** Observed 2026-01-15: one flat subnet with no VLANs on the firewall; 12 cameras, 1 TV, the NAS
+and the hypervisor all on `192.0.2.0/24`.
+**Expected secure state:** IoT and cameras on a separate segment that can reach only the services they
+need (for example the NVR), with no access to management interfaces.
+**Exposure and prerequisites:** an attacker who compromises any IoT device.
+**Dependencies / blast radius:** the NVR, home automation, and media players all talk to cameras and IoT;
+DHCP reservations and firewall aliases would need to move.
+**Recommended remediation:** create an IoT VLAN with firewall rules allowing only the NVR and home
+automation to reach it; move devices in stages. Alternative: firewall rules between hosts on the existing
+LAN where the switch supports it.
+**Operation class:** C2 (devices lose connectivity while being moved).
+**Approval required:** Yes.
+**Verification:** from the IoT segment, the NAS and admin UIs are unreachable; cameras still stream to the
+NVR.
+**Rollback:** move devices back to the original network; keep the old DHCP reservations until done.
+
+---
+
+## Version history
+
+- **1.0** (2026-10-30): Initial version.

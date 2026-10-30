@@ -7,7 +7,7 @@ description: >-
   Synology NAS may have been compromised or hit by ransomware.
 license: CC-BY-4.0
 metadata:
-  version: "4.0"
+  version: "4.1"
   last_reviewed: "2026-10-30"
   applies_to: "Synology DSM 7.x (verify the live build; menus and features vary by version and model)"
   audience: "home, work, homelab"
@@ -58,6 +58,18 @@ Identify the variant in Discover. It changes which rules apply.
 | **Genuine Synology hardware** | Model and serial match a Synology product; DSM updates offered through the normal channel. | All guidance applies as written. |
 | **DSM on non-Synology hardware** (unofficial bootloader-based installs, bare metal or virtualized) | Model reported doesn't match the physical or virtual hardware; a bootloader disk is present; the user confirms. | Vendor support and update eligibility don't apply normally. DSM updates may break the bootloader, so treat every update as **C2** and require a tested rollback. Some vendor services (QuickConnect, Synology Account features, some packages) may not work or may not be legitimately available. Security fixes may lag. Treat the platform's lifecycle as unsupported (see the end-of-life rule in core triage) and weigh isolation more heavily. |
 | **Virtualized DSM** (either of the above inside a hypervisor) | Virtual NICs/disks; hypervisor tools; the user confirms. | The **hypervisor is part of the NAS's trust boundary**: anyone with hypervisor admin access controls the NAS. Assess hypervisor access, VM backup coverage, and whether disks are passed through (passed-through disks are usually excluded from VM snapshots and backups). Disk health may have to be read on the hypervisor, not in DSM. Hypervisor network controls are a useful containment option during Respond. |
+
+## Detection
+
+Hints for recognizing this product during a network inventory (used by the `full-assessment` skill).
+Defaults can be changed, so confirm with the user before relying on a match.
+
+- DSM web interface on its default ports, 5000 (HTTP) and 5001 (HTTPS), with a page title or TLS
+  certificate mentioning Synology or DiskStation.
+- mDNS/DNS-SD, SMB, or SSDP announcements naming Synology or DiskStation.
+- A MAC address vendor (OUI) registered to Synology. Only genuine hardware shows this; DSM on virtual or
+  non-Synology hardware shows the hypervisor's or NIC maker's vendor instead.
+- Found by Synology's own discovery tools (Synology Assistant, or Web Assistant on the local network).
 
 ---
 
@@ -332,6 +344,8 @@ check that every container still reads and writes its data.
 
 ## Version history
 
+- **4.1** (2026-10-30): Added a Detection section for network inventories and linked the live reporting
+  protocol.
 - **4.0** (2026-10-30): Split generic material into the shared `core/`. Reorganized around the four modes
   (Discover, Recommend, Remediate, Respond). Merged duplicated hardening, container, and storage sections.
   Added frontmatter, deployment variants (non-Synology and virtualized DSM), a dependency/blast-radius

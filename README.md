@@ -17,6 +17,22 @@ Every skill covers four modes:
 | **Remediate** | Makes changes. | Explicit approval for each change, or a bounded standing authorization. |
 | **Respond** (incident response) | Walks the user through containment, evidence preservation, and recovery after a suspected compromise. | Urgent manual steps are advised immediately; disruptive actions still need approval. |
 
+## Quick start: assess everything
+
+1. Optional: start the [live dashboard](tools/dashboard/README.md) to watch progress.
+2. Give your AI assistant this collection (clone the repo, or install `dist/full-assessment/` plus the
+   product skills you need) and paste:
+
+```text
+Use the full-assessment skill from ai-security-skills to run a complete security assessment of my
+network. Start with the kick-off questions. Discovery level 0 until I approve more. Don't change
+anything without my approval. Report live events to ~/.ai-security-dashboard/events/.
+```
+
+The agent asks a few scoping questions, inventories your network, matches each device to a skill, runs
+each skill's checks, and gives you one prioritized plan. Devices without a dedicated skill still get
+baseline checks and show up as gaps on the dashboard.
+
 ## Layout
 
 ```
@@ -26,7 +42,7 @@ skills/<domain>/<product>/
   SKILL.md                Product-specific Discover / Recommend / Remediate guidance
   incident-response.md    Product-specific incident-response steps
   references.md           Vendor documentation and advisories, with last-verified dates
-dist/                     Generated standalone single-file bundles (core + skill)
+dist/                     Generated bundles: one folder and one single file per skill, plus catalog.md
 scripts/                  Tooling, including the content check
 tools/dashboard/          Local live dashboard that agents report progress to
 ```
@@ -46,6 +62,7 @@ Status: ✅ available · ⏳ planned
 
 | Domain | Skill | Status |
 |---|---|---|
+| orchestration | Full assessment (kick-off: inventory the network and run every matching skill) | ✅ |
 | storage | Synology DSM (including DSM on non-Synology hardware) | ✅ |
 | network | OPNsense / pfSense firewall | ⏳ |
 | network | WireGuard / OpenVPN | ⏳ |

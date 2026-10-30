@@ -52,6 +52,15 @@ reboot, so edits to X don't persist".>
 |---|---|---|
 | <e.g. appliance vs. container vs. VM> | | |
 
+## Detection
+
+Hints for recognizing this product during a network inventory (used by the `full-assessment` skill).
+Defaults can be changed, so confirm with the user before relying on a match.
+
+- <Vendor-default ports and what answers on them (page titles, banners, certificate names).>
+- <mDNS/DNS-SD, SSDP, or other discovery announcements.>
+- <MAC address vendors, noting when they don't apply (virtual or rebadged hardware).>
+
 ---
 
 ## Discover

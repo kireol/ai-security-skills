@@ -93,6 +93,32 @@ class AggregateTests(unittest.TestCase):
         self.assertEqual({d["domain"]: d["status"] for d in nas["domains"]}["A"], "pass")
         self.assertEqual(nas["mode"], "remediate")
 
+    def test_run_groups_children_and_rolls_up_counts(self):
+        run = self.by_id["2026-01-15-example-home-run"]
+        self.assertIsNone(run["parent"])
+        self.assertEqual(sorted(run["children"]), ["2026-01-15-example-nas", "2026-01-16-example-firewall"])
+        # Run's own NET-001 (P3) + NAS-001 (P2) + firewall P0 and P1; resolved NAS-002 excluded.
+        self.assertEqual(run["rollup_counts"], {"P0": 1, "P1": 1, "P2": 1, "P3": 1, "P4": 0})
+        self.assertEqual(self.by_id["2026-01-15-example-nas"]["parent"], run["id"])
+
+    def test_asset_partial_updates_merge(self):
+        assets = {x["id"]: x for x in self.by_id["2026-01-15-example-home-run"]["assets"]}
+        self.assertEqual(assets["nas"]["coverage"], "assessed")
+        self.assertEqual(assets["nas"]["assessment_id"], "2026-01-15-example-nas")
+        self.assertEqual(assets["nas"]["kind"], "NAS")
+        self.assertEqual(assets["camera-1"]["coverage"], "no_skill")
+
+    def test_unknown_parent_is_ignored(self):
+        events = [dashboard.validate_event(event("assessment.started", skill="x", target="y", parent="missing"))]
+        state = dashboard.aggregate(events)
+        self.assertIsNone(state["assessments"][0]["parent"])
+
+    def test_asset_validation(self):
+        clean = dashboard.validate_event(event("asset.upserted", id="cam-1", exposure="Internet", coverage="No skill"))
+        self.assertEqual((clean["data"]["exposure"], clean["data"]["coverage"]), ("internet", "no_skill"))
+        with self.assertRaises(dashboard.InvalidEvent):
+            dashboard.validate_event(event("asset.upserted", id="cam 1"))
+
     def test_incident_and_priority_order(self):
         fw = self.by_id["2026-01-16-example-firewall"]
         self.assertEqual(fw["incident"]["status"], "suspected")

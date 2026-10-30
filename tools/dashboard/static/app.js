@@ -41,9 +41,9 @@ function badge(kind, value) {
   return el("span", { class: `badge ${kind}-${value || "none"}` }, label(value));
 }
 
-function counts(a) {
+function counts(a, which = "open_counts") {
   return el("span", { class: "counts" },
-    Object.entries(a.open_counts).filter(([, n]) => n > 0)
+    Object.entries(a[which]).filter(([, n]) => n > 0)
       .map(([p, n]) => el("span", { class: `badge priority-${p}` }, `${p} ${n}`)));
 }
 
@@ -53,22 +53,49 @@ function renderList(state) {
   if (state.assessments.length === 0) {
     nav.append(el("p", { class: "muted" }, "No events yet. Agents write to the events folder or POST to /api/events."));
   }
-  for (const a of state.assessments) {
-    nav.append(el("button", {
-      class: `assessment${a.id === selected ? " selected" : ""}`,
-      onclick: () => { selected = a.id; render(lastState); },
-    },
-    el("span", { class: "row" }, el("strong", {}, a.skill || a.id), a.incident && a.incident.status !== "closed"
-      ? badge("incident", a.incident.status) : null),
-    el("span", { class: "row muted" }, a.target || "unknown target"),
-    el("span", { class: "row" }, a.completed ? badge("mode", "completed") : badge("mode", a.mode), counts(a)),
-    el("span", { class: "row muted small" }, `updated ${when(a.updated)}`)));
+  const byId = new Map(state.assessments.map((a) => [a.id, a]));
+  const item = (a, child) => el("button", {
+    class: `assessment${child ? " child" : ""}${a.id === selected ? " selected" : ""}`,
+    onclick: () => select(a.id),
+  },
+  el("span", { class: "row" }, el("strong", {}, a.children.length ? `Run: ${a.target || a.id}` : a.skill || a.id),
+    a.incident && a.incident.status !== "closed" ? badge("incident", a.incident.status) : null),
+  a.children.length ? null : el("span", { class: "row muted" }, a.target || "unknown target"),
+  el("span", { class: "row" }, a.completed ? badge("mode", "completed") : badge("mode", a.mode),
+    counts(a, a.children.length ? "rollup_counts" : "open_counts")),
+  el("span", { class: "row muted small" }, `updated ${when(a.updated)}`));
+  for (const a of state.assessments.filter((x) => !x.parent)) {
+    nav.append(item(a, false));
+    for (const id of a.children) nav.append(item(byId.get(id), true));
   }
   if (state.rejected.length) {
     nav.append(el("details", { class: "rejected" },
       el("summary", {}, `${state.rejected.length} rejected event(s)`),
       el("ul", {}, state.rejected.map((r) => el("li", {}, `${r.file}:${r.line}: ${r.reason}`)))));
   }
+}
+
+function select(id) {
+  selected = id;
+  render(lastState);
+}
+
+function inventory(a) {
+  if (a.assets.length === 0) return null;
+  const covered = a.assets.filter((x) => x.coverage === "assessed").length;
+  return [
+    el("h3", {}, `Inventory (${covered} of ${a.assets.length} assessed)`),
+    table(["Asset", "Kind", "Exposure", "Services", "Skill", "Coverage"],
+      a.assets.map((x) => el("tr", { title: x.note || "" },
+        el("td", {}, x.label || x.id, x.addresses ? el("div", { class: "small muted mono" }, x.addresses.join(", ")) : null),
+        el("td", {}, x.kind || "—"), el("td", {}, badge("exposure", x.exposure)),
+        el("td", { class: "small" }, x.services ? x.services.join("; ") : "—"),
+        el("td", { class: "mono" }, x.skill || "—"),
+        el("td", {}, x.assessment_id && lastState.assessments.some((c) => c.id === x.assessment_id)
+          ? el("button", { class: "link", onclick: () => select(x.assessment_id) }, badge("coverage", x.coverage), " open →")
+          : badge("coverage", x.coverage)))),
+      ""),
+  ];
 }
 
 function modeStrip(a) {
@@ -92,14 +119,18 @@ function renderDetail(a) {
   const findings = a.findings.filter((f) => showClosed || !CLOSED.has(f.state));
   const hidden = a.findings.length - findings.length;
 
-  detail.replaceChildren(
+  // replaceChildren() would print null/false as text, so drop empty optional sections first.
+  detail.replaceChildren(...[
     el("h2", {}, a.skill || a.id, a.skill_version ? el("span", { class: "muted" }, ` v${a.skill_version}`) : null),
     el("p", { class: "muted" }, [a.target, a.scope, a.agent && `agent: ${a.agent}`, `started ${when(a.started)}`]
       .filter(Boolean).join(" · ")),
     a.incident && a.incident.status !== "closed" ? el("div", { class: "incident" },
       el("strong", {}, `Incident: ${label(a.incident.status)}`), a.incident.summary ? ` ${a.incident.summary}` : "",
       a.incident.containment ? el("ul", {}, a.incident.containment.map((c) => el("li", {}, c))) : null) : null,
+    a.parent ? el("p", {}, el("button", { class: "link", onclick: () => select(a.parent) }, "← back to run")) : null,
+    a.children.length ? el("p", {}, "Open findings across this run: ", counts(a, "rollup_counts")) : null,
     a.completed ? el("div", { class: "completed" }, el("strong", {}, "Completed. "), a.summary || "") : modeStrip(a),
+    inventory(a),
 
     el("h3", {}, "Domains"),
     a.domains.length ? el("div", { class: "domains" }, a.domains.map((d) => el("div", {
@@ -126,12 +157,14 @@ function renderDetail(a) {
         el("td", {}, c.description), el("td", { class: "mono" }, c.operation_class), el("td", {}, badge("result", c.result)),
         el("td", {}, c.approved_by || "—"))),
       "No changes recorded."),
-  );
+  ].flat().filter(Boolean));
 }
 
 function render(state) {
   if (!state) return;
-  if (!state.assessments.some((a) => a.id === selected)) selected = state.assessments[0]?.id ?? null;
+  if (!state.assessments.some((a) => a.id === selected)) {
+    selected = (state.assessments.find((a) => !a.parent) || state.assessments[0])?.id ?? null;
+  }
   renderList(state);
   renderDetail(state.assessments.find((a) => a.id === selected));
 }

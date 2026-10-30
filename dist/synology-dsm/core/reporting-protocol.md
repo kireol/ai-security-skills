@@ -62,16 +62,26 @@ Enumerated values are case-insensitive, and spaces or hyphens may be used instea
 
 | Type | Required fields | Optional fields |
 |---|---|---|
-| `assessment.started` | `skill`, `target` | `skill_version`, `scope`, `agent` |
+| `assessment.started` | `skill`, `target` | `skill_version`, `scope`, `agent`, `parent` (the `assessment_id` of the full-assessment run this belongs to) |
 | `mode.changed` | `mode`: `discover` · `recommend` · `remediate` · `respond` | `note` |
 | `domain.status` | `domain` (the skill's letter, e.g. `C`), `status`: `in_progress` · `pass` · `finding` · `not_assessed` · `not_applicable` · `accepted_risk` | `title`, `note` |
 | `finding.upserted` | `id` (e.g. `NAS-001`) | `title`, `priority` (`P0`–`P4`), `confidence` (`confirmed` · `likely` · `potential`), `state` (`open` · `resolved` · `partially_resolved` · `failed` · `unverified` · `accepted_risk`), `component`, `operation_class` (`R` · `C1` · `C2` · `C3`), `evidence_label` (`observed` · `vendor_documented` · `third_party_documented` · `user_reported` · `inferred` · `unknown`), `summary` |
 | `change.recorded` | `description`, `operation_class`, `result`: `planned` · `verified` · `failed` · `unverified` · `rolled_back` | `finding_id`, `approved_by`, `rollback` |
 | `incident.status` | `status`: `suspected` · `likely` · `confirmed` · `closed` | `summary`, `containment` (list of strings) |
+| `asset.upserted` | `id` (stable slug for the asset, e.g. `nas-1`) | `label`, `kind` (e.g. "NAS", "firewall", "IP camera"), `addresses` (list), `services` (list, e.g. "tcp/443 https admin UI"), `exposure` (`internet` · `vpn` · `lan` · `isolated` · `unknown`), `skill` (matching skill name), `coverage` (`pending` · `in_progress` · `assessed` · `no_skill` · `out_of_scope` · `skipped`), `assessment_id` (the per-asset assessment), `note` |
 | `assessment.completed` | none | `summary` |
 
 The first `finding.upserted` for an ID should include `title`, `priority`, `confidence`, and `state`.
 Later events for the same ID may send only the fields that changed (for example, `state: resolved`).
+
+## Runs: one assessment per asset, grouped
+
+A full assessment (see the `full-assessment` skill) is reported as a **run**: one assessment whose skill is
+`full-assessment`, which reports `asset.upserted` events as it inventories the network. Each asset it then
+assesses gets its own assessment, started with `parent` set to the run's `assessment_id`, and the run
+updates that asset's `coverage` and `assessment_id`. Dashboards group child assessments under their run.
+
+Assets, like findings, may be updated with only the fields that changed.
 
 `target` is a label the user will recognize, not a secret: for example "home NAS". Follow the report
 redaction rules; don't include serial numbers or credentials.

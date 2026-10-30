@@ -44,6 +44,10 @@ the content check. Never commit it, and never copy its contents into a tracked f
   Remediate / Respond sections, a worked example, version history), `incident-response.md`, and
   `references.md`. Domains are technology areas (`network`, `storage`, `operating-systems`,
   `surveillance`, `web`, …), not audiences; audience goes in frontmatter.
+- Every product skill needs a `## Detection` section (vendor-default ports, banners, discovery
+  announcements, MAC vendors). `build-dist.py` extracts it, with the frontmatter, into `dist/catalog.md`,
+  which the `full-assessment` skill (`skills/orchestration/`) uses to match discovered devices to skills.
+  Orchestration skills are excluded from the catalog and get it bundled instead.
 - New skills start from `templates/skill-template/`. `skills/storage/synology-dsm/` is the reference
   example.
 - Skills contain only product-specific content and link to core with `../../../core/<file>.md`.
