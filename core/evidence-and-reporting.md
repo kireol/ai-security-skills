@@ -1,0 +1,136 @@
+# Core: Evidence, Findings, and Reporting
+
+How every skill records evidence, states confidence, and produces its report.
+
+## Evidence labels
+
+Label every piece of evidence:
+
+- **Observed:** read directly from the target system or a trusted integration during this assessment.
+- **Vendor-documented:** stated in current vendor documentation for the applicable product and version.
+- **Third-party documented:** reported by a repository, scanner, researcher, or other external source.
+  Validate before acting on it.
+- **User-reported:** stated by the user but not observed.
+- **Inferred:** a conclusion drawn from observed facts. Not proof of exploitability or compromise.
+- **Unknown / Not assessed:** the evidence was unavailable or the check was not run.
+
+An empty result is not automatically a pass. Check exit status, permissions, scope, pagination, and error
+output. Preserve stderr when diagnosing an unknown state; do not hide errors with `2>/dev/null`.
+
+For every inventory item, record its source, collection time, version, and confidence. For every
+vulnerability, record the advisory URL and retrieval date, the affected and fixed version ranges, the
+observed installed version, and why it does or does not apply.
+
+## Three kinds of status
+
+Keep these separate. They answer different questions.
+
+| Question | Values |
+|---|---|
+| **How sure are we this finding is real?** (finding confidence) | **Confirmed** · **Likely** · **Potential** |
+| **What happened to each assessment domain?** (domain checklist) | **Pass** · **Finding** · **Not assessed** · **Not applicable** · **Accepted risk** |
+| **Where is the finding in its lifecycle?** (finding state) | **Open** · **Resolved** · **Partially resolved** · **Failed** · **Unverified** · **Accepted risk** |
+
+Mark a finding **Resolved** only when verification evidence supports it. Never present a recommendation as
+a verified finding.
+
+## Finding IDs
+
+Each skill declares a short ID prefix in its frontmatter (for example `NAS`, `FW`, `HV`). Number findings
+sequentially within an assessment: `NAS-001`, `NAS-002`. Reuse the same ID when re-assessing the same
+issue, so findings can be tracked across assessments and combined across skills.
+
+## Finding template
+
+```markdown
+### NAS-001: <short title>
+
+**Confidence:** Confirmed / Likely / Potential
+**Priority:** P0–P4, with rationale
+**State:** Open
+**Component:** <component> <installed version/configuration>
+**Evidence:** <what was observed, how, when, and its evidence label>
+**Expected secure state:** <and the authoritative source>
+**Exposure and prerequisites:** <attack path; who can reach it; what an attacker needs>
+**Advisory:** <CVE/advisory ID, affected and fixed versions, source URL, retrieval date> (if applicable)
+**Dependencies / blast radius:** <what relies on the current state and would break if it changed>
+**Recommended remediation:** <exact change, plus alternatives>
+**Operation class:** R / C1 / C2 / C3, and whether downtime or a reboot is expected
+**Approval required:** Yes / No, and why
+**Verification:** <how to prove the fix worked>
+**Rollback:** <how to undo it>
+```
+
+## Machine-readable findings
+
+At the end of every report, include the findings as YAML so they can be tracked or merged with other
+skills' results:
+
+```yaml
+assessment:
+  skill: <skill name>
+  skill_version: <version>
+  target: <redacted target identity>
+  date: <ISO-8601 date>
+findings:
+  - id: NAS-001
+    title: <short title>
+    priority: P2
+    confidence: Confirmed
+    state: Open
+    component: <component>
+    operation_class: C2
+    advisories: []
+    evidence_label: Observed
+```
+
+## Report structure
+
+1. **Summary:** scope, date, access method, and overall risk posture in a few sentences.
+2. **Findings table:**
+
+   | ID | Priority | Component | Finding | Evidence / source | State |
+   |---|---|---|---|---|---|
+
+3. **Findings in detail**, using the template above, most severe first.
+4. **Domain checklist:** every domain the skill defines, with its status. None may be silently omitted.
+5. **Closing sections:**
+   - **What is secure / verified**
+   - **What needs attention**
+   - **What was changed** (with before/after state and verification)
+   - **What remains unknown**
+   - **Next review**
+6. **Machine-readable findings** (YAML).
+
+Keep an open-findings register between assessments.
+
+## Definition of success
+
+An engagement is successful only when:
+
+- The system and relevant connected components have a documented inventory.
+- Public exposure and enabled services are understood.
+- Supported software is current, or has a documented, risk-managed exception.
+- Known-exploited and high-impact vulnerabilities are prioritized and addressed or mitigated.
+- Every assessment domain in the skill has a status.
+- Changes are authorized, safely applied, and verified.
+- Recovery paths are understood and backups have been restore-tested.
+- Remaining risks and unknowns are explicit.
+
+**Never issue an unconditional "secure" or "fully protected" verdict.** State the scope, evidence, date,
+and residual risk.
+
+## Assessment cadence
+
+Adapt to risk and the user's capacity. These are starting points:
+
+- **Continuous / event-driven:** alerts for suspicious logins, backup failures, storage or health
+  problems, and security-relevant configuration changes.
+- **Weekly:** critical update availability, high-priority advisories, backup failures, unresolved urgent
+  findings.
+- **Monthly:** updates for the product and its add-ons, accounts and permissions, public exposure, backup
+  and restore status.
+- **Quarterly:** full attack surface, firewall rules, remote access, service necessity, recovery
+  documentation, and a restore exercise.
+- **After every significant change:** new add-ons or containers, network or router changes, new remote
+  access, major upgrades, or permission changes.

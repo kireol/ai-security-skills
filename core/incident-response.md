@@ -1,0 +1,233 @@
+# Core: Respond (Incident Response)
+
+The generic playbook for the **Respond** mode. It applies when the user reports, or the agent detects, a
+possible intrusion, malicious account use, malware, ransomware, unauthorized access, data theft,
+destructive activity, or unexplained changes. Each product skill's `incident-response.md` adds
+product-specific steps on top of this playbook.
+
+Take a credible suspicion seriously, but distinguish suspicion from confirmed compromise. The goals are to
+stop ongoing harm, preserve evidence, determine scope, recover from a trusted state, and prevent
+recurrence.
+
+**Switch immediately from routine work to Respond.** Pause upgrades, cleanup, configuration
+optimization, and unrelated remediation. Do not start by deleting suspicious files, uninstalling software,
+clearing logs, resetting the system, rebuilding storage, or rebooting. Those actions can destroy evidence,
+cause further damage, or make recovery harder.
+
+## 1. Triage and immediate actions
+
+Establish whether harm is active and whether the user needs urgent human help. Ask concise questions, one
+at a time, only where the answer changes the next safe action:
+
+- What was observed, and when was it first noticed?
+- Is data being renamed, encrypted, or deleted right now? Are unknown users logged in, or suspicious
+  connections still active?
+- Is the system reachable from the internet, and are other devices showing symptoms?
+- Are backups, snapshots, or backup destinations currently connected or writable from the affected system?
+
+Give the user these instructions as appropriate:
+
+1. **Use a known-clean device** for communications, account recovery, and administration. Do not use a
+   possibly infected computer to change passwords, access email or banking, or administer systems. Never
+   paste passwords, recovery codes, private keys, or tokens into chat.
+2. **Stop using affected accounts and devices for administration.** Don't open suspicious attachments,
+   scripts, ransom notes, or links except as part of controlled evidence preservation.
+3. **Contain active spread.** If ransomware or malware is spreading, disconnect affected devices from
+   wired and wireless networks. Isolate the affected system or service from untrusted networks using the
+   router, switch, VLAN, hypervisor, or cable, as appropriate. Consider temporarily blocking public port
+   forwards and remote-access paths, but avoid broad firewall changes that could strand recovery access or
+   affect unrelated systems.
+4. **Protect backups and unaffected systems.** Stop compromised systems writing to backup destinations.
+   If a backup disk or destination is not currently being written to, disconnect it and store it safely.
+   Never connect offline backups to a possibly compromised system. Don't change backup retention or delete
+   snapshots.
+5. **Don't casually power off.** Network isolation is generally preferred: powering off destroys volatile
+   evidence and can interrupt storage operations. If destruction is continuing and isolation can't be
+   achieved quickly, cut network access; powering off is a last resort, used when the risk of continued
+   damage outweighs evidence and storage risks.
+6. **Escalate when the stakes are high.** If safety, critical services, or large-scale data loss is at
+   stake, engage a qualified incident-response provider or trusted IT/security professional. For serious
+   criminal activity, extortion, or suspected data theft, consider contacting law enforcement.
+
+Tailor containment to the topology. Do not tell the user to unplug a system if that would interrupt a
+critical service, corrupt an active storage operation, or destroy the only evidence. An agent with
+write-capable tools must not make disruptive containment changes without explicit approval or a specific
+emergency standing authorization (see [modes-and-authorization.md](modes-and-authorization.md)).
+
+## 2. Preserve evidence and build a timeline
+
+Before nonessential changes, preserve what is reasonably available without increasing harm:
+
+- Record the date, time, and timezone of discovery, who noticed it, symptoms, affected systems, and
+  actions already taken.
+- Capture product version, installed add-ons/containers, enabled services, network exposure, accounts and
+  group membership, recent configuration changes, and scheduled tasks.
+- Export relevant logs: system, login/security, firewall/router, VPN, reverse proxy, DNS, endpoint
+  security, and backup. Preserve them off the affected system when safe and authorized.
+- Record indicators: source IPs, hostnames, account names, process/service names, package names,
+  container IDs and image digests, file paths, timestamps, ransom-note names, and file extensions. Redact
+  secrets and personal information in reports.
+- Preserve alerts, emails, ransom notes, and suspicious files. Never execute suspicious files, and don't
+  upload private data to public malware-analysis services without approval and a privacy review.
+- Where qualified responders and suitable tools are available, consider disk images, memory capture, and
+  evidence hashes. Don't improvise raw-disk imaging on a live production system.
+- Keep an action log: who did what, on which system, when, why, and what changed. Note any evidence that
+  couldn't be collected, and why.
+
+Local logs may be incomplete or tampered with; an attacker with administrative access can alter them.
+Correlate with router, firewall, VPN, DNS, endpoint, cloud identity, and off-device logs where possible.
+
+## 3. Scope beyond the affected system
+
+Assume the affected system may be one part of a wider incident until evidence narrows it:
+
+- Workstations, laptops, phones, servers, hypervisors, VMs, containers, and other systems that accessed
+  it or share its credentials.
+- Router/firewall, VPN and other remote-access systems, reverse proxies, DNS/DDNS, and exposed management
+  services.
+- Accounts, groups, API keys, tokens, SSH keys, certificates, scheduled and startup tasks, installed
+  software, containers, and new or modified admin tools.
+- Cloud accounts that sync, back up, or store its data, plus identity/email and remote-management accounts.
+- Reused passwords, password-manager access, MFA recovery methods, browser sessions, and service
+  credentials that may have been exposed.
+- Signs of data exfiltration as well as encryption: bulk reads, unusual outbound traffic, unexpected
+  archives. Ransomware incidents often include data theft before encryption.
+
+Work out the likely initial access vector (vulnerable exposed service, stolen credentials, compromised
+endpoint, malicious container or package, unsafe remote access), persistence, lateral movement, affected
+data, and whether the attacker may still have access. Mark unknowns explicitly. Don't guess an entry
+point from a single suspicious login.
+
+## 4. Credentials, sessions, and access revocation
+
+Rotate credentials from a known-clean device, in a coordinated order, so the attacker doesn't keep another
+way in:
+
+- Prioritize compromised administrator, email/identity, VPN/remote-access, and backup-capable credentials.
+- Disable or restrict confirmed compromised accounts where safe. Revoke active sessions, API tokens, app
+  passwords, OAuth grants, SSH keys, and certificates where applicable.
+- Rotate reused or possibly exposed passwords everywhere they're used, not just on this system.
+- Re-establish MFA with trusted devices. Review recovery email/phone, trusted devices, passkeys, and
+  recovery options.
+- Remove unauthorized admins, scheduled tasks, startup entries, SSH keys, software sources, containers,
+  and remote-access methods only after preserving evidence and understanding dependencies.
+- Don't rotate every secret indiscriminately: uncoordinated rotation breaks backups and services. Keep a
+  rotation register and verify each dependent service afterward.
+
+The agent never asks for the secret value. It provides a prioritized rotation plan and gets approval for
+changes that may interrupt services.
+
+## 5. Ransomware or destructive activity
+
+1. Isolate affected devices and systems as quickly and safely as possible. Pause sync and replication
+   paths that could spread encrypted or deleted files, after checking how to pause them without destroying
+   recovery points.
+2. Protect backups and snapshots from further writes or deletion. Don't delete encrypted files, ransom
+   notes, suspicious binaries, snapshots, or backup versions.
+3. Identify affected data, snapshots, backups, clients, and applications. Determine whether encryption is
+   still active and whether data may also have been exfiltrated.
+4. Don't run bulk cleaning, mass rename, or decryption on the original data. Never restore over affected
+   data.
+5. Check for a reputable decryptor for the exact ransomware family, using law-enforcement or established
+   security-vendor sources. Never run a decryptor from an untrusted source on the only copy of the data.
+6. Don't advise that paying a ransom will recover data or prevent publication. Payment decisions are
+   complex, may have legal implications, and guarantee nothing. Recommend consulting law enforcement,
+   legal counsel, the insurer (if any), and qualified responders first.
+7. Restore only after the entry point and attacker access are dealt with, the recovery environment is
+   trusted, and backups are checked for integrity and contamination.
+
+## 6. Malware or a suspicious package/container without obvious ransomware
+
+- Treat a detection, unknown binary, suspicious package, or unexpected container as an indicator to
+  validate, not automatic proof of full compromise.
+- Identify its path, hash, publisher, source, creation/modification time, execution context, privileges,
+  mounts, network access, and related logs.
+- Don't execute, move, delete, quarantine, or uninstall it until evidence is preserved and the impact is
+  understood, unless immediate containment is necessary and authorized.
+- Inspect provenance and configuration from a trusted management host: privileged mode, container-runtime
+  socket mounts, host networking, broad writable mounts, exposed ports, and secrets.
+- Use current, reputable detection tools, but a clean scan is not proof of safety. Scanners can miss
+  persistence, stolen credentials, web shells, kernel-level activity, and exfiltration.
+- If the integrity of the operating system or privileged software is in doubt, prefer a vendor-supported
+  rebuild or reinstall over trying to surgically remove unknown persistence. Preserve data and evidence
+  first.
+
+## 7. Eradication and trusted recovery
+
+Recovery is more than restarting services or changing a password. Before reconnecting:
+
+1. Identify and close the initial access path: patch to a verified fixed version, or disable/remove the
+   exposed service if no safe fix exists.
+2. Confirm whether the OS, privileged software, boot/startup configuration, accounts, scheduled tasks,
+   remote access, containers, and management integrations can be trusted.
+3. If integrity can't be established, use the vendor's current recovery/reinstallation guidance or a
+   qualified specialist. Never improvise firmware flashing, resets, or storage repair.
+4. Rebuild containers from trusted, verified images and known-good configuration. Don't reuse possibly
+   compromised images, secrets, volumes, or deployment scripts without review.
+5. Restore data from a known-good backup taken before the earliest plausible compromise, and validate it
+   from a clean environment. Snapshots on the compromised system may also have been under attacker control.
+6. Restore in stages on an isolated or restricted network. Reconnect only clean, patched systems and
+   necessary services, and monitor closely before restoring broad LAN or internet access.
+7. Verify admin and MFA state, revoked sessions, IPv4/IPv6 exposure, installed software, scheduled tasks,
+   backup protection, logging, and endpoint health.
+8. Test representative file and application restores, then confirm backups and off-system copies are
+   working again.
+
+**Exit criteria.** Don't declare the incident eradicated until the likely entry path is closed,
+persistence and unauthorized access are addressed to a reasonable standard, credentials and sessions are
+reset as appropriate, restored systems are validated, and monitoring shows no continuing indicators.
+State residual uncertainty.
+
+## 8. Reporting, privacy, and lessons learned
+
+- Determine whether personal, financial, health, business, or other sensitive data may have been accessed
+  or exfiltrated. Avoid unsupported public claims.
+- Recommend consulting legal counsel, the insurer, affected organizations, and regulators where
+  applicable. Breach-notification duties depend on jurisdiction, data type, and circumstances; the agent
+  must not invent a deadline or give a definitive legal conclusion.
+- In the United States, cybercrime can be reported to the FBI's Internet Crime Complaint Center
+  (https://www.ic3.gov/) and local law enforcement. Organizations can also contact CISA
+  (https://www.cisa.gov/report). CISA's ransomware guide: https://www.cisa.gov/stopransomware/ransomware-guide
+- Document the timeline, affected assets, accounts, and data, likely entry point, containment actions,
+  evidence preserved, recovery sources, notifications, and open questions.
+- Run a lessons-learned review: update the security baseline, network diagrams, and recovery procedures,
+  improve off-system logging, test backups, and schedule a follow-up assessment.
+
+## 9. Agent behavior during Respond
+
+- State the current assessment: **Suspected**, **Likely**, or **Confirmed** compromise, with evidence and
+  confidence. Don't overstate certainty or minimize credible indicators.
+- Present immediate safety and containment steps separately from longer-term remediation. Keep
+  instructions short and prioritized while an incident is active.
+- Read-only evidence collection is allowed within scope only if it creates no additional risk.
+- Get explicit approval before disruptive containment, account disablement, token revocation,
+  firewall/router changes, service shutdown, reboot, software removal, reset, restore, or any destructive
+  action, unless that specific action was pre-authorized. Never delay telling the user about urgent manual
+  steps while waiting for approval.
+- If the incident exceeds the agent's expertise or the user's capacity, say so and recommend qualified
+  incident-response help.
+- Never promise that malware is gone, data wasn't stolen, backups are clean, or the system is safe based
+  only on a scan, a password change, an update, or the absence of visible symptoms.
+
+## 10. Quick checklist for the user
+
+When the user says "I think I've been hacked," give a short, calm checklist before deep investigation.
+Each skill's `incident-response.md` may tailor it to its product.
+
+- [ ] Stop administering from any possibly infected computer; use a known-clean device.
+- [ ] If there is active encryption or spread, isolate affected devices and services from the network,
+      keeping a safe recovery path if possible.
+- [ ] Stop affected systems from writing to backups; keep offline backups disconnected.
+- [ ] Don't reboot, reset, reinstall, delete suspicious files, clear logs, or restore over affected data
+      unless a qualified response plan calls for it.
+- [ ] Write down what happened and when; preserve logs, alerts, ransom notes, and indicators.
+- [ ] From a clean device, secure email, identity, VPN, admin, and backup accounts; revoke compromised
+      sessions and tokens; rotate exposed credentials in a coordinated order.
+- [ ] Check other computers, servers, containers, the router/firewall, cloud sync, and backups, not just
+      the affected system.
+- [ ] Get qualified help for ransomware, suspected data theft, privileged compromise, or uncertain
+      recovery integrity.
+- [ ] Restore only from verified clean backups, after closing the entry point and validating the recovery
+      environment.
+
+This checklist is a triage aid, not a substitute for a tailored incident-response plan.

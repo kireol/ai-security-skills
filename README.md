@@ -1,7 +1,12 @@
 # AI Security Skills
 
-Portable, model- and tool-agnostic instruction sets ("skills") that let an AI assistant audit, harden, and
-help recover the systems people run at home, at work, in a homelab, and on the web.
+A collection of AI security skills designed to help secure your home network, office infrastructure, and internet-facing servers.
+
+These skills enable your AI assistant to **Discover** security weaknesses and potential threats, **Recommend** practical improvements, **Remediate** vulnerabilities with appropriate authorization, and **Respond** to suspected security incidents, malware, and active compromises.
+
+Built to help your AI act as a security partner—not just identify problems, but help you understand, prioritize, and address them.
+
+The skills are portable, model- and tool-agnostic Markdown instruction sets that work with Claude Code, Codex, local LLMs, MCP clients, or a human following along.
 
 Every skill covers four modes:
 
@@ -10,7 +15,7 @@ Every skill covers four modes:
 | **Discover** | Inspects the system and reports weaknesses with evidence. | Read-only access within the agreed scope. |
 | **Recommend** | Proposes specific fixes and explains their consequences, dependencies, and rollback. | None beyond Discover; nothing is changed. |
 | **Remediate** | Makes changes. | Explicit approval for each change, or a bounded standing authorization. |
-| **Incident response** | Walks the user through containment, evidence preservation, and recovery after a suspected compromise. | Urgent manual steps are advised immediately; disruptive actions still need approval. |
+| **Respond** (incident response) | Walks the user through containment, evidence preservation, and recovery after a suspected compromise. | Urgent manual steps are advised immediately; disruptive actions still need approval. |
 
 ## Layout
 
@@ -25,15 +30,22 @@ dist/                     Generated standalone single-file bundles (core + skill
 scripts/                  Tooling, including the content check
 ```
 
-`core/`, `templates/`, and `dist/` are being built out; until then, the Synology skill is self-contained.
+## Using a skill
+
+- **Claude Code (or any loader that understands `SKILL.md`):** copy `dist/<skill>/` into your skills
+  directory (for Claude Code, `~/.claude/skills/<skill>/` or `.claude/skills/<skill>/` in a project). The
+  folder includes its own copy of `core/`.
+- **Any other AI assistant:** paste or attach the single file `dist/<skill>.md`. It contains the skill and
+  all of `core/`.
+- Then ask, for example: "Use the Synology DSM security skill to run a Discover assessment of my NAS."
 
 ## Catalog
 
-Status: ✅ available · 🛠 needs restructuring to the template · ⏳ planned
+Status: ✅ available · ⏳ planned
 
 | Domain | Skill | Status |
 |---|---|---|
-| storage | Synology DSM (including DSM on non-Synology hardware) | 🛠 |
+| storage | Synology DSM (including DSM on non-Synology hardware) | ✅ |
 | network | OPNsense / pfSense firewall | ⏳ |
 | network | WireGuard / OpenVPN | ⏳ |
 | network | DNS filtering (AdGuard Home, Pi-hole) | ⏳ |
