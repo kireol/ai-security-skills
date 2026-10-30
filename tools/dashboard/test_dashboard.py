@@ -75,7 +75,7 @@ class AggregateTests(unittest.TestCase):
         self.state = state
 
     def test_newest_assessment_first(self):
-        self.assertEqual(self.state["assessments"][0]["id"], "2026-01-16-example-firewall")
+        self.assertEqual(self.state["assessments"][0]["id"], "2026-01-15-example-home-run")
 
     def test_partial_finding_update_merges(self):
         nas = self.by_id["2026-01-15-example-nas"]
@@ -212,3 +212,52 @@ class ServerTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ReportTests(unittest.TestCase):
+    def setUp(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("aiss_report", Path(__file__).resolve().parent / "report.py")
+        self.report = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.report)
+        self.tmp = tempfile.TemporaryDirectory()
+        self.run = Path(self.tmp.name)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def quiet_main(self):
+        import contextlib
+        import io
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            return self.report.main(self.run)
+
+    def write(self, events):
+        (self.run / "events.jsonl").write_text("".join(json.dumps(e) + "\n" for e in events))
+
+    def test_sample_run_totals_and_files(self):
+        (self.run / "events.jsonl").write_text(SAMPLE.read_text())
+        self.assertEqual(self.quiet_main(), 0)
+        t = self.report.totals(self.report.load_run(self.run)[0]["assessments"])
+        self.assertEqual((t["systems"], t["serious"], t["warnings"], t["info"]), (4, 3, 1, 0))
+        for name in ("report.md", "report.html"):
+            self.assertEqual((self.run / name).stat().st_mode & 0o777, 0o600)
+
+    def test_untrusted_text_is_escaped_in_html(self):
+        hostile = "<script>alert(1)</script>"
+        self.write([event("assessment.started", skill="x", target=hostile),
+                    event("finding.upserted", id="X-001", title=hostile, priority="P1", state="open",
+                          recommendation=hostile)])
+        self.quiet_main()
+        page = (self.run / "report.html").read_text()
+        self.assertNotIn("<script>", page)
+        self.assertIn("&lt;script&gt;", page)
+
+    def test_systems_without_inventory_count_assessments(self):
+        self.write([event("assessment.started", aid="a", skill="opnsense", target="fw"),
+                    event("assessment.started", aid="b", skill="synology-dsm", target="nas")])
+        t = self.report.totals(self.report.load_run(self.run)[0]["assessments"])
+        self.assertEqual(t["systems"], 2)
+
+    def test_empty_run_fails(self):
+        self.assertEqual(self.quiet_main(), 1)

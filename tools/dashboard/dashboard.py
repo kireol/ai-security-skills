@@ -3,8 +3,9 @@
 
 Standard library only; Python 3.9+.
 
-  dashboard.py serve [--host 127.0.0.1] [--port 8770] [--data DIR] [--allow-host NAME ...]
+  dashboard.py serve [--host 127.0.0.1] [--port 8770] [--data DIR] [--reports DIR] [--open]
   dashboard.py validate FILE.jsonl ...
+  dashboard.py report RUN_DIR      write report.md and report.html for a run and print the totals
 """
 import argparse
 import hmac
@@ -21,6 +22,7 @@ from pathlib import Path
 
 SCHEMA = "ai-security-skills/event/v1"
 DEFAULT_DATA = Path(os.environ.get("AISS_DASHBOARD_DATA", Path.home() / ".ai-security-dashboard"))
+DEFAULT_REPORTS = Path(os.environ.get("AISS_REPORTS", Path.home() / "ai-security-reports"))
 DEFAULT_PORT = 8770
 MAX_BODY = 1_000_000
 MAX_TEXT = 4000
@@ -61,7 +63,10 @@ EVENT_FIELDS = {
     "finding.upserted": {"id": (FINDING_ID, True), "title": ("text", False), "priority": (PRIORITY, False),
                          "confidence": (CONFIDENCE, False), "state": (FINDING_STATE, False),
                          "component": ("text", False), "operation_class": (OPERATION_CLASS, False),
-                         "evidence_label": (EVIDENCE, False), "summary": ("text", False)},
+                         "evidence_label": (EVIDENCE, False), "summary": ("text", False),
+                         "evidence": ("text", False), "exposure": ("text", False),
+                         "recommendation": ("text", False), "verification": ("text", False),
+                         "rollback": ("text", False)},
     "change.recorded": {"description": ("text", True), "operation_class": (OPERATION_CLASS, True),
                         "result": (CHANGE_RESULT, True), "finding_id": (FINDING_ID, False),
                         "approved_by": ("text", False), "rollback": ("text", False)},
@@ -167,11 +172,13 @@ def _now():
 
 
 class EventStore:
-    """Events live in <data>/events/*.jsonl, written by agents directly or by the HTTP endpoint."""
+    """Events live in <data>/events/*.jsonl (agents or the HTTP endpoint) and, when a reports directory is
+    given, in each run folder's <reports>/<run-id>/events*.jsonl (one file per parallel agent)."""
 
-    def __init__(self, data_dir):
+    def __init__(self, data_dir, reports_dir=None):
         self.events_dir = Path(data_dir) / "events"
         self.events_dir.mkdir(parents=True, exist_ok=True)
+        self.reports_dir = Path(reports_dir) if reports_dir else None
         self._lock = threading.Lock()
         self._cache = {}
 
@@ -189,6 +196,7 @@ class EventStore:
         if cached and cached[0] == key:
             return cached[1], cached[2]
         events, rejected = [], []
+        label = f"{path.parent.name}/{path.name}" if path.parent != self.events_dir else path.name
         received = datetime.fromtimestamp(stat.st_mtime, timezone.utc).isoformat(timespec="seconds")
         received = received.replace("+00:00", "Z")
         with open(path, encoding="utf-8", errors="replace") as fh:
@@ -198,16 +206,19 @@ class EventStore:
                 try:
                     events.append(validate_event(json.loads(line), received))
                 except json.JSONDecodeError:
-                    rejected.append({"file": path.name, "line": number, "reason": "not valid JSON"})
+                    rejected.append({"file": label, "line": number, "reason": "not valid JSON"})
                 except InvalidEvent as exc:
-                    rejected.append({"file": path.name, "line": number, "reason": str(exc)})
+                    rejected.append({"file": label, "line": number, "reason": str(exc)})
         self._cache[path] = (key, events, rejected)
         return events, rejected
 
     def load(self):
         events, rejected = [], []
+        paths = sorted(self.events_dir.glob("*.jsonl"))
+        if self.reports_dir and self.reports_dir.is_dir():
+            paths += sorted(self.reports_dir.glob("*/events*.jsonl"))
         with self._lock:
-            for path in sorted(self.events_dir.glob("*.jsonl")):
+            for path in paths:
                 file_events, file_rejected = self._read_file(path)
                 events.extend(file_events)
                 rejected.extend(file_rejected)
@@ -401,10 +412,10 @@ def load_token(data_dir):
     return token
 
 
-def make_server(host, port, data_dir, token, extra_hosts=()):
+def make_server(host, port, data_dir, token, extra_hosts=(), reports_dir=None):
     server = ThreadingHTTPServer((host, port), Handler)
     server.daemon_threads = True
-    server.store = EventStore(data_dir)
+    server.store = EventStore(data_dir, reports_dir)
     server.token = token
     server.allowed_hosts = {"localhost", "127.0.0.1", "[::1]", host.lower()} | {h.lower() for h in extra_hosts}
     return server
@@ -417,12 +428,18 @@ def cmd_serve(args):
     data_dir.mkdir(parents=True, exist_ok=True)
     os.chmod(data_dir, 0o700)
     token = load_token(data_dir)
-    server = make_server(args.host, args.port, data_dir, token, args.allow_host)
+    reports_dir = Path(args.reports).expanduser()
+    server = make_server(args.host, args.port, data_dir, token, args.allow_host, reports_dir)
     shown = "127.0.0.1" if args.host in ("0.0.0.0", "::") else args.host
-    print(f"Dashboard:   http://{shown}:{server.server_address[1]}/#token={token}")
+    url = f"http://{shown}:{server.server_address[1]}/#token={token}"
+    print(f"Dashboard:   {url}")
+    print(f"Run folders: {reports_dir}/<run-id>/events.jsonl")
     print(f"Events dir:  {server.store.events_dir}")
     print(f"HTTP ingest: POST http://{shown}:{server.server_address[1]}/api/events (Bearer token)")
-    print("Keep this dashboard off the internet: it is a map of your weaknesses.")
+    print("Keep this dashboard off the internet: it is a map of your weaknesses.", flush=True)
+    if args.open:
+        import webbrowser
+        webbrowser.open(url)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
@@ -453,11 +470,23 @@ def main(argv=None):
     serve.add_argument("--host", default="127.0.0.1")
     serve.add_argument("--port", type=int, default=DEFAULT_PORT)
     serve.add_argument("--data", default=str(DEFAULT_DATA), help=f"data directory (default {DEFAULT_DATA})")
+    serve.add_argument("--reports", default=str(DEFAULT_REPORTS),
+                       help=f"folder of run folders to show (default {DEFAULT_REPORTS})")
     serve.add_argument("--allow-host", action="append", default=[],
                        help="extra Host name/IP to accept (repeatable); required when binding all interfaces")
+    serve.add_argument("--open", action="store_true", help="open the dashboard in the default browser")
     validate = sub.add_parser("validate", help="check event files without running the server")
     validate.add_argument("files", nargs="+")
+    report = sub.add_parser("report", help="write report.md and report.html for a run folder and print totals")
+    report.add_argument("run_dir")
     args = parser.parse_args(argv)
+    if args.command == "report":
+        # Load by path: isolated mode (python3 -I) doesn't put this folder on the import path.
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("aiss_report", Path(__file__).resolve().parent / "report.py")
+        report_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(report_module)
+        return report_module.main(args.run_dir)
     return cmd_serve(args) if args.command == "serve" else cmd_validate(args)
 
 

@@ -106,11 +106,33 @@ findings:
 
 Keep an open-findings register between assessments.
 
-## Live reporting
+## Run folder, final reports, and the closing message
 
-If the user provides a dashboard folder or endpoint, also report progress while working, using
-[reporting-protocol.md](reporting-protocol.md). This is in addition to the written report, not a
-replacement.
+Record the assessment as you work in its run folder, using [reporting-protocol.md](reporting-protocol.md).
+At the end of every assessment (or the last phase of a phased one):
+
+1. **Generate the reports.** If this collection's tools are available and you can run commands, run
+   `python3 tools/dashboard/dashboard.py report <run folder>` from the collection's folder. It writes
+   `report.md` and `report.html` into the run folder from the recorded events and prints the totals. If
+   you can't run it, write both files yourself with the structure above, escaping all text in the HTML
+   (findings contain text copied from scanned systems). Either way, the files must be readable only by
+   the user.
+2. **Close with the totals and paths**, in this form:
+
+   ```
+   Assessment complete.
+   Systems found:     <n>
+   Serious problems:  <n>  (open P0–P2)
+   Warnings:          <n>  (open P3)
+   Informational:     <n>  (open P4)
+   Not covered:       <n> systems with no skill, <n> domains not assessed   (omit if both are zero)
+   Full report (HTML):     <path>
+   Full report (Markdown): <path>
+   ```
+
+   "Systems found" is the number of assets in the inventory, or the number of systems assessed if there
+   was no inventory. Mention any active incident above the totals. Then offer the next step (for example,
+   working through the recommended actions, or resuming the next phase).
 
 ## Definition of success
 

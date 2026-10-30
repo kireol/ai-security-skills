@@ -1,3 +1,4 @@
 .private-denylist
 .DS_Store
 __pycache__/
+ai-security-reports/

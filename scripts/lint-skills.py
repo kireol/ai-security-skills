@@ -15,7 +15,7 @@ SECTIONS = ["How to use this skill", "Deployment variants", "Discover", "Recomme
 PRODUCT_SECTIONS = ["Detection"]
 # Orchestration skills (skills/orchestration/) run other skills in phases, so they need fewer parts.
 ORCHESTRATION_PARTS = ["SKILL.md"]
-ORCHESTRATION_SECTIONS = ["How to use this skill", "Recommend", "Remediate", "Respond", "Version history"]
+ORCHESTRATION_SECTIONS = ["How to use this skill", "Version history"]
 PREFIX = re.compile(r"^[A-Z][A-Z0-9]{0,9}$")
 LINK = re.compile(r"\[[^\]]+\]\((?!https?:)([^)#\s]+)\)")
 

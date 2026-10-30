@@ -9,15 +9,19 @@ Python file with no dependencies (Python 3.9+).
 
 ## Run it
 
+The easiest way is `scripts/assess.sh --dashboard`, which starts the dashboard, opens it, and starts the
+assessment in one command (`scripts/assess.sh --stop` stops it). To run the dashboard on its own:
+
 ```sh
-python3 tools/dashboard/dashboard.py serve
+python3 tools/dashboard/dashboard.py serve --open
 ```
 
-It prints three things:
+It prints:
 
 - **Dashboard URL**, including the token, e.g. `http://127.0.0.1:8770/#token=…`. Open it in a browser.
   The token is in the URL fragment, which browsers never send to the server; the page moves it to session
   storage and removes it from the address bar.
+- **Run folders**: it shows every `~/ai-security-reports/<run-id>/events*.jsonl` (change with `--reports`).
 - **Events folder**, by default `~/.ai-security-dashboard/events/`.
 - **HTTP endpoint**: `POST http://127.0.0.1:8770/api/events`.
 
@@ -41,6 +45,18 @@ curl -X POST http://127.0.0.1:8770/api/events \
 ```
 
 To see the dashboard with invented data, copy `examples/sample-events.jsonl` into the events folder.
+
+## Reports
+
+At the end of a run, the agent generates the final reports from the run folder:
+
+```sh
+python3 tools/dashboard/dashboard.py report ~/ai-security-reports/<run-id>
+```
+
+This writes `report.md` and `report.html` (owner-only permissions) and prints the number of systems,
+serious problems (open P0–P2), warnings (open P3), and informational items (open P4), plus the file
+paths. It works whether or not the dashboard was running.
 
 Check event files without running the server:
 

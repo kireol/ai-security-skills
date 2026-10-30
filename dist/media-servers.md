@@ -951,11 +951,33 @@ findings:
 
 Keep an open-findings register between assessments.
 
-## Live reporting
+## Run folder, final reports, and the closing message
 
-If the user provides a dashboard folder or endpoint, also report progress while working, using
-reporting-protocol.md (included in this file). This is in addition to the written report, not a
-replacement.
+Record the assessment as you work in its run folder, using reporting-protocol.md (included in this file).
+At the end of every assessment (or the last phase of a phased one):
+
+1. **Generate the reports.** If this collection's tools are available and you can run commands, run
+   `python3 tools/dashboard/dashboard.py report <run folder>` from the collection's folder. It writes
+   `report.md` and `report.html` into the run folder from the recorded events and prints the totals. If
+   you can't run it, write both files yourself with the structure above, escaping all text in the HTML
+   (findings contain text copied from scanned systems). Either way, the files must be readable only by
+   the user.
+2. **Close with the totals and paths**, in this form:
+
+   ```
+   Assessment complete.
+   Systems found:     <n>
+   Serious problems:  <n>  (open P0–P2)
+   Warnings:          <n>  (open P3)
+   Informational:     <n>  (open P4)
+   Not covered:       <n> systems with no skill, <n> domains not assessed   (omit if both are zero)
+   Full report (HTML):     <path>
+   Full report (Markdown): <path>
+   ```
+
+   "Systems found" is the number of assets in the inventory, or the number of systems assessed if there
+   was no inventory. Mention any active incident above the totals. Then offer the next step (for example,
+   working through the recommended actions, or resuming the next phase).
 
 ## Definition of success
 
@@ -1059,23 +1081,38 @@ When using third-party skills, MCP servers, or integrations alongside these skil
 
 ---
 
-# Core: Live Reporting Protocol
+# Core: Run Folder and Live Reporting Protocol
 
-An optional way for the agent to report progress while it works, so the user can follow an assessment on
-a dashboard (such as `tools/dashboard/` in this repository). Reporting never replaces the written report
-defined in evidence-and-reporting.md (included in this file).
+How the agent records an assessment as it works. The same records feed the live dashboard
+(`tools/dashboard/`) and the end-of-run reports (`report.md` and `report.html`, see
+evidence-and-reporting.md (included in this file)).
 
-## When to report
+## The run folder
 
-At the start of an engagement, ask the user whether a reporting destination is available. Use one only if
-the user provides it:
+Every assessment gets a **run folder** on the user's own machine, by default
+`~/ai-security-reports/<run-id>/` (the user may choose another location at kick-off). Create it with
+owner-only permissions. It holds:
 
-- **Folder:** a directory the agent can write to, for example `~/.ai-security-dashboard/events/`.
-- **HTTP endpoint:** a URL such as `http://127.0.0.1:8770/api/events`, plus a token.
+| File | Contents |
+|---|---|
+| `events.jsonl` | Every event below, one per line, appended as you work. |
+| `run-state.md` | For phased runs: what's done, what's next, and the scope and choices from kick-off, so a later session can resume. |
+| `report.md`, `report.html` | The final reports, generated at the end. |
 
-If neither is available, skip reporting entirely. Never invent a destination, and never send events to
-any destination the user didn't provide. Reporting is class **R**: it doesn't change the target system,
-so it needs no further approval.
+The run folder contains the user's real hostnames, addresses, and weaknesses. Never place it inside this
+repository or any synced or shared folder without the user's agreement, and never upload it anywhere.
+
+## Where to send events
+
+- **Always**, if you can write files on the user's machine: append to `<run folder>/events.jsonl`. A
+  running dashboard reads run folders automatically.
+- **Also, if the user provides one:** an HTTP endpoint such as `http://127.0.0.1:8770/api/events` plus a
+  token (for agents that can't write to the user's disk).
+- **If you can do neither** (for example, a conversation-only assessment), skip events and write the final
+  reports directly (see evidence-and-reporting).
+
+Never invent a destination, and never send events anywhere the user didn't provide. Writing events is
+class **R**: it doesn't change the target system, so it needs no further approval.
 
 ## Rules
 
@@ -1091,8 +1128,8 @@ so it needs no further approval.
 
 ## Event format
 
-Each event is one JSON object. In a folder, write one event per line to a `.jsonl` file (appending is
-fine), for example `events/<assessment_id>.jsonl`. Over HTTP, `POST` one event or an array of events to
+Each event is one JSON object. In the run folder, write one event per line to `events.jsonl` (append;
+child assessments of the same run go in the same file). Over HTTP, `POST` one event or an array of events to
 the endpoint with `Authorization: Bearer <token>` and `Content-Type: application/json`.
 
 ```json
@@ -1124,13 +1161,15 @@ Enumerated values are case-insensitive, and spaces or hyphens may be used instea
 | `assessment.started` | `skill`, `target` | `skill_version`, `scope`, `agent`, `parent` (the `assessment_id` of the full-assessment run this belongs to) |
 | `mode.changed` | `mode`: `discover` · `recommend` · `remediate` · `respond` | `note` |
 | `domain.status` | `domain` (the skill's letter, e.g. `C`), `status`: `in_progress` · `pass` · `finding` · `not_assessed` · `not_applicable` · `accepted_risk` | `title`, `note` |
-| `finding.upserted` | `id` (e.g. `NAS-001`) | `title`, `priority` (`P0`–`P4`), `confidence` (`confirmed` · `likely` · `potential`), `state` (`open` · `resolved` · `partially_resolved` · `failed` · `unverified` · `accepted_risk`), `component`, `operation_class` (`R` · `C1` · `C2` · `C3`), `evidence_label` (`observed` · `vendor_documented` · `third_party_documented` · `user_reported` · `inferred` · `unknown`), `summary` |
+| `finding.upserted` | `id` (e.g. `NAS-001`) | `title`, `priority` (`P0`–`P4`), `confidence` (`confirmed` · `likely` · `potential`), `state` (`open` · `resolved` · `partially_resolved` · `failed` · `unverified` · `accepted_risk`), `component`, `operation_class` (`R` · `C1` · `C2` · `C3`), `evidence_label` (`observed` · `vendor_documented` · `third_party_documented` · `user_reported` · `inferred` · `unknown`), `summary`, `evidence`, `exposure`, `recommendation`, `verification`, `rollback` |
 | `change.recorded` | `description`, `operation_class`, `result`: `planned` · `verified` · `failed` · `unverified` · `rolled_back` | `finding_id`, `approved_by`, `rollback` |
 | `incident.status` | `status`: `suspected` · `likely` · `confirmed` · `closed` | `summary`, `containment` (list of strings) |
 | `asset.upserted` | `id` (stable slug for the asset, e.g. `nas-1`) | `label`, `kind` (e.g. "NAS", "firewall", "IP camera"), `addresses` (list), `services` (list, e.g. "tcp/443 https admin UI"), `exposure` (`internet` · `vpn` · `lan` · `isolated` · `unknown`), `skill` (matching skill name), `coverage` (`pending` · `in_progress` · `assessed` · `no_skill` · `out_of_scope` · `skipped`), `assessment_id` (the per-asset assessment), `note` |
-| `assessment.completed` | none | `summary` |
+| `assessment.completed` | none | `summary` (for a run: the overall summary that opens the final report) |
 
-The first `finding.upserted` for an ID should include `title`, `priority`, `confidence`, and `state`.
+The first `finding.upserted` for an ID should include `title`, `priority`, `confidence`, and `state`, and
+by the end of the assessment every open finding should have `evidence` and `recommendation`, because the
+final reports are built from these events.
 Later events for the same ID may send only the fields that changed (for example, `state: resolved`).
 
 ## Runs: one assessment per asset, grouped

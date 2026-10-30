@@ -156,6 +156,43 @@ Defaults can be changed, so confirm with the user before relying on a match.
 - **On endpoints:** the Cloudflare WARP client installed indicates Zero Trust device enrollment and
   possibly private network routing.
 
+## tunnels
+
+**Use for:** Security assessment, hardening, remediation, and incident response for tunnels and service-publishing tools other than Cloudflare Tunnel: ngrok, Tailscale Funnel and Serve, frp (fast reverse proxy), Pangolin, zrok/OpenZiti, localtunnel-style tools, Microsoft Dev Tunnels and VS Code port forwarding or remote tunnels, SSH reverse tunnels, and mesh VPNs (Tailscale, Headscale, ZeroTier, NetBird) where they publish services or extend network access. Use when inventorying what is published from a home or work network and who can reach it, reviewing authentication in front of tunneled services, agent credentials, frp or Pangolin servers, mesh VPN ACLs, subnet routers, and exit nodes, or when a tunnel agent may have been installed or abused by an attacker.
+
+**Applies to:** ngrok agent v3 and Traffic Policy, Tailscale (Serve, Funnel, subnet routers, exit nodes), Headscale, frp 0.5x and later (TOML/YAML/JSON configuration), Pangolin with Newt, zrok 1.x/2.x, Microsoft Dev Tunnels CLI and VS Code port forwarding/remote tunnels, OpenSSH remote forwarding, ZeroTier, NetBird (verify the live versions; CLIs, flags, and defaults change often) · **Finding prefix:** `TUN` · **Version:** 1.0 · **Bundle:** `dist/tunnels.md`
+
+### Detection
+
+Hints for recognizing tunnel agents during an inventory (used by the `full-assessment` skill). These tools
+make outbound connections only, so a network port scan rarely finds them; look on hosts and in egress
+logs. Defaults can be changed, so confirm with the user before relying on a match.
+
+- **Processes, services, and containers on hosts:** `ngrok`, `frpc`, `frps`, `tailscaled`, `headscale`,
+  `zerotier-one`, `netbird`, `newt` (Pangolin connector), `pangolin`/`gerbil` (Pangolin server), `zrok` or
+  `zrok2`, `devtunnel`, `code tunnel` / `code-tunnel`, `lt`/`localtunnel`, and long-running `ssh -R` or
+  `autossh`. Check systemd units, launchd jobs, Windows services, scheduled tasks, cron, and container
+  images, not just running processes. Renamed binaries are common in intrusions; compare hashes and
+  command lines, not only names.
+- **Local admin and metrics ports:** the ngrok agent's web inspection interface listens on
+  `localhost:4040` by default (with a `/status` page). frp examples use port 7000 for `frps` client
+  connections, 7500 for the `frps` dashboard, and 7400 for the `frpc` admin UI; these are project example
+  values rather than fixed defaults, and the dashboard is off until configured. A frp dashboard or Pangolin
+  login page answering on a public address is a strong match.
+- **Mesh VPN interfaces:** a `tailscale0`/`utun` interface, a ZeroTier `zt*` interface, or a `wt0`
+  NetBird interface, with addresses from the provider's overlay range. Tailscale and ZeroTier use
+  vendor-documented UDP ports (41641 and 9993 respectively) for direct peer connections; verify in current
+  docs.
+- **Egress, DNS, and proxy logs:** queries and connections to tunnel providers, for example ngrok domains
+  (`ngrok.com`, `ngrok-free.app`, `ngrok.io` and related agent-connect hostnames), Tailscale control and
+  DERP relay hostnames under `tailscale.com`, Dev Tunnels hostnames (`*.devtunnels.ms`,
+  `*.rel.tunnels.api.visualstudio.com`, `global.rel.tunnels.api.visualstudio.com`), localtunnel
+  (`localtunnel.me`, `loca.lt`), and zrok hosted-service hostnames. Long-lived outbound TLS or SSH sessions
+  from servers to a VPS address are typical of frp, Pangolin, and `ssh -R`. Verify current hostname lists
+  in vendor firewall documentation before writing block rules.
+- **Public footprint:** certificate transparency entries for `*.ts.net` names (Tailscale HTTPS), the
+  user's domains pointed at a frp or Pangolin server, and published URLs found in docs, chat, or webhooks.
+
 ## home-assistant
 
 **Use for:** Security assessment, hardening, remediation, and incident response for Home Assistant (Home Assistant OS, Container, and the unsupported Supervised and Core installs). Use when auditing a Home Assistant instance, reviewing its remote access (Home Assistant Cloud, reverse proxies, tunnels, port forwards), users, MFA, access tokens, auth providers, secrets and backups, apps (add-ons), HACS or Marketplace custom integrations, cloud-connected integrations, security-sensitive automations, or when a Home Assistant instance may have been compromised.
@@ -361,6 +398,41 @@ Defaults can be changed, so confirm with the user before relying on a match.
   UI is titled Tdarr. Nodes connect outbound to the server port.
 - Media servers often run with host networking, so many ports appear on one host. MAC vendors are those of
   the host (NAS, mini PC, hypervisor), not of the product.
+
+## phones
+
+**Use for:** Security and privacy assessment, hardening, remediation, and incident response for cell phones: iPhone (iOS) and Android (Pixel, Samsung Galaxy, and other makers), personal and work phones, and phones used by family members and children. Use when reviewing a phone's OS version and support window, updates, screen lock, Find My or Find Hub, theft protections (Stolen Device Protection, Android Theft Protection and Identity Check), Lockdown Mode or Android Advanced Protection, Apple Account or Google Account security, SIM PIN and carrier protections against SIM swap and port-out, app permissions, accessibility and device admin apps, configuration profiles and MDM, sideloading, jailbreak or root, VPN and private DNS, Bluetooth, AirDrop, and Quick Share, backups, stalkerware and unwanted trackers, work profiles, or disposal and resale, or when a phone or its accounts may have been compromised, lost, or stolen.
+
+**Applies to:** iPhone on iOS and Android phones (Pixel, Samsung Galaxy, and other Google-certified devices) on versions still receiving security updates; feature names and menu paths change between releases and makers, so verify on the live device · **Finding prefix:** `PHN` · **Version:** 1.0 · **Bundle:** `dist/phones.md`
+
+### Detection
+
+Hints for recognizing phones during a network inventory (used by the `full-assessment` skill). Phones
+are often invisible or misleading on a network scan, so confirm with the user before relying on a match
+and inventory phones by asking the household, not by scanning.
+
+- **Private (randomized) Wi-Fi MAC addresses are the default.** iOS uses a private Wi-Fi address per
+  network (with fixed and rotating options on recent versions), and Android uses a randomized MAC per
+  network by default. These are locally administered addresses with no vendor (OUI) match, so "unknown
+  vendor" Wi-Fi clients are often phones. A phone's address can change when the network is forgotten and
+  rejoined, when rotation is on, or after a reset, so it may appear as several devices over time.
+- **DHCP hostnames** are the best hint but are user-controlled: iPhones commonly send the device name
+  ("iPhone", or "<person>s-iPhone"-style names); Android phones commonly send the device name, which is
+  often the model ("Galaxy-…", "Pixel-…") or an `android-<hex>` string on older versions. Treat names that
+  include a person's name as personal data and don't copy them into reports.
+- **mDNS/Bonjour (UDP 5353):** iPhones may answer or announce Apple services such as
+  `_companion-link._tcp` and `_apple-mobdev2._tcp` (Wi-Fi sync), especially when unlocked or charging.
+  Android phones are usually quiet on mDNS unless an app is casting or sharing. A phone that answers
+  nothing is normal.
+- **No listening services is normal.** Phones accept almost no inbound connections. An open port on a
+  phone is unusual: it may be a debugging interface (Android wireless debugging), a hotspot, or an app's
+  local server. Identify it with the user; never connect to it.
+- **Why phones disappear:** they sleep Wi-Fi aggressively, move to cellular when Wi-Fi is weak, use
+  private relay or VPN services that hide their traffic, and leave the network every time the user leaves
+  home. A missing phone in a scan says nothing about its security.
+- Router and access-point client lists (connected-device names, band, last seen) and the vendor accounts'
+  device lists (Apple Account devices, Google "Your devices", Find My or Find Hub) are better inventory
+  sources than scanning.
 
 ## dns-filtering
 

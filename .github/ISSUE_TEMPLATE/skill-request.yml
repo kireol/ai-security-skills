@@ -1,0 +1,63 @@
+name: Skill request
+description: Ask for a security skill for a product or device type that doesn't have one yet.
+title: "Skill request: "
+labels: ["skill-request"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **This issue is public.** Describe the product, not your setup. Don't include hostnames, IP or MAC
+        addresses, serial numbers, account names, screenshots of your network, or findings from your systems.
+  - type: input
+    id: product
+    attributes:
+      label: Product
+      description: Make and product family, for example "Brand X smart thermostat (3rd generation)".
+    validations:
+      required: true
+  - type: dropdown
+    id: category
+    attributes:
+      label: Category
+      options:
+        - network
+        - edge / remote access
+        - storage
+        - virtualization
+        - operating system
+        - mobile
+        - containers
+        - home automation / smart home
+        - surveillance / cameras
+        - consumer devices
+        - peripherals / maker devices
+        - media
+        - AI
+        - web apps / web servers
+        - other
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why it matters
+      description: What the product does and what could go wrong if it's insecure (in general terms).
+    validations:
+      required: true
+  - type: textarea
+    id: detection
+    attributes:
+      label: How to recognize it
+      description: Vendor-default ports, page titles, discovery announcements, or other generic signs. Not your addresses.
+  - type: textarea
+    id: references
+    attributes:
+      label: Vendor documentation and advisories
+      description: Links to the vendor's security, hardening, or support pages, if you know them.
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy check
+      options:
+        - label: This issue contains no details from my own network, devices, or accounts.
+          required: true

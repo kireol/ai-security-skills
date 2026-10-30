@@ -37,8 +37,9 @@ scan "Home directory paths" '/(Users|home)/[A-Za-z][A-Za-z0-9._-]+/' "$@"
 if [ -f .private-denylist ]; then
   terms=$(grep -vE '^\s*(#|$)' .private-denylist)
   if [ -n "$terms" ]; then
+    # The project's own repository address legitimately contains the owner's handle.
     out=$(printf '%s\n' "$terms" | grep -rnIiF -f /dev/stdin "$@" \
-      --exclude-dir=.git --exclude=.private-denylist 2>/dev/null)
+      --exclude-dir=.git --exclude=.private-denylist 2>/dev/null | grep -vi 'kireol/ai-security-skills')
     if [ -n "$out" ]; then
       printf '\n== Private denylist terms ==\n%s\n' "$out"
       hits=1

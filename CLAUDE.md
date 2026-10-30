@@ -29,7 +29,9 @@ scripts/build-dist.py --check       # exit 1 if dist/ is stale
 scripts/lint-skills.py              # structure: files, sections, frontmatter, unique prefixes, links
 python3 -m unittest discover -s tools/dashboard                 # dashboard tests
 python3 -m unittest tools/dashboard/test_dashboard.py -k Server  # one group of tests
-python3 tools/dashboard/dashboard.py serve                      # run the dashboard locally
+python3 tools/dashboard/dashboard.py serve --open               # run the dashboard locally
+python3 tools/dashboard/dashboard.py report <run folder>        # write report.md/report.html, print totals
+scripts/assess.sh [--dashboard] [--agent claude|codex|print]    # one-command kick-off (and --stop)
 ```
 
 Run the content check, the linter, and `build-dist.py --check` before every commit. `.private-denylist` (git-ignored) holds the owner's identifiers for
@@ -64,6 +66,14 @@ the content check. Never commit it, and never copy its contents into a tracked f
   `version` and add a version-history entry on substantive changes. Versions never go in filenames.
 - Don't add static CVE or version tables, or executable storage/RAID/filesystem repair procedures. Skills
   must tell the agent to verify against live vendor sources.
+- Every assessment records events in a run folder (`~/ai-security-reports/<run-id>/`, never inside this
+  repo). `tools/dashboard/report.py` turns a run folder into `report.md` and `report.html`; the closing
+  message format (systems, serious = open P0–P2, warnings = open P3, informational = open P4, file paths)
+  is defined in `core/evidence-and-reporting.md`. Keep the two in sync.
+- `skills/orchestration/` holds skills that coordinate others (`full-assessment`, `skill-request`); the
+  linter requires only frontmatter, "How to use this skill", and "Version history" for them.
+- `check-content.sh` exempts only the project's own repository address (`kireol/ai-security-skills`)
+  from the private denylist.
 - `core/reporting-protocol.md` defines the live-event format; `tools/dashboard/dashboard.py` implements it
   (stdlib only, Python 3.9+, so it runs on stock macOS Python). Change both together, and keep its
   security properties: localhost by default, token auth, Host-header check, strict CSP, `textContent`-only
