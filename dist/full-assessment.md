@@ -282,6 +282,24 @@ NVR.
 
 Every product skill in this collection, with hints for recognizing the product on a network. Used by the `full-assessment` skill to match each discovered device to a skill. Load a skill from `dist/<skill>.md` (single file) or the installed `<skill>/` folder.
 
+## opnsense
+
+**Use for:** Security assessment, hardening, remediation, and incident response for OPNsense firewalls (community and business editions, on hardware or virtualized). Use when auditing an OPNsense firewall, reviewing its firewall and NAT rules, admin access, VPNs (WireGuard, OpenVPN, IPsec), DNS/DHCP services, plugins, backups, or logging, or when an OPNsense firewall may have been compromised.
+
+**Applies to:** OPNsense 26.x community and business editions (verify the live version; menus change between series) · **Finding prefix:** `OPN` · **Version:** 1.0 · **Bundle:** `dist/opnsense.md`
+
+### Detection
+
+Hints for recognizing this product during a network inventory (used by the `full-assessment` skill).
+Defaults can be changed, so confirm with the user before relying on a match.
+
+- Usually the LAN's default gateway, and often also its DNS server and DHCP server.
+- Web GUI on HTTPS (port 443 by default, with an HTTP redirect on port 80) whose login page is titled
+  OPNsense; a self-signed certificate on a fresh install.
+- SSH (port 22) with a FreeBSD OpenSSH banner, if enabled.
+- A MAC address vendor (OUI) of the official appliance maker on vendor hardware; generic NIC or hypervisor
+  vendors otherwise.
+
 ## synology-dsm
 
 **Use for:** Security assessment, hardening, remediation, and incident response for Synology NAS devices running DSM, including DSM installed on non-Synology or virtualized hardware. Use when auditing a Synology NAS, reviewing DSM settings, packages, Container Manager, shares, remote access, or backups, or when a Synology NAS may have been compromised or hit by ransomware.

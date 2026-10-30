@@ -64,7 +64,8 @@ Status: ✅ available · ⏳ planned
 |---|---|---|
 | orchestration | Full assessment (kick-off: inventory the network and run every matching skill) | ✅ |
 | storage | Synology DSM (including DSM on non-Synology hardware) | ✅ |
-| network | OPNsense / pfSense firewall | ⏳ |
+| network | OPNsense firewall | ✅ |
+| network | pfSense firewall | ⏳ |
 | network | WireGuard / OpenVPN | ⏳ |
 | network | DNS filtering (AdGuard Home, Pi-hole) | ⏳ |
 | network | Consumer Wi-Fi mesh and managed switches | ⏳ |

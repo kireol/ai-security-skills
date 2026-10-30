@@ -123,7 +123,7 @@ class AggregateTests(unittest.TestCase):
         fw = self.by_id["2026-01-16-example-firewall"]
         self.assertEqual(fw["incident"]["status"], "suspected")
         self.assertEqual(fw["modes_visited"], ["discover", "respond"])
-        self.assertEqual([f["id"] for f in fw["findings"]], ["FW-002", "FW-001"])
+        self.assertEqual([f["id"] for f in fw["findings"]], ["OPN-002", "OPN-001"])
 
 
 class ServerTests(unittest.TestCase):
