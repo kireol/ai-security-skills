@@ -1,0 +1,8 @@
+# Copy to .private-denylist (git-ignored) and list identifiers from your own environment,
+# one per line, matched case-insensitively as plain text. Lines starting with # are ignored.
+# Examples:
+# my-surname
+# my-site-name
+# mydomain.example
+# my-nas-hostname
+# my-wifi-ssid
