@@ -1,0 +1,101 @@
+# Home Routers and ISP Gateways: Respond (Incident Response)
+
+Use with the core playbook, [incident-response.md](../../../core/incident-response.md), which always
+applies. This file adds only router-specific steps.
+
+A compromised router sees and can alter all of the household's traffic: it can redirect DNS to steal
+logins, open inbound ports to any device, and rent out the connection as a criminal proxy. If the router
+itself may be compromised, **don't rely on it to contain the incident**, and don't trust the DNS answers or
+DHCP settings it hands out.
+
+## Triage and containment
+
+- **Indicators that point at the router itself:** DNS servers (WAN or DHCP-provided) nobody chose;
+  admin password changed or new admin accounts; remote management, DMZ, port forwards, UPnP mappings, VPN
+  accounts, or file sharing turned on that nobody enabled; firmware version different from expected;
+  unknown packages or startup scripts on OpenWrt/DD-WRT; browser certificate warnings or login pages that
+  look wrong across many sites; the ISP reporting abuse, proxy, or botnet traffic from the connection; or
+  the FBI-listed signs of compromised end-of-life routers (overheating, connectivity problems, and settings
+  changes the administrator doesn't recognize).
+- **Contain at the edge, with the user present.** The least destructive step is to disconnect the router
+  from the internet: unplug the cable between the modem/ONT and the router, or (for an all-in-one ISP
+  gateway) the WAN or fiber cable, after warning the household. Keep the router powered unless
+  destruction is ongoing; many consumer routers keep logs and some malware only in RAM, so a reboot can
+  erase evidence (and, for RAM-only malware, the infection, which then returns through the same hole).
+- **Protect the clients first if DNS was changed.** Have users stop entering passwords on the affected
+  network. Clients may also have cached bad DNS answers or been sent to fake login pages; use a mobile
+  network to reach important accounts until the router is trusted again.
+- **ISP gateways:** call the ISP. They can see the gateway's management history, push firmware, replace
+  the device, and may already know about a campaign. Don't try to investigate the ISP's management
+  channel yourself.
+- **If a downstream firewall exists and is trusted,** it still protects devices behind it from inbound
+  connections, but not from DNS answers it forwards from the gateway. Point the firewall's resolver at a
+  known resolver while the gateway is investigated.
+
+## Evidence to preserve (router-specific)
+
+Collect before changing or rebooting anything, from a wired client if possible:
+
+- Screenshots of every relevant page: status (firmware version, WAN address, uptime), DNS settings (WAN
+  and DHCP), administration and remote management, accounts, port forwards, DMZ, UPnP mapping list, VPN
+  server accounts, USB/file sharing, guest network, IPv6 firewall, and the attached-device list.
+- The router's log pages (system, admin login, security/firewall), exported or screenshotted. Note that
+  most consumer router logs live in RAM.
+- A configuration backup file, if the router offers one, stored off the router as a secret and not opened
+  in the agent's context.
+- OpenWrt over SSH (read-only): `logread`, `cat /etc/openwrt_release`, installed packages
+  (`apk list --installed` or `opkg list-installed`), `netstat -lntup`, `ps w`, `crontab -l`,
+  `/etc/rc.local`, `uci show firewall`, `uci show dhcp`, and DNS-related settings; redact secrets. A
+  `sysupgrade` backup archive (`sysupgrade -b <file>`, written to RAM storage and copied off) captures the
+  configuration; it contains secrets.
+- DD-WRT: specific `nvram get` values for DNS, remote management, startup/firewall scripts, and cron;
+  never a full `nvram show` in a shared session.
+- From a client: which DNS server it was given (`ipconfig getpacket <interface>` on macOS,
+  `resolvectl status` on Linux, `ipconfig /all` on Windows) and what a few important domains resolve to,
+  compared with a lookup over a mobile network.
+- The ISP's account portal: device list, any notices, and recent gateway changes.
+
+## Scope checks specific to a router
+
+- **Every account used on the network while DNS may have been hijacked:** email, banking, cloud, and work
+  accounts. Change passwords from a trusted network and review sessions and 2FA.
+- **Every device behind the router:** port forwards, DMZ, and UPnP mappings show which ones were exposed
+  to the internet; assess those first (for example a NAS or camera behind a forward).
+- **Accounts tied to the router:** the vendor cloud/app account, dynamic DNS account, VPN server accounts
+  and profiles, and the ISP account.
+- **Other copies of the same password:** if the router admin password was reused elsewhere, rotate it
+  there too.
+- **Downstream firewall and Wi-Fi mesh:** if the router fed their DNS or management path, check them with
+  their own skills ([OPNsense](../opnsense/SKILL.md), [pfSense](../pfsense/SKILL.md),
+  [Wi-Fi and switches](../wifi-and-switches/SKILL.md)).
+
+## Eradication and recovery
+
+- **End-of-life router:** replace it. Cleaning an unsupported router leaves the hole that let the attacker
+  in.
+- **Supported router:** with the user present and the ISP provisioning details ready, factory reset, then
+  install the latest firmware from the vendor's own site or update function **before** reconnecting it to
+  the internet where the vendor allows offline updates, then set it up by hand. Don't restore a backup
+  taken after the earliest plausible compromise; it may restore the attacker's settings.
+- **ISP gateway:** ask the ISP to reset, re-provision, or replace it; then reapply the user's own settings
+  by hand.
+- **OpenWrt:** reflash a verified image of a supported release (check the published checksum), then
+  restore only configuration you have reviewed; reinstall packages from official feeds.
+- **Rotate every secret the router held:** admin password, Wi-Fi passphrases (all SSIDs including guest),
+  VPN server keys and profiles, dynamic DNS credentials, vendor cloud account password and 2FA, and any
+  PPPoE credentials (via the ISP).
+- **Before reconnecting:** remote management off, no unexpected port forwards or DMZ, UPnP off or
+  restricted, DNS set to known resolvers, WPS off, guest network isolated, IPv6 firewall on, unused
+  services (file sharing, cloud access, VPN) off, and automatic firmware updates on where offered.
+
+## Quick checklist tailored for a home router
+
+Start with the core quick checklist, plus:
+
+- [ ] Warn the household, then disconnect the router's internet side (modem/ONT cable); keep it powered.
+- [ ] Screenshot DNS, remote management, accounts, port forwards, DMZ, UPnP mappings, VPN, and logs before
+      any reboot.
+- [ ] Stop entering passwords on the network; use mobile data for important accounts until it is clean.
+- [ ] Call the ISP if it is their gateway, or if they reported abuse from the connection.
+- [ ] Check the model's support status: replace an end-of-life router instead of cleaning it.
+- [ ] Reset, update, and reconfigure by hand; rotate every password and key the router held.

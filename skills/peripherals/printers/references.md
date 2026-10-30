@@ -1,0 +1,58 @@
+# Printers and MFPs: References
+
+Always prefer current vendor documentation for the exact model; menu names, defaults, and firmware
+behavior change between models and releases. Re-verify links and contents when updating this skill.
+
+Last verified: 2026-10-30
+
+## Vendor (authoritative)
+
+- HP security bulletins (search by product): https://support.hp.com/us-en/security-bulletins
+- HP, home printer security guidance (EWS password, Wi-Fi Direct, firmware):
+  https://www.hp.com/us-en/shop/tech-takes/how-to-secure-home-printer-from-hackers
+- HP, Wi-Fi Direct settings and security (support document): https://support.hp.com/gb-en/document/ish_6525397-6525444-16
+- Brother security notifications: https://support.brother.com/g/s/security/
+- Epson, initial Web Config administrator password discoverable via SNMP (CVE-2025-35970):
+  https://epson.com/Support/wa00965
+- Canon PSIRT advisories: https://psirt.canon/advisory-information
+- Canon CP2023-003, Wi-Fi settings not erased by initialization (inkjet models):
+  https://psirt.canon/advisory-information/cp2023-003/
+- Xerox security information and bulletins: https://security.business.xerox.com/en-us/
+- Lexmark security advisories: https://www.lexmark.com/en_us/solutions/security/lexmark-security-advisories.html
+- Konica Minolta advisory on derivable initial passwords (KM-2025-0005):
+  https://www.konicaminolta.com/global-en/security/advisory/pdf/km-2025-0005.pdf
+- Toshiba Tec advisory on derivable initial passwords: https://www.toshibatec.com/information/20250917_01.html
+
+## Standards and government guidance
+
+- JVN / JPCERT/CC, JVNVU#93294882: weak initial administrator passwords derivable from serial numbers
+  (Brother, Konica Minolta, Toshiba Tec; CVE-2024-51978, CVE-2025-8452): https://jvn.jp/en/vu/JVNVU93294882/
+- NIST SP 800-88 Rev. 2, Guidelines for Media Sanitization (September 2025):
+  https://csrc.nist.gov/pubs/sp/800/88/r2/final
+- CISA Secure by Design alert on eliminating default passwords (December 2023):
+  https://www.cisa.gov/news-events/alerts/2023/12/15/cisa-secure-design-alert-urges-manufacturers-eliminate-default-passwords
+- Protection Profile for Hardcopy Devices (NIAP/IPA, Common Criteria), useful as a checklist of MFP
+  security functions (image overwrite, storage encryption, audit): https://www.commoncriteriaportal.org/files/ppfiles/c0553_pp.pdf
+- Apple Bonjour Printing Specification (DNS-SD service types for printers):
+  https://developer.apple.com/bonjour/printing-specification
+- RFC 3805, Printer MIB v2: https://www.rfc-editor.org/rfc/rfc3805
+
+Generic vulnerability and incident sources (CISA KEV, NVD, CVE, CISA ransomware guidance, IC3) are listed in
+the core documents.
+
+## Third-party (not authoritative)
+
+- Rapid7, Brother and multi-vendor printer vulnerabilities (CVE-2024-51977, CVE-2024-51978), June 2025:
+  https://www.rapid7.com/blog/post/multiple-brother-devices-multiple-vulnerabilities-fixed/
+  Technical background; check vendor pages for current fixes.
+- Rapid7, Xerox VersaLink pass-back vulnerabilities (CVE-2024-12510, CVE-2024-12511), February 2025:
+  https://www.rapid7.com/blog/post/2025/02/14/xerox-versalink-c7025-multifunction-printer-pass-back-attack-vulnerabilities-fixed/
+  A clear explanation of LDAP/SMB pass-back attacks on MFPs.
+- runZero, Brother printer serial number disclosure: https://www.runzero.com/advisories/brother-printer-serial-number-disclosure/
+  Shows which network services disclose serial numbers.
+- Shadowserver Foundation, Open IPP report: https://www.shadowserver.org/what-we-do/network-reporting/open-ipp-report/
+  Daily reports of printers exposing IPP on the internet; free for network owners.
+- Reporting on HP "dynamic security" cartridge authentication and firmware updates (for example
+  https://www.notebookcheck.net/HP-cites-threat-of-viruses-from-non-HP-printer-cartridges-to-justify-blocking-their-use-experts-sceptical.795726.0.html):
+  background for the update/cartridge trade-off; HP's own support pages are authoritative for current
+  behavior.

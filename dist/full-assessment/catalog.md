@@ -204,6 +204,109 @@ Defaults can be changed, so confirm with the user before relying on a match.
 - Often co-located with Home Assistant, Zigbee2MQTT (frontend on 8080 by default when enabled), and
   Frigate.
 
+## smart-home-devices
+
+**Use for:** Security assessment, hardening, remediation, and incident response for consumer smart home devices and their hubs: smart plugs, bulbs, switches and dimmers, locks, thermostats, sensors, garage-door openers, robot vacuums, voice assistants and smart speakers, hubs and bridges (Philips Hue, SmartThings, Aqara, Zigbee/Z-Wave coordinators, Matter controllers, Thread border routers), and DIY or open firmware (ESPHome, Tasmota, Shelly local APIs). Use when inventorying smart home devices, reviewing vendor cloud accounts, shared users, locks and garage doors, local APIs, Zigbee/Z-Wave/Thread/Matter security, firmware support, IoT network placement, voice assistants, privacy, or resale and disposal, or when a smart home device or account may have been compromised.
+
+**Applies to:** Consumer smart home devices, hubs, and bridges from any vendor, plus ESPHome, Tasmota, and Shelly Gen1/Gen2+ firmware (verify each device's current firmware, app, and support status) · **Finding prefix:** `SHD` · **Version:** 1.0 · **Bundle:** `dist/smart-home-devices.md`
+
+### Detection
+
+Hints for recognizing these devices during a network inventory (used by the `full-assessment` skill).
+Ports listed are protocol or vendor defaults; firmware can change them. Confirm with the user before
+relying on a match, and **never** interact with these services beyond observing that they exist.
+
+- **Many devices are only a MAC address.** Cheap Wi-Fi devices often have no hostname or a generic one
+  (for example `ESP_xxxxxx` or a module name). The MAC vendor (OUI) is frequently the **Wi-Fi module
+  maker**, not the brand: Espressif (ESP8266/ESP32, used by Shelly, Sonoff, many Tuya-platform devices,
+  and almost all ESPHome/Tasmota builds), Tuya-platform OEM module makers, Beken, Realtek, and similar.
+  Phones and some devices use randomized MACs, so an unknown OUI is not proof of anything.
+- **mDNS/DNS-SD** (UDP 5353):
+  - `_hap._tcp`: Apple HomeKit accessories and bridges (also Home Assistant's HomeKit Bridge).
+  - `_matter._tcp`: commissioned Matter nodes (operational discovery); `_matterc._udp`: Matter devices
+    currently in commissioning mode (a device advertising this is waiting to be paired). Per the Matter
+    handbook, Thread devices are advertised by their border router, not by themselves.
+  - `_meshcop._udp`: Thread border routers (commonly reported; TXT records include network identifiers).
+  - `_hue._tcp`: Philips Hue Bridge (as used by Hue discovery clients; Hue also offers a cloud
+    discovery broker).
+  - `_esphomelib._tcp`: ESPHome devices with the native API enabled; `_http._tcp` if the ESPHome web
+    server is enabled.
+  - `_shelly._tcp` and `_http._tcp`: Shelly Gen2+ devices (commonly reported; not vendor-verified here).
+- **SSDP** (UDP 1900): Hue bridges, many Wi-Fi plugs (older Wemo-style devices), media and speaker
+  devices, and anything doing UPnP. A device creating UPnP port mappings on the router is a finding.
+- **Typical local ports** (TCP connect state only):
+  - ESPHome native API **6053**; ESPHome OTA **3232** (ESP32) or **8266** (ESP8266) (vendor-documented).
+  - Shelly and Tasmota web UI and API on **80**; Shelly Gen2+ RPC over HTTP/WebSocket on 80.
+  - Hue Bridge local API over HTTPS on **443** (vendor-documented; plain HTTP on 80 may also answer).
+  - Tuya-platform local protocol on **6668** (commonly reported; not vendor-verified here).
+  - HomeKit accessories on a dynamic port announced in their `_hap._tcp` record.
+- **Hubs with no visible end devices:** a hub's single IP address may stand for dozens of Zigbee, Z-Wave,
+  Thread, or Bluetooth devices. Ask the user for the hub app's device list.
+- **Open setup access points:** an unconfigured or factory-reset device often broadcasts its own Wi-Fi
+  network (for example a `shelly...`, `tasmota-...`, or vendor-named SSID). Tasmota documents a fallback
+  access point when Wi-Fi fails. An unexpected open SSID nearby may be a device waiting to be claimed.
+
+## 3d-printers
+
+**Use for:** Security assessment, hardening, remediation, and incident response for networked 3D printers and their host software: Bambu Lab (cloud, LAN Only, and Developer Mode), Prusa (PrusaLink, Prusa Connect), Creality and other Klipper-based printers, OctoPrint, and Klipper with Moonraker, Mainsail, or Fluidd. Use when auditing a 3D printer or print server, reviewing remote access, access codes, API keys, plugins, cameras, firmware, or network placement, or when a printer may have been tampered with or started a job nobody sent.
+
+**Applies to:** Bambu Lab X1/P1/A1/H2 series and later; Prusa printers with PrusaLink/Prusa Connect; Creality and other Klipper-based printers; OctoPrint 1.x; Moonraker with Mainsail or Fluidd (verify live versions; firmware behavior changes often) · **Finding prefix:** `P3D` · **Version:** 1.0 · **Bundle:** `dist/3d-printers.md`
+
+### Detection
+
+Hints for recognizing this product during a network inventory (used by the `full-assessment` skill).
+Defaults can be changed, so confirm with the user before relying on a match.
+
+- **OctoPrint:** web UI titled "OctoPrint" on TCP 5000 by default; on the OctoPi image it is usually
+  fronted by a reverse proxy on 80/443. The bundled discovery plugin announces `_octoprint._tcp` and
+  `_http._tcp` over mDNS/DNS-SD, and can announce over SSDP for Windows network discovery.
+- **Moonraker:** HTTP and WebSocket API on TCP 7125 by default (binds to all IPv4 interfaces unless
+  configured otherwise); `GET /server/info` answers with Moonraker JSON (an authorization error for
+  untrusted clients, full state for trusted ones). Its optional `[zeroconf]` component announces over
+  mDNS, and over SSDP if `enable_ssdp` is set.
+- **Mainsail / Fluidd:** static web front ends on 80 (or 4408/4409 on Creality K1-series, as commonly
+  reported) with page titles "Mainsail" or "Fluidd"; they talk to Moonraker on 7125 or through the same
+  web server.
+- **Bambu Lab:** SSDP-style announcements on UDP 2021 (and 1990, per Bambu's port table) used for
+  device discovery in cloud and LAN mode; MQTT over TLS on TCP 8883, implicit FTPS on TCP 990 (passive
+  data ports 50000–50100), and LAN live video on TCP 6000 (and 322 on models with RTSP live view), per
+  Bambu's printer network ports page. Steady TLS connections to Bambu cloud endpoints in cloud mode.
+- **PrusaLink:** a PrusaLink-branded web UI on port 80 of the printer (or of its Raspberry Pi); the HTTP
+  API asks for digest authentication. Outbound connections to Prusa Connect when linked.
+- **MAC vendors (OUI):** Raspberry Pi hosts usually show a Raspberry Pi vendor. Printers with built-in
+  Wi-Fi often show the Wi-Fi module's maker rather than the printer brand, so a match on the brand is not
+  expected.
+- **Behavior:** printers idle most of the time and then exchange status every second or so with a slicer,
+  phone app, or cloud during a job; cameras stream continuously when a viewer is open.
+
+## craft-cutters
+
+**Use for:** Security and privacy assessment, hardening, remediation, and incident response for app-connected craft cutting machines and small home cutters: Cricut (Maker, Explore, Joy, Venture with Design Space), Silhouette (Cameo, Portrait, Curio with Silhouette Studio), Brother ScanNCut (CanvasWorkspace, Artspira), and similar vinyl cutters and desktop laser cutters. Use when reviewing the vendor account, saved payment details and subscriptions, the design apps and their installers on computers and phones, Bluetooth, USB, and Wi-Fi connections, firmware updates, cloud-stored designs and sharing, third-party design downloads and plugins, end-of-support models, physical safety, or resale and disposal, or when a cutter account or the computer that runs its app may have been compromised.
+
+**Applies to:** Cricut, Silhouette, and Brother ScanNCut cutters and their vendor apps and accounts; similar app-connected vinyl and desktop laser cutters (verify live app versions; menus change often) · **Finding prefix:** `CUT` · **Version:** 1.0 · **Bundle:** `dist/craft-cutters.md`
+
+### Detection
+
+Hints for recognizing this product class during an inventory (used by the `full-assessment` skill). Most
+cutters never appear on the network; evidence is usually on the computers and phones that drive them.
+Confirm with the user before relying on a match.
+
+- **Installed apps on computers:** Cricut Design Space, Silhouette Studio (including Business Edition),
+  Brother CanvasWorkspace for PC, and laser control apps from the laser vendor. Look in the installed
+  applications list, not just the desktop shortcut.
+- **Helpers and background items on computers:** USB drivers, updaters, or login/startup items installed
+  with these apps (names vary by version; not yet verified). On Windows, check Startup apps, Services, and
+  installed drivers; on macOS, Login Items and background items. Record what is present; don't remove
+  anything in Discover.
+- **Mobile apps:** Cricut's mobile apps, Silhouette's mobile app, and Brother Artspira or ScanNCut Link.
+- **Bluetooth:** paired device names usually include the machine family (for example a Cricut or Cameo
+  model name followed by a short suffix). Check the computer's and phone's paired-devices lists.
+- **Wi-Fi models:** a router client with a MAC vendor (OUI) of Brother or of the Wi-Fi module maker inside
+  the machine (in which case the OUI alone doesn't identify the product), and a DHCP hostname that may
+  include the model. Outbound connections to the vendor's cloud with no listening services are normal.
+- **mDNS/SSDP:** not documented for these cutters at last review. Some desktop lasers advertise or listen
+  locally; treat any open port as something to identify, not something to connect to.
+
 ## media-automation
 
 **Use for:** Security assessment, hardening, remediation, and incident response for media-automation stacks: the Servarr apps (Sonarr, Radarr, Lidarr, Readarr-style apps, Prowlarr), Bazarr, request apps (Overseerr, Jellyseerr, Seerr), Tautulli, usenet downloaders (SABnzbd, NZBGet), torrent clients (qBittorrent, Transmission), and helpers such as FlareSolverr. Use when auditing an "*arr" stack, reviewing its authentication, API keys, reverse-proxy or tunnel exposure, download-client web UIs, VPN binding, shared media/config folder permissions, updates, or backups, or when one of these apps may have been compromised.
@@ -286,6 +389,38 @@ Defaults can be changed, so confirm with the user before relying on a match.
 - MAC vendor (OUI): often a single-board-computer maker (both products are popular on Raspberry Pi
   boards), but just as often a hypervisor or container bridge vendor, or the host's NIC. The MAC rarely
   identifies these products.
+
+## home-routers
+
+**Use for:** Security assessment, hardening, remediation, and incident response for home routers, ISP-supplied gateways (cable, DSL, and fiber ONT/router combos), standalone modems, consumer routers (ASUS, TP-Link, Netgear, Linksys, and similar), routers running OpenWrt or DD-WRT, and devices in bridge, passthrough, or IP-passthrough mode in front of a separate firewall. Use when auditing a home router or ISP gateway, reviewing bridge versus router mode and double NAT, DMZ/exposed-host settings, port forwards, UPnP and NAT-PMP, WPS, DNS settings, remote and cloud management, ISP remote management (TR-069), firmware and end-of-life status, built-in VPN or file-sharing features, or OpenWrt/DD-WRT specifics, or when a home router may have been compromised or had its DNS settings changed.
+
+**Applies to:** Consumer routers, ISP gateways, modems, and OpenWrt/DD-WRT routers, any vendor (verify the live firmware, ISP restrictions, and support status; menu names vary by vendor, ISP, and firmware) · **Finding prefix:** `RTR` · **Version:** 1.0 · **Bundle:** `dist/home-routers.md`
+
+### Detection
+
+Hints for recognizing these devices during a network inventory (used by the `full-assessment` skill).
+Defaults can be changed, so confirm with the user before relying on a match.
+
+- **Position:** usually the LAN's default gateway, DNS server, and DHCP server, or (behind a separate
+  firewall) the next hop on the firewall's WAN side. A downstream WAN address in a private range points to
+  an ISP gateway still routing (double NAT).
+- **Admin web UI** on HTTP 80 and/or HTTPS 443 (some vendors also use 8080 or 8443), whose page title,
+  login page, or certificate names the vendor, model, or ISP. Many vendors also publish a convenience
+  hostname for the admin page; don't rely on it during inventory.
+- **SSDP/UPnP:** routers with UPnP on answer SSDP on UDP 1900 and announce an `InternetGatewayDevice`
+  (UPnP IGD) device type; the device description XML usually names the manufacturer and model.
+  NAT-PMP/PCP listens on UDP 5351 when enabled.
+- **ISP management:** TR-069/CWMP connection-request listeners commonly use TCP 7547 on the WAN side. Only
+  check the WAN side from outside with explicit authorization; an open 7547 shows the device is
+  ISP-managed, not that it is vulnerable.
+- **OpenWrt:** LuCI login page titled with the hostname and "LuCI"; uHTTPd web server; Dropbear SSH banner
+  on port 22. **DD-WRT:** web UI that names DD-WRT. Many consumer firmwares also run a DNS forwarder on 53
+  and sometimes Telnet, SSH, SMB, FTP, or media services if USB sharing is on.
+- **Modems and ONTs:** a minimal status page on a fixed address reachable only from the directly connected
+  port; the vendor documents the address.
+- **MAC address vendors (OUIs):** retail routers usually carry the vendor's own OUI; ISP gateways often
+  carry the OEM manufacturer's OUI rather than the ISP's name. Per-SSID BSSIDs and WAN MACs may differ from
+  the LAN MAC.
 
 ## opnsense
 
@@ -488,6 +623,36 @@ Defaults can be changed, so confirm with the user before relying on a match.
   different, locally administered MAC on each network.
 - **When these don't apply**: laptops on guest or Public-profile networks, PCs with third-party firewalls,
   and machines that are asleep. Ask the user for a device list rather than inferring from silence.
+
+## printers
+
+**Use for:** Security assessment, hardening, remediation, and incident response for network printers and multifunction printers (MFPs): home inkjets and lasers and small-office MFPs from HP, Brother, Canon, Epson, Xerox, Lexmark, and similar vendors. Use when auditing a printer's firmware and vendor support, embedded web server (EWS) admin password, exposed print and management services (raw 9100, IPP/IPPS, LPD, SNMP, FTP/Telnet, Wi-Fi Direct), cloud printing accounts, scan-to-email/SMB/FTP and LDAP stored credentials, stored jobs and internal storage at disposal, internet exposure, network placement, or logging, or when a printer may have been compromised or used as a pivot.
+
+**Applies to:** Networked single-function printers and MFPs from any vendor, home through small office (verify each model's current firmware, support status, and menu names) · **Finding prefix:** `PRN` · **Version:** 1.0 · **Bundle:** `dist/printers.md`
+
+### Detection
+
+Hints for recognizing this product during a network inventory (used by the `full-assessment` skill).
+Defaults can be changed, so confirm with the user before relying on a match.
+
+- Print service ports (IANA and vendor-documented defaults): TCP 9100 (raw/"AppSocket"/"JetDirect"),
+  TCP 631 (IPP, and IPPS on the same port with TLS), TCP 515 (LPD). Many printers also answer on 80/443
+  (EWS), 161/UDP (SNMP), and sometimes 21 (FTP), 23 (Telnet), 445 (SMB), or 5357 (WSD). Some Windows
+  print servers and computers with printer sharing also answer on 631 or 515.
+- mDNS/DNS-SD (Bonjour printing): `_ipp._tcp`, `_ipps._tcp`, `_printer._tcp` (LPD),
+  `_pdl-datastream._tcp` (raw socket), `_printer._sub._http._tcp` (the EWS), and on scanners and MFPs
+  `_uscan._tcp` / `_uscans._tcp` (eSCL/AirScan; reported widely, not verified for every model). A Mac with
+  Printer Sharing also advertises `_ipp._tcp`, so check the TXT record (`ty=`, `product=`) and host.
+- WS-Discovery (UDP 3702) and SSDP (UDP 1900) announcements describing a print or scan device.
+- SNMP `sysDescr` and the Printer MIB (RFC 3805) commonly name the vendor and model; only query SNMP with
+  a community string the user provides (see Discover).
+- EWS page titles and headers usually name the vendor and model (for example "HP Embedded Web Server",
+  "Brother" Web Based Management, Epson "Web Config", Canon "Remote UI", Xerox "CentreWare"/"Embedded Web
+  Server", Lexmark EWS). A self-signed certificate naming the model or vendor is common.
+- Wi-Fi: a second SSID beginning with `DIRECT-` (Wi-Fi Direct) near the printer's location.
+- MAC vendors (OUI) usually name the printer maker (HP, Brother, Canon, Seiko Epson, Xerox, Lexmark,
+  Kyocera, Ricoh, Konica Minolta), but Wi-Fi models may show the Wi-Fi module's maker and rebranded
+  devices show the OEM.
 
 ## synology-dsm
 

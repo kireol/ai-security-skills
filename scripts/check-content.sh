@@ -17,9 +17,12 @@ scan() {
   fi
 }
 
-# IPv4 addresses, excluding RFC 5737 documentation ranges, 0.0.0.0, and loopback.
-ipv4=$(grep -rnIoE '\b([0-9]{1,3}\.){3}[0-9]{1,3}\b' "$@" \
+# IPv4 addresses, excluding RFC 5737 documentation ranges, 0.0.0.0, and loopback. Four numbers that are
+# part of a longer dotted sequence (SNMP OIDs such as 1.3.6.1.2.1.1.1.0) are not addresses; a sentence-
+# ending period is allowed. Four-part version numbers still match and need a human look.
+ipv4=$(grep -rnIoE '(^|[^0-9.])([0-9]{1,3}\.){3}[0-9]{1,3}($|[^0-9.]|\.($|[^0-9]))' "$@" \
   --exclude-dir=.git --exclude=CONTENT_RULES.md --exclude=check-content.sh 2>/dev/null \
+  | sed -E 's/^(.*:[0-9]+:)[^0-9]?([0-9]+(\.[0-9]+){3}).*$/\1\2/' \
   | grep -vE ':(192\.0\.2|198\.51\.100|203\.0\.113)\.[0-9]+$|:0\.0\.0\.0$|:127\.[0-9.]+$')
 if [ -n "$ipv4" ]; then
   printf '\n== IPv4 addresses (non-documentation) ==\n%s\n' "$ipv4"
