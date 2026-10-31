@@ -301,8 +301,9 @@ if ($Dashboard) {
     if ($Access -eq "lan") { $view = "this computer and other devices on the user's local network" }
     else { $view = "this computer only" }
     $DashboardNote = " A live dashboard is running (viewable from $view) and reads the run folder automatically, " +
-        "so always write events there. I can also answer the kick-off questions in the dashboard's Kick-off settings tab; " +
-        "record the dashboard choice in the kick-off answers."
+        "so always write events there. I can also answer the kick-off questions in the dashboard's Kick-off settings tab, " +
+        "even before you ask: read events-dashboard.jsonl in the run folder before asking, and ask only what's still " +
+        "unanswered. Record the dashboard choice in the kick-off answers."
 }
 
 # Single quotes around the rule name: Windows PowerShell 5.1 doesn't escape double quotes in native-command arguments.

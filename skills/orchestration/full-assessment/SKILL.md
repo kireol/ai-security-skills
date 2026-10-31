@@ -8,7 +8,7 @@ description: >-
   dashboard.
 license: CC-BY-4.0
 metadata:
-  version: "1.3"
+  version: "1.4"
   last_reviewed: "2026-10-31"
   applies_to: "Any network the user owns or is authorized to assess"
   audience: "home, work, homelab"
@@ -30,7 +30,9 @@ time, adds network-wide checks no single product skill can see, and merges the r
    `activity: "Kick-off: waiting for your answers"` and `waiting_on: user`. If the user can't give you a
    writable folder, say so and continue without events.
 2. **Ask the kick-off questions and wait for the answers.** The user may answer in the conversation or,
-   if a dashboard is running, in its Kick-off settings tab (see "Answers from the dashboard"). Do not probe
+   if a dashboard is running, in its Kick-off settings tab (see "Answers from the dashboard"), possibly
+   before you ask. Read the run folder's `events-dashboard.jsonl` first and ask only what is still
+   unanswered. Do not probe
    the network in any way (no ping or ARP sweeps, port scans, `nmap`, service or version detection, or
    vulnerability tools) until the user has confirmed the scope and chosen a discovery level. A request for a "complete" or "full" assessment
    is not approval to scan. If the user says "just use the defaults", the default is discovery level 0
@@ -104,8 +106,13 @@ If a dashboard is running, tell the user they can answer in the chat or in the d
 settings** tab, whichever is easier. The dashboard writes those answers to `events-dashboard.jsonl` in
 the run folder as `kickoff.answered` events with `source: dashboard`.
 
-- **Read them** when the user says they've answered in the dashboard, before you act on the kick-off, and
-  at every phase checkpoint. If your environment lets you watch a file in the background, you may also
+- **Check before you ask.** The user may fill in the form as soon as the run appears on the dashboard,
+  before you've asked anything. Right before asking kick-off questions (the first time, and before each
+  later batch), read `events-dashboard.jsonl`. Don't ask again what's already answered there: list
+  those answers ("From the dashboard: ...") and ask only for the rest. If everything is answered, go
+  straight to confirming.
+- **Read them again** when the user says they've answered in the dashboard, before you act on the
+  kick-off, and at every phase checkpoint. If your environment lets you watch a file in the background, you may also
   watch for it; otherwise ask the user to tell you when they've saved.
 - **The newest answer to each question wins,** whichever place it came from (compare the event times).
 - **Confirm in the conversation before acting.** Dashboard answers count as the user's answers, but
@@ -427,6 +434,8 @@ NVR.
 
 ## Version history
 
+- **1.4** (2026-10-31): Read the dashboard's kick-off answers before asking, and ask only the questions
+  still unanswered.
 - **1.3** (2026-10-31): Kick-off asks who may view the dashboard (this computer only or the LAN); answers
   are recorded as `kickoff.answered` events, and the user can answer in the dashboard's Kick-off settings
   tab instead of the chat.

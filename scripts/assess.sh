@@ -228,8 +228,9 @@ if [ "$DASHBOARD" = yes ]; then
   if [ "$ACCESS" = lan ]; then VIEW="this computer and other devices on the user's local network"
   else VIEW="this computer only"; fi
   DASHBOARD_NOTE=" A live dashboard is running (viewable from $VIEW) and reads the run folder automatically, \
-so always write events there. I can also answer the kick-off questions in the dashboard's Kick-off settings tab; \
-record the dashboard choice in the kick-off answers."
+so always write events there. I can also answer the kick-off questions in the dashboard's Kick-off settings tab, \
+even before you ask: read events-dashboard.jsonl in the run folder before asking, and ask only what's still \
+unanswered. Record the dashboard choice in the kick-off answers."
 fi
 
 PROMPT="Use the full-assessment skill from the ai-security-skills collection at $REPO \
