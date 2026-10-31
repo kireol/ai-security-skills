@@ -60,30 +60,69 @@ SOURCE = ("chat", "dashboard")
 # The kick-off questions of the full-assessment skill, in the order they're asked. The dashboard's
 # Kick-off tab is built from this list, so the skill's form, the protocol, and this list change together.
 # Each entry: (key, question, choices or None for free text, hint). Choices are (value, label).
+# (key, question, choices or None for free text, placeholder, description shown under the question).
+# The questions and choices match the kick-off form in skills/orchestration/full-assessment/SKILL.md.
 KICKOFF_FIELDS = [
     ("environment", "Environment", [("home", "Home"), ("office", "Office"), ("homelab", "Homelab"),
-                                     ("mixed", "Mixed")], ""),
-    ("in_scope", "In-scope networks", None, "Subnets or VLANs to assess, e.g. 192.0.2.0/24"),
-    ("out_of_scope", "Out of scope", None, "Devices or ranges to skip"),
-    ("internet_edge", "Internet edge", None, "Public IP or hostname to check from outside, or \"skip\""),
-    ("known_systems", "Known systems", None, "Anything you already know is there: firewall, NAS, cameras, ..."),
+                                     ("mixed", "Mixed")], "",
+     "What kind of network this is. It sets which risks matter most and how careful to be with shared or "
+     "business systems."),
+    ("in_scope", "In-scope networks", None, "Subnets or VLANs to assess, e.g. 192.0.2.0/24",
+     "The only networks the agent may look at. Anything not listed here is left alone."),
+    ("out_of_scope", "Out of scope", None, "Devices or ranges to skip",
+     "Devices or address ranges inside the in-scope networks that the agent must not touch, for example "
+     "someone else's devices or a work laptop."),
+    ("internet_edge", "Internet edge", None, "Public IP or hostname to check from outside, or \"skip\"",
+     "Your public address, so the agent can confirm what the internet can reach. It is checked only with "
+     "your approval, from a place you approve. Enter \"skip\" to leave it out."),
+    ("known_systems", "Known systems", None, "Anything you already know is there: firewall, NAS, cameras, ...",
+     "Systems you already know about. This speeds up the inventory and helps the agent notice anything "
+     "missing or unexpected."),
     ("discovery_level", "Discovery level", [("0", "0: passive, no probing (default)"),
                                             ("1", "1: light discovery (host and port checks)"),
-                                            ("2", "2: service identification (banners, versions)")], ""),
+                                            ("2", "2: service identification (banners, versions)")], "",
+     "How actively the agent may look for devices. 0 uses only what already exists (your lists, the "
+     "router's DHCP leases and ARP tables) and sends nothing to your devices. 1 adds slow ping and port "
+     "checks on in-scope networks. 2 also reads service banners, versions, web page titles, and TLS "
+     "certificates on open ports. Each level includes the ones below it. Levels 1 and 2 still need your "
+     "approval before they start; password guessing and exploits are never used."),
     ("access_depth", "Access depth", [("none", "None: I'll run the commands (default)"),
                                       ("read_only", "Read-only credentials"),
-                                      ("admin", "Admin credentials (only for approved changes)")], ""),
+                                      ("admin", "Admin credentials (only for approved changes)")], "",
+     "Whether the agent gets its own access to your systems. None: it tells you what to run and you paste "
+     "the output (safest, slower, sees only what you share). Read-only: it reads settings and logs itself "
+     "(more complete, low risk if the accounts can't change anything). Admin: it can also make changes "
+     "you approve (highest risk; only needed for remediation)."),
     ("access_available", "Access available", None,
-     "Per system: SSH, API tokens, web logins, MCP tools. Never type a password or key here."),
-    ("fragile_devices", "Fragile devices", None, "Devices that must not be probed"),
-    ("time_window", "Time window", None, "When probing and changes are allowed"),
+     "Per system: SSH, API tokens, web logins, MCP tools. Never type a password or key here.",
+     "Which kinds of access exist for which system, for example \"NAS: read-only SSH account\". Only the "
+     "kind of access: keep the credentials themselves in environment variables, an SSH agent, or a "
+     "credential store."),
+    ("fragile_devices", "Fragile devices", None, "Devices that must not be probed",
+     "Devices that could crash or misbehave if probed, such as medical or industrial equipment, old "
+     "printers, or some cameras. The agent won't send anything to them."),
+    ("time_window", "Time window", None, "When probing and changes are allowed",
+     "When the agent may probe the network or make approved changes, for example \"weekday evenings\" or "
+     "\"any time\". Outside it, the agent does neither."),
     ("goal", "Goal", [("discover", "Discover only"), ("recommend", "Discover and recommend"),
-                      ("remediate", "Allow remediation with approval")], ""),
-    ("agents", "Agents", None, "1 (default), or how many agents to run at once"),
-    ("pace", "Pace", [("phases", "In phases (stop at checkpoints)"), ("all_at_once", "All at once")], ""),
+                      ("remediate", "Allow remediation with approval")], "",
+     "How far the run goes. Discover only: find and report. Discover and recommend: also say what to fix "
+     "and in what order. Allow remediation: the agent may also make fixes, each one only after you approve "
+     "it."),
+    ("agents", "Agents", None, "1 (default), or how many agents to run at once",
+     "How many AI agents check systems at the same time. One is slowest and easiest to follow. Several "
+     "finish sooner but use tokens much faster; only read-only checks run in parallel, and changes are "
+     "always made one at a time."),
+    ("pace", "Pace", [("phases", "In phases (stop at checkpoints)"), ("all_at_once", "All at once")], "",
+     "In phases: the agent stops after the inventory and after each batch of a few systems, so you can "
+     "review, pause, or resume later. Recommended for more than about five systems. All at once: it runs "
+     "to the final report without stopping."),
     ("dashboard", "Live dashboard", [("none", "None"), ("local", "This computer only"),
                                      ("lan", "Devices on my local network (LAN)"),
-                                     ("already_running", "Already running")], ""),
+                                     ("already_running", "Already running")], "",
+     "Who can open this dashboard. This computer only is the most private. Devices on your local network "
+     "is for a computer without a screen; the page is unencrypted on your network, so use it only on a "
+     "network you trust."),
 ]
 AGENT_COUNT = re.compile(r"^[1-9][0-9]?$")
 
@@ -113,7 +152,7 @@ EVENT_FIELDS = {
     "assessment.completed": {"summary": ("text", False)},
     "kickoff.answered": {"source": (SOURCE, False),
                          **{key: (AGENT_COUNT if key == "agents" else tuple(v for v, _ in choices) if choices else "text", False)
-                            for key, _, choices, _ in KICKOFF_FIELDS}},
+                            for key, _, choices, *_ in KICKOFF_FIELDS}},
 }
 KICKOFF_KEYS = [key for key, *_ in KICKOFF_FIELDS]
 
@@ -377,7 +416,8 @@ def aggregate(events, rejected=()):
                 rollup[p] += n
         a["rollup_counts"] = rollup
     return {"generated": _now(), "assessments": result, "rejected": list(rejected)[-100:], "sources": [],
-            "kickoff_fields": [{"key": k, "question": q, "choices": c, "hint": h} for k, q, c, h in KICKOFF_FIELDS]}
+            "kickoff_fields": [{"key": k, "question": q, "choices": c, "hint": h, "description": d}
+                               for k, q, c, h, d in KICKOFF_FIELDS]}
 
 
 class Handler(BaseHTTPRequestHandler):

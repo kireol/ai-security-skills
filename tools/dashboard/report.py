@@ -104,7 +104,7 @@ def kickoff_rows(assessments):
     for a in assessments:
         if a["parent"] or not a.get("kickoff"):
             continue
-        for key, question, choices, _ in dashboard.KICKOFF_FIELDS:
+        for key, question, choices, *_ in dashboard.KICKOFF_FIELDS:
             answer = a["kickoff"].get(key)
             if answer:
                 shown = dict(choices or ()).get(answer["value"], answer["value"])

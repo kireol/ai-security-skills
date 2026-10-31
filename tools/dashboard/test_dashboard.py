@@ -329,6 +329,10 @@ class KickoffTests(unittest.TestCase):
         self.assertEqual(state["dashboard_access"], "local")
         self.assertIn("discovery_level", [f["key"] for f in state["kickoff_fields"]])
 
+    def test_every_kickoff_question_has_a_description(self):
+        for field in self.state()["kickoff_fields"]:
+            self.assertTrue(field["description"].strip(), field["key"])
+
     def test_dashboard_answers_go_to_the_run_folder_and_win_when_newer(self):
         self.state()  # the dashboard learns where the run lives by reading it
         status, _ = self.post({"assessment_id": "run-1", "answers": {"discovery_level": "1", "pace": "phases",

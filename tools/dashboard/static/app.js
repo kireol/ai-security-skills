@@ -135,10 +135,12 @@ function kickoffForm(a) {
   const locked = a.completed;
   const rows = fields.map((f) => {
     const answer = a.kickoff[f.key];
+    const descId = `kickoff-${f.key}-description`;
+    const description = f.description ? el("div", { id: descId, class: "description" }, f.description) : null;
     const current = answer ? answer.value : "";
     if (f.key === "dashboard") {
       // How this dashboard is reachable is set when it starts, so show it rather than offer to change it.
-      return el("div", { class: "field" }, el("label", {}, f.question),
+      return el("div", { class: "field" }, el("label", {}, f.question), description,
         el("div", {}, `Running now: ${ACCESS[lastState.dashboard_access] || "unknown"}`),
         el("div", { class: "small muted" }, answer ? `Kick-off answer: ${(f.choices.find(([v]) => v === answer.value) || [, answer.value])[1]}. ` : "",
           "To change who can view it, stop the dashboard (scripts/assess.sh --stop) and start it again."));
@@ -156,8 +158,9 @@ function kickoffForm(a) {
         ...(long ? { rows: "2" } : { type: "text" }) });
       input.value = current;
     }
-    return el("div", { class: "field" }, el("label", { for: `kickoff-${f.key}` }, f.question),
-      Object.assign(input, { id: `kickoff-${f.key}` }),
+    input.id = `kickoff-${f.key}`;
+    if (description) input.setAttribute("aria-describedby", descId);
+    return el("div", { class: "field" }, el("label", { for: input.id }, f.question), description, input,
       el("div", { class: "small muted" }, answeredBy(answer)));
   });
 
