@@ -34,7 +34,7 @@ def lint(src, prefixes):
             problems.append(f"missing {part}")
     if not (src / "SKILL.md").exists():
         return problems
-    text = (src / "SKILL.md").read_text()
+    text = (src / "SKILL.md").read_text(encoding="utf-8")
     try:
         fm = build_dist.frontmatter(text)
     except ValueError:
@@ -64,7 +64,7 @@ def lint(src, prefixes):
     for part in PARTS:
         path = src / part
         if path.exists():
-            for target in LINK.findall(path.read_text()):
+            for target in LINK.findall(path.read_text(encoding="utf-8")):
                 if not (path.parent / target).resolve().exists():
                     problems.append(f"{part}: broken link {target}")
     return problems

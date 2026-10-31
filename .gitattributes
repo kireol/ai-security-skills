@@ -1,0 +1,3 @@
+# Check out text files with LF on every OS (including Windows with core.autocrlf), so
+# scripts/build-dist.py --check compares like with like and shell scripts keep working.
+* text=auto eol=lf

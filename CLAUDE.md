@@ -32,6 +32,7 @@ python3 -m unittest tools/dashboard/test_dashboard.py -k Server  # one group of 
 python3 tools/dashboard/dashboard.py serve --open               # run the dashboard locally
 python3 tools/dashboard/dashboard.py report <run folder>        # write report.md/report.html, print totals
 scripts/assess.sh [--dashboard] [--agent claude|codex|gemini|print]  # asks which AI to use; --stop stops the dashboard
+scripts/assess.ps1 [-Dashboard] [-Agent claude|codex|gemini|print]  # PowerShell twin of assess.sh; keep them in sync
 ```
 
 Run the content check, the linter, and `build-dist.py --check` before every commit. `.private-denylist` (git-ignored) holds the owner's identifiers for
@@ -59,6 +60,9 @@ the content check. Never commit it, and never copy its contents into a tracked f
   to sibling-folder links in folder bundles and to `dist/<skill>.md` pointers in single-file bundles.
 - `check-content.sh` also flags vendor contact emails and vendor-documented private addresses; leave
   those out and point to the vendor page instead.
+- `scripts/assess.sh` and `scripts/assess.ps1` ask the same questions and build the same prompt; change
+  them together. Python tools read and write UTF-8 with LF line endings, and `.gitattributes` forces LF
+  checkouts, so `build-dist.py --check` gives the same result on every OS.
 - `dist/` is generated and committed, so people can download a skill without building. Never edit it by
   hand.
 - Frontmatter follows the Agent Skills format: `name` and `description` at the top level; `version`,
@@ -74,10 +78,15 @@ the content check. Never commit it, and never copy its contents into a tracked f
   linter requires only frontmatter, "How to use this skill", and "Version history" for them.
 - `check-content.sh` exempts only the project's own repository address (`kireol/ai-security-skills`)
   from the private denylist.
+- The kick-off questions exist in three places that must match: the form in
+  `skills/orchestration/full-assessment/SKILL.md`, the `kickoff.answered` row in
+  `core/reporting-protocol.md`, and `KICKOFF_FIELDS` in `tools/dashboard/dashboard.py` (which builds the
+  dashboard's Kick-off settings tab and the report's "Kick-off choices" section).
 - `core/reporting-protocol.md` defines the live-event format; `tools/dashboard/dashboard.py` implements it
   (stdlib only, Python 3.9+, so it runs on stock macOS Python). Change both together, and keep its
-  security properties: localhost by default, token auth, Host-header check, strict CSP, `textContent`-only
-  rendering of event text, and secret screening. Test fixtures that look like secrets must be assembled at
+  security properties: localhost by default (`--lan` is opt-in), kick-off answers as the page's only
+  write, token auth, Host-header check, strict CSP, `textContent`-only rendering of event text, and secret
+  screening. Test fixtures that look like secrets must be assembled at
   runtime so `check-content.sh` stays strict.
 - Keep skills tool-agnostic (Claude Code, Codex, local LLMs, MCP clients, humans). Scope MCP-server-specific
   guidance to the named server.

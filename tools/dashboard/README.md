@@ -5,6 +5,12 @@ assessment's current mode, what the agent is doing right now (highlighted when i
 status of every domain, findings by priority and state, changes made, and any active incident. When it
 has nothing to show, it lists the folders it's watching.
 
+For a full-assessment run, the **Kick-off settings** tab lists every kick-off question with its current
+answer and where it was given (in the chat or in the dashboard). You can answer or change answers there
+instead of typing them to the agent; after saving, tell the agent you've answered in the dashboard. It
+also re-reads them at every checkpoint and confirms them with you before it acts. Answers to a completed
+run are read-only, so the tab doubles as a record of how the run was set up.
+
 Agents report using the [live reporting protocol](../../core/reporting-protocol.md). The dashboard is one
 Python file with no dependencies (Python 3.9+).
 
@@ -26,7 +32,7 @@ It prints:
 - **Events folder**, by default `~/.ai-security-dashboard/events/`.
 - **HTTP endpoint**: `POST http://127.0.0.1:8770/api/events`.
 
-Options: `--port`, `--data DIR` (or `AISS_DASHBOARD_DATA`), `--host`, `--allow-host`. The token is
+Options: `--lan`, `--port`, `--data DIR` (or `AISS_DASHBOARD_DATA`), `--host`, `--allow-host`. The token is
 generated on first run and stored in `<data>/token` (mode 600); set `AISS_DASHBOARD_TOKEN` to override it.
 
 ## Point an agent at it
@@ -69,10 +75,18 @@ python3 tools/dashboard/dashboard.py validate path/to/events.jsonl
 
 The dashboard is a map of your weaknesses. It is built to stay private:
 
-- **Localhost only by default.** To use it from another device on your LAN, run with `--host 0.0.0.0
-  --allow-host <the-ip-or-name-you-browse-to>`. Never expose it to the internet or put it behind a public
-  tunnel.
-- **Token required** for reading state and posting events.
+- **Localhost only by default.** To view it from another device on your LAN (for example when the agent
+  runs on a computer without a screen), run with `--lan` (or `scripts/assess.sh --dashboard --lan`). It
+  then listens on all interfaces, accepts this computer's LAN address and name, and prints a link for each.
+  Plain HTTP means the page and token can be read by anyone who can watch your network traffic, so use LAN
+  mode only on a network you trust and stop the dashboard when you're done. The more private alternative
+  is to keep it local and use an SSH tunnel: `ssh -L 8770:127.0.0.1:8770 <that computer>`, then open the
+  `127.0.0.1` link on your own computer. For other names or addresses, use `--host 0.0.0.0 --allow-host
+  <name-or-ip>`. Never expose it to the internet or put it behind a public tunnel.
+- **Token required** for reading state, posting events, and saving kick-off answers.
+- **One narrow write.** The page itself can write only kick-off answers (`POST /api/kickoff`): validated
+  like any event, screened for secrets, for a run that's still open, appended to that run's
+  `events-dashboard.jsonl` (mode 600). It can't change findings or anything else the agent reported.
 - **Host header check:** requests with an unexpected `Host` are refused, which blocks DNS-rebinding attacks
   from malicious web pages.
 - **Untrusted content stays text.** Findings contain text from scanned systems (hostnames, labels, logs).

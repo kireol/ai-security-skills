@@ -31,10 +31,13 @@ scripts/assess.sh --dashboard
 ```
 
 It asks which AI assistant to use (Claude Code, Codex, or Gemini CLI, whichever you have installed), or
-lets you print the prompt to paste into another assistant, or exit without doing anything. Then it starts
-the [dashboard](tools/dashboard/README.md) in the background, opens it in your browser, and starts the
-assistant with the kick-off prompt. As the agent works, the dashboard fills in with the inventory, each
-system's checks, findings, and changes. (Already in an AI session? Ask it to "start the dashboard" during
+lets you print the prompt to paste into another assistant, or exit without doing anything. It also asks
+who may view the dashboard: **only this computer**, or **any device on your local network** (pick this
+when you're running it on a computer without a screen; `--local` or `--lan` skips the question). Then it
+starts the [dashboard](tools/dashboard/README.md) in the background, opens it or prints its links, and
+starts the assistant with the kick-off prompt. You can answer the kick-off questions in the chat or in
+the dashboard's **Kick-off settings** tab, which also shows every answer however it was given. As the
+agent works, the dashboard fills in with the inventory, each system's checks, findings, and changes. (Already in an AI session? Ask it to "start the dashboard" during
 the kick-off and it will do the same.)
 
 **When you're done,** stop the dashboard with:
@@ -45,6 +48,17 @@ scripts/assess.sh --stop
 
 That stops it however it was started. (If you ran `tools/dashboard/dashboard.py serve` yourself in a
 terminal, Ctrl+C there also works.) Your reports stay in `~/ai-security-reports/`.
+
+**On Windows,** use the PowerShell launcher instead. It asks the same questions and takes the same
+options in PowerShell style (`-Dashboard`, `-Stop`, `-Agent`, `-Local`, `-Lan`, `-Port`):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\assess.ps1 -Dashboard
+powershell -ExecutionPolicy Bypass -File scripts\assess.ps1 -Stop
+```
+
+It needs Python 3.9 or later (`python3`, `python`, or `py -3`) for the dashboard. It also runs under
+PowerShell 7 on macOS and Linux.
 
 ### Option 2: full assessment, just the AI (no dashboard)
 

@@ -6,6 +6,7 @@
 #   scripts/assess.sh --stop          stop the dashboard
 #
 # Options: --agent claude|codex|gemini|print   skip the question and use this choice
+#          --local | --lan                     dashboard viewable from this computer only, or from your LAN
 #          --port N                            dashboard port (default 8770)
 #
 # Reports and run data go to ~/ai-security-reports/<run-id>/ (override with AISS_REPORTS).
@@ -18,6 +19,7 @@ PORT=8770
 DASHBOARD=no
 STOP=no
 AGENT=""
+ACCESS=""
 KNOWN_AGENTS="claude codex gemini"
 
 while [ $# -gt 0 ]; do
@@ -25,8 +27,10 @@ while [ $# -gt 0 ]; do
     --dashboard) DASHBOARD=yes ;;
     --stop) STOP=yes ;;
     --agent) AGENT=${2:-}; shift ;;
+    --local) ACCESS=local ;;
+    --lan) ACCESS=lan ;;
     --port) PORT=${2:-}; shift ;;
-    -h|--help) sed -n '2,12p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,13p' "$0"; exit 0 ;;
     *) echo "Unknown option: $1 (see --help)" >&2; exit 2 ;;
   esac
   shift
@@ -38,6 +42,7 @@ if [ "$STOP" = yes ]; then
   [ -f "$DATA/dashboard.pid" ] && pid=$(cat "$DATA/dashboard.pid")
   if [ -z "$pid" ] || ! kill -0 "$pid" 2>/dev/null; then
     pid=""
+    command -v lsof >/dev/null 2>&1 || echo "(lsof isn't installed, so only a dashboard started by this script can be found.)"
     for candidate in $(lsof -ti "tcp:$PORT" -sTCP:LISTEN 2>/dev/null); do
       if ps -p "$candidate" -o command= | grep -q 'dashboard\.py serve'; then pid=$candidate; fi
     done
@@ -86,27 +91,61 @@ case "$AGENT" in
   *) echo "Unknown assistant: $AGENT (use claude, codex, gemini, or print)" >&2; exit 2 ;;
 esac
 
+# Who may view the dashboard. A headless computer has no browser, so "this computer only" would mean
+# nobody can see it unless they use an SSH tunnel.
+if [ "$DASHBOARD" = yes ] && [ -z "$ACCESS" ]; then
+  if [ ! -t 0 ]; then
+    ACCESS=local
+  else
+    echo
+    echo "Who should be able to view the dashboard?"
+    echo "  1) Only this computer (most private; from another computer, use an SSH tunnel:"
+    echo "     ssh -L $PORT:127.0.0.1:$PORT <this computer>, then open the link on that computer)"
+    echo "  2) Any device on my local network (choose this for a computer without a screen;"
+    echo "     the page is unencrypted on your network, so only on a network you trust)"
+    printf "Choose 1-2: "
+    read -r choice
+    case "$choice" in
+      1) ACCESS=local ;;
+      2) ACCESS=lan ;;
+      *) echo "Not a valid choice; nothing started."; exit 1 ;;
+    esac
+  fi
+fi
+
 mkdir -p "$REPORTS"
 chmod 700 "$REPORTS"
 
+# Python is already required for the dashboard, so use it rather than curl (missing on minimal systems).
+dashboard_up() {
+  python3 -I -c 'import socket, sys
+try:
+    socket.create_connection(("127.0.0.1", int(sys.argv[1])), timeout=1).close()
+except OSError:
+    sys.exit(1)' "$PORT"
+}
+
 open_url() {
-  if command -v open >/dev/null 2>&1; then open "$1"
-  elif command -v xdg-open >/dev/null 2>&1; then xdg-open "$1" >/dev/null 2>&1
-  else echo "Open this in your browser: $1"
-  fi
+  if [ "$(uname)" = Darwin ] && open "$1" 2>/dev/null; then return; fi
+  if [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ] && command -v xdg-open >/dev/null 2>&1 \
+    && xdg-open "$1" >/dev/null 2>&1; then return; fi
+  return 0
 }
 
 DASHBOARD_NOTE=""
 if [ "$DASHBOARD" = yes ]; then
   mkdir -p "$DATA"
-  if curl -s -o /dev/null --max-time 2 "http://127.0.0.1:$PORT/"; then
-    echo "Dashboard already running on port $PORT."
+  if dashboard_up; then
+    echo "Dashboard already running on port $PORT. To change who can view it, stop it first:"
+    echo "  scripts/assess.sh --stop"
   else
-    nohup python3 -I "$REPO/tools/dashboard/dashboard.py" serve --port "$PORT" --data "$DATA" \
+    LAN_FLAG=""
+    [ "$ACCESS" = lan ] && LAN_FLAG=--lan
+    nohup python3 -I "$REPO/tools/dashboard/dashboard.py" serve $LAN_FLAG --port "$PORT" --data "$DATA" \
       --reports "$REPORTS" >"$DATA/dashboard.log" 2>&1 &
     echo $! >"$DATA/dashboard.pid"
     tries=0
-    until curl -s -o /dev/null --max-time 1 "http://127.0.0.1:$PORT/"; do
+    until dashboard_up; do
       tries=$((tries + 1))
       if [ $tries -ge 20 ]; then echo "Dashboard didn't start; see $DATA/dashboard.log" >&2; exit 1; fi
       sleep 0.25
@@ -114,8 +153,17 @@ if [ "$DASHBOARD" = yes ]; then
     echo "Dashboard started. When you're done, stop it with: scripts/assess.sh --stop"
   fi
   if [ -n "${AISS_DASHBOARD_TOKEN:-}" ]; then TOKEN=$AISS_DASHBOARD_TOKEN; else TOKEN=$(cat "$DATA/token"); fi
+  echo "Dashboard on this computer: http://127.0.0.1:$PORT/#token=$TOKEN"
   open_url "http://127.0.0.1:$PORT/#token=$TOKEN"
-  DASHBOARD_NOTE=" A live dashboard is running and reads the run folder automatically, so always write events there."
+  if grep -q '^On your LAN:' "$DATA/dashboard.log" 2>/dev/null; then
+    echo "From another device on your network, open one of these:"
+    grep '^On your LAN:' "$DATA/dashboard.log" | sed 's/^On your LAN: */  /'
+  fi
+  if [ "$ACCESS" = lan ]; then VIEW="this computer and other devices on the user's local network"
+  else VIEW="this computer only"; fi
+  DASHBOARD_NOTE=" A live dashboard is running (viewable from $VIEW) and reads the run folder automatically, \
+so always write events there. I can also answer the kick-off questions in the dashboard's Kick-off settings tab; \
+record the dashboard choice in the kick-off answers."
 fi
 
 PROMPT="Use the full-assessment skill from the ai-security-skills collection at $REPO \

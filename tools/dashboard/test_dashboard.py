@@ -214,9 +214,6 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(len(state["rejected"]), 2)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
 
 class ReportTests(unittest.TestCase):
     def setUp(self):
@@ -246,6 +243,8 @@ class ReportTests(unittest.TestCase):
         self.assertEqual((t["systems"], t["serious"], t["warnings"], t["info"]), (4, 3, 1, 0))
         for name in ("report.md", "report.html"):
             self.assertEqual((self.run / name).stat().st_mode & 0o777, 0o600)
+        self.assertIn("| Discovery level | 1: light discovery (host and port checks) | dashboard,",
+                      (self.run / "report.md").read_text())
 
     def test_untrusted_text_is_escaped_in_html(self):
         hostile = "<script>alert(1)</script>"
@@ -283,3 +282,92 @@ class StatusTests(unittest.TestCase):
     def test_waiting_on_defaults_to_nothing(self):
         a = dashboard.aggregate([dashboard.validate_event(event("status.updated", activity="checking"))])["assessments"][0]
         self.assertEqual(a["status"]["waiting_on"], "nothing")
+
+
+class KickoffTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.data = Path(self.tmp.name) / "data"
+        self.reports = Path(self.tmp.name) / "reports"
+        self.run = self.reports / "run-1"
+        self.run.mkdir(parents=True)
+        (self.run / "events.jsonl").write_text(
+            json.dumps(event("assessment.started", aid="run-1", skill="full-assessment", target="home")) + "\n"
+            + json.dumps(event("kickoff.answered", aid="run-1", environment="Home", discovery_level=0)) + "\n")
+        self.server = dashboard.make_server("127.0.0.1", 0, self.data, "test-token", reports_dir=self.reports)
+        self.port = self.server.server_address[1]
+        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+
+    def tearDown(self):
+        self.server.shutdown()
+        self.server.server_close()
+        self.tmp.cleanup()
+
+    def post(self, body):
+        conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
+        conn.request("POST", "/api/kickoff", body=json.dumps(body).encode(), headers={
+            "Host": f"127.0.0.1:{self.port}", "Authorization": "Bearer test-token",
+            "Content-Type": "application/json"})
+        response = conn.getresponse()
+        payload = response.read()
+        conn.close()
+        return response.status, payload
+
+    def state(self):
+        conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
+        conn.request("GET", "/api/state", headers={"Host": f"127.0.0.1:{self.port}",
+                                                   "Authorization": "Bearer test-token"})
+        state = json.loads(conn.getresponse().read())
+        conn.close()
+        return state
+
+    def test_chat_answers_show_with_their_source(self):
+        state = self.state()
+        kickoff = state["assessments"][0]["kickoff"]
+        self.assertEqual(kickoff["environment"]["value"], "home")
+        self.assertEqual(kickoff["discovery_level"], {"value": "0", "source": "chat", "time": "2026-01-15T14:00:00Z"})
+        self.assertEqual(state["dashboard_access"], "local")
+        self.assertIn("discovery_level", [f["key"] for f in state["kickoff_fields"]])
+
+    def test_dashboard_answers_go_to_the_run_folder_and_win_when_newer(self):
+        self.state()  # the dashboard learns where the run lives by reading it
+        status, _ = self.post({"assessment_id": "run-1", "answers": {"discovery_level": "1", "pace": "phases",
+                                                                     "goal": "", "bogus": "x"}})
+        self.assertEqual(status, 202)
+        written = self.run / "events-dashboard.jsonl"
+        self.assertEqual(written.stat().st_mode & 0o777, 0o600)
+        line = json.loads(written.read_text())
+        self.assertEqual(line["data"], {"source": "dashboard", "discovery_level": "1", "pace": "phases"})
+        kickoff = self.state()["assessments"][0]["kickoff"]
+        self.assertEqual((kickoff["discovery_level"]["value"], kickoff["discovery_level"]["source"]), ("1", "dashboard"))
+        self.assertEqual(kickoff["environment"]["source"], "chat")
+        self.assertNotIn("goal", kickoff)
+
+    def test_dashboard_answers_are_validated(self):
+        self.state()
+        for answers in ({"discovery_level": "3"}, {"agents": "0"}, {"access_available": "password: hunter22"}, {}):
+            with self.subTest(answers=answers):
+                status, body = self.post({"assessment_id": "run-1", "answers": answers})
+                self.assertEqual(status, 400)
+                self.assertNotIn(b"hunter22", body)
+        self.assertEqual(self.post({"assessment_id": "nope", "answers": {"pace": "phases"}})[0], 404)
+        self.assertFalse((self.run / "events-dashboard.jsonl").exists())
+
+    def test_completed_runs_are_read_only(self):
+        with open(self.run / "events.jsonl", "a") as fh:
+            fh.write(json.dumps(event("assessment.completed", aid="run-1")) + "\n")
+        self.state()
+        self.assertEqual(self.post({"assessment_id": "run-1", "answers": {"pace": "phases"}})[0], 404)
+
+    def test_lan_server_accepts_its_lan_names(self):
+        server = dashboard.make_server("0.0.0.0", 0, self.data, "t", extra_hosts=["192.0.2.10"])
+        try:
+            self.assertEqual(server.access, "lan")
+            self.assertIn("192.0.2.10", server.allowed_hosts)
+        finally:
+            server.server_close()
+        self.assertTrue(all(not n.startswith("127.") for n in dashboard.lan_names()))
+
+
+if __name__ == "__main__":
+    unittest.main()

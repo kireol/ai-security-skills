@@ -9,12 +9,17 @@ const CLOSED = new Set(["resolved", "accepted_risk"]);
 let selected = null;
 let showClosed = false;
 let lastState = null;
+let tab = "overview";       // for runs: "overview" or "kickoff"
+let kickoffDirty = false;   // unsaved edits in the kick-off form; don't re-render over them
+let kickoffMessage = null;  // {text, ok} after saving
 
 function el(tag, props = {}, ...children) {
   const node = document.createElement(tag);
   for (const [key, value] of Object.entries(props)) {
     if (key === "class") node.className = value;
     else if (key === "onclick") node.addEventListener("click", value);
+    else if (key === "onsubmit") node.addEventListener("submit", value);
+    else if (key === "oninput") node.addEventListener("input", value);
     else node.setAttribute(key, value);
   }
   for (const child of children.flat()) {
@@ -90,8 +95,119 @@ function statusLine(a, compact) {
 }
 
 function select(id) {
+  if (id !== selected) {
+    tab = "overview";
+    kickoffDirty = false;
+    kickoffMessage = null;
+  }
   selected = id;
   render(lastState);
+}
+
+// Redraw now, even if focus is in the kick-off form (render() skips the form while someone is typing).
+function redraw() {
+  if (document.activeElement) document.activeElement.blur();
+  render(lastState);
+}
+
+const isRun = (a) => a.skill === "full-assessment" && !a.parent;
+const kickoffAnswered = (a) => Boolean(a.kickoff.discovery_level);
+
+function tabs(a) {
+  const button = (name, text) => el("button", {
+    class: `tab${tab === name ? " current" : ""}`,
+    onclick: () => { tab = name; kickoffDirty = false; kickoffMessage = null; render(lastState); },
+  }, text);
+  return el("div", { class: "tabs", role: "tablist" }, button("overview", "Overview"),
+    button("kickoff", kickoffAnswered(a) ? "Kick-off settings" : "Kick-off settings (needs answers)"));
+}
+
+function answeredBy(answer) {
+  if (!answer) return "Not answered yet";
+  const where = answer.source === "dashboard" ? "Set in the dashboard" : "Answered in the chat";
+  return `${where}, ${when(answer.time)}`;
+}
+
+const ACCESS = { local: "This computer only", lan: "Devices on your local network (LAN)" };
+
+function kickoffForm(a) {
+  const fields = lastState.kickoff_fields || [];
+  const locked = a.completed;
+  const rows = fields.map((f) => {
+    const answer = a.kickoff[f.key];
+    const current = answer ? answer.value : "";
+    if (f.key === "dashboard") {
+      // How this dashboard is reachable is set when it starts, so show it rather than offer to change it.
+      return el("div", { class: "field" }, el("label", {}, f.question),
+        el("div", {}, `Running now: ${ACCESS[lastState.dashboard_access] || "unknown"}`),
+        el("div", { class: "small muted" }, answer ? `Kick-off answer: ${(f.choices.find(([v]) => v === answer.value) || [, answer.value])[1]}. ` : "",
+          "To change who can view it, stop the dashboard (scripts/assess.sh --stop) and start it again."));
+    }
+    const mark = () => { kickoffDirty = true; kickoffMessage = null; };
+    let input;
+    if (f.choices) {
+      input = el("select", { name: f.key, oninput: mark },
+        el("option", { value: "" }, "— not answered —"),
+        f.choices.map(([value, text]) => el("option", { value }, text)));
+      input.value = current;
+    } else {
+      const long = ["known_systems", "access_available", "in_scope", "out_of_scope", "fragile_devices"].includes(f.key);
+      input = el(long ? "textarea" : "input", { name: f.key, placeholder: f.hint || "", oninput: mark,
+        ...(long ? { rows: "2" } : { type: "text" }) });
+      input.value = current;
+    }
+    return el("div", { class: "field" }, el("label", { for: `kickoff-${f.key}` }, f.question),
+      Object.assign(input, { id: `kickoff-${f.key}` }),
+      el("div", { class: "small muted" }, answeredBy(answer)));
+  });
+
+  async function save(e) {
+    e.preventDefault();
+    const answers = {};
+    for (const f of fields) {
+      const input = e.target.elements[f.key];
+      if (!input) continue;
+      const before = a.kickoff[f.key] ? a.kickoff[f.key].value : "";
+      const value = input.value.trim();
+      if (value !== before && value !== "") answers[f.key] = value;
+    }
+    if (Object.keys(answers).length === 0) {
+      kickoffMessage = { text: "Nothing changed.", ok: true };
+      kickoffDirty = false;
+      return redraw();
+    }
+    try {
+      const response = await fetch("/api/kickoff", {
+        method: "POST", cache: "no-store",
+        headers: { Authorization: `Bearer ${token()}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ assessment_id: a.id, answers }),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.error || `HTTP ${response.status}`);
+      kickoffDirty = false;
+      kickoffMessage = { text: "Saved. Tell the agent you've answered in the dashboard; it also re-reads these "
+        + "answers at every checkpoint, and confirms them with you before it starts.", ok: true };
+      if (document.activeElement) document.activeElement.blur();
+      refresh();
+    } catch (err) {
+      // Keep what was typed: show the error in place instead of redrawing the form.
+      const message = document.getElementById("kickoff-message");
+      message.textContent = `Not saved: ${err.message}`;
+      message.className = "error";
+    }
+  }
+
+  return el("form", { id: "kickoff-form", class: "kickoff", onsubmit: save },
+    el("p", { class: "muted" }, locked
+      ? "This run is complete. These are the kick-off answers it used."
+      : "Answer here or in the chat with your AI assistant; both end up in the same place. The newest answer "
+        + "to each question wins. Leaving a field blank keeps the existing answer."),
+    el("fieldset", locked ? { disabled: "" } : {}, rows,
+      locked ? null : el("div", { class: "actions" }, el("button", { type: "submit" }, "Save answers"),
+        kickoffDirty ? el("button", { type: "button", class: "link",
+          onclick: () => { kickoffDirty = false; kickoffMessage = null; redraw(); } }, "Discard changes") : null)),
+    el("p", { id: "kickoff-message", class: kickoffMessage && !kickoffMessage.ok ? "error" : "saved" },
+      kickoffMessage ? kickoffMessage.text : ""));
 }
 
 function inventory(a) {
@@ -132,16 +248,28 @@ function renderDetail(a) {
   }
   const findings = a.findings.filter((f) => showClosed || !CLOSED.has(f.state));
   const hidden = a.findings.length - findings.length;
-
-  // replaceChildren() would print null/false as text, so drop empty optional sections first.
-  detail.replaceChildren(...[
+  const header = [
     el("h2", {}, a.skill || a.id, a.skill_version ? el("span", { class: "muted" }, ` v${a.skill_version}`) : null),
     el("p", { class: "muted" }, [a.target, a.scope, a.agent && `agent: ${a.agent}`, `started ${when(a.started)}`]
       .filter(Boolean).join(" · ")),
+    isRun(a) ? tabs(a) : null,
+  ];
+  if (isRun(a) && tab === "kickoff") {
+    detail.replaceChildren(...[...header, a.completed ? null : statusLine(a, false), kickoffForm(a)].filter(Boolean));
+    return;
+  }
+
+  // replaceChildren() would print null/false as text, so drop empty optional sections first.
+  detail.replaceChildren(...[
+    ...header,
     a.incident && a.incident.status !== "closed" ? el("div", { class: "incident" },
       el("strong", {}, `Incident: ${label(a.incident.status)}`), a.incident.summary ? ` ${a.incident.summary}` : "",
       a.incident.containment ? el("ul", {}, a.incident.containment.map((c) => el("li", {}, c))) : null) : null,
     a.completed ? null : statusLine(a, false),
+    isRun(a) && !a.completed && !kickoffAnswered(a) ? el("div", { class: "kickoff-needed" },
+      "The kick-off questions haven't been answered yet. ",
+      el("button", { class: "link", onclick: () => { tab = "kickoff"; render(lastState); } }, "Answer them here →"),
+      " or in the chat.") : null,
     a.parent ? el("p", {}, el("button", { class: "link", onclick: () => select(a.parent) }, "← back to run")) : null,
     a.children.length ? el("p", {}, "Open findings across this run: ", counts(a, "rollup_counts")) : null,
     a.completed ? el("div", { class: "completed" }, el("strong", {}, "Completed. "), a.summary || "") : modeStrip(a),
@@ -181,6 +309,9 @@ function render(state) {
     selected = (state.assessments.find((a) => !a.parent) || state.assessments[0])?.id ?? null;
   }
   renderList(state);
+  // Don't redraw the kick-off form under someone who is typing in it.
+  const form = document.getElementById("kickoff-form");
+  if (form && (kickoffDirty || form.contains(document.activeElement))) return;
   renderDetail(state.assessments.find((a) => a.id === selected));
 }
 
@@ -194,6 +325,13 @@ function showLogin(message) {
   document.getElementById("app").hidden = true;
   document.getElementById("login").hidden = false;
   setStatus(message, false);
+}
+
+let pollTimer = null;
+
+function refresh() {
+  clearTimeout(pollTimer);
+  poll();
 }
 
 async function poll() {
@@ -213,7 +351,7 @@ async function poll() {
   } catch (err) {
     setStatus(`disconnected (${err.message})`, false);
   }
-  setTimeout(poll, POLL_MS);
+  pollTimer = setTimeout(poll, POLL_MS);
 }
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -229,7 +367,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (value) {
       sessionStorage.setItem("aiss-token", value);
       document.getElementById("token-input").value = "";
-      poll();
+      refresh();
     }
   });
   poll();

@@ -3,7 +3,7 @@
 
 Standard library only; Python 3.9+.
 
-  dashboard.py serve [--host 127.0.0.1] [--port 8770] [--data DIR] [--reports DIR] [--open]
+  dashboard.py serve [--lan | --host 127.0.0.1] [--port 8770] [--data DIR] [--reports DIR] [--open]
   dashboard.py validate FILE.jsonl ...
   dashboard.py report RUN_DIR      write report.md and report.html for a run and print the totals
 """
@@ -13,6 +13,7 @@ import json
 import os
 import re
 import secrets
+import socket
 import sys
 import threading
 from datetime import datetime, timezone
@@ -24,6 +25,7 @@ SCHEMA = "ai-security-skills/event/v1"
 DEFAULT_DATA = Path(os.environ.get("AISS_DASHBOARD_DATA", Path.home() / ".ai-security-dashboard"))
 DEFAULT_REPORTS = Path(os.environ.get("AISS_REPORTS", Path.home() / "ai-security-reports"))
 DEFAULT_PORT = 8770
+O_BINARY = getattr(os, "O_BINARY", 0)  # Windows only: no newline translation below the text layer
 MAX_BODY = 1_000_000
 MAX_TEXT = 4000
 MAX_LIST = 50
@@ -53,6 +55,37 @@ WAITING_ON = ("nothing", "user", "background_task")
 EXPOSURE = ("internet", "vpn", "lan", "isolated", "unknown")
 COVERAGE = ("pending", "in_progress", "assessed", "no_skill", "out_of_scope", "skipped")
 CLOSED_STATES = ("resolved", "accepted_risk")
+SOURCE = ("chat", "dashboard")
+
+# The kick-off questions of the full-assessment skill, in the order they're asked. The dashboard's
+# Kick-off tab is built from this list, so the skill's form, the protocol, and this list change together.
+# Each entry: (key, question, choices or None for free text, hint). Choices are (value, label).
+KICKOFF_FIELDS = [
+    ("environment", "Environment", [("home", "Home"), ("office", "Office"), ("homelab", "Homelab"),
+                                     ("mixed", "Mixed")], ""),
+    ("in_scope", "In-scope networks", None, "Subnets or VLANs to assess, e.g. 192.0.2.0/24"),
+    ("out_of_scope", "Out of scope", None, "Devices or ranges to skip"),
+    ("internet_edge", "Internet edge", None, "Public IP or hostname to check from outside, or \"skip\""),
+    ("known_systems", "Known systems", None, "Anything you already know is there: firewall, NAS, cameras, ..."),
+    ("discovery_level", "Discovery level", [("0", "0: passive, no probing (default)"),
+                                            ("1", "1: light discovery (host and port checks)"),
+                                            ("2", "2: service identification (banners, versions)")], ""),
+    ("access_depth", "Access depth", [("none", "None: I'll run the commands (default)"),
+                                      ("read_only", "Read-only credentials"),
+                                      ("admin", "Admin credentials (only for approved changes)")], ""),
+    ("access_available", "Access available", None,
+     "Per system: SSH, API tokens, web logins, MCP tools. Never type a password or key here."),
+    ("fragile_devices", "Fragile devices", None, "Devices that must not be probed"),
+    ("time_window", "Time window", None, "When probing and changes are allowed"),
+    ("goal", "Goal", [("discover", "Discover only"), ("recommend", "Discover and recommend"),
+                      ("remediate", "Allow remediation with approval")], ""),
+    ("agents", "Agents", None, "1 (default), or how many agents to run at once"),
+    ("pace", "Pace", [("phases", "In phases (stop at checkpoints)"), ("all_at_once", "All at once")], ""),
+    ("dashboard", "Live dashboard", [("none", "None"), ("local", "This computer only"),
+                                     ("lan", "Devices on my local network (LAN)"),
+                                     ("already_running", "Already running")], ""),
+]
+AGENT_COUNT = re.compile(r"^[1-9][0-9]?$")
 
 # type -> {field: (kind, required)}; kind is "text", "list", a regex, or a tuple of allowed values.
 EVENT_FIELDS = {
@@ -78,7 +111,11 @@ EVENT_FIELDS = {
                        "skill": (SKILL_NAME, False), "coverage": (COVERAGE, False),
                        "assessment_id": (ASSESSMENT_ID, False), "note": ("text", False)},
     "assessment.completed": {"summary": ("text", False)},
+    "kickoff.answered": {"source": (SOURCE, False),
+                         **{key: (AGENT_COUNT if key == "agents" else tuple(v for v, _ in choices) if choices else "text", False)
+                            for key, _, choices, _ in KICKOFF_FIELDS}},
 }
+KICKOFF_KEYS = [key for key, *_ in KICKOFF_FIELDS]
 
 # Redacted placeholders such as <token>, ***, or [REDACTED] are allowed after "password:" and similar.
 SECRET_PATTERNS = [re.compile(p, re.IGNORECASE) for p in (
@@ -96,7 +133,12 @@ class InvalidEvent(ValueError):
     pass
 
 
+_BAD = object()  # a request body that was refused (the error response has already been sent)
+
+
 def _normalize(value, allowed):
+    if isinstance(value, int) and not isinstance(value, bool):
+        value = str(value)
     if not isinstance(value, str):
         raise InvalidEvent("must be a string")
     simple = value.strip().replace(" ", "_").replace("-", "_")
@@ -161,6 +203,8 @@ def validate_event(raw, received=None):
             elif isinstance(kind, tuple):
                 clean[name] = _normalize(value, kind)
             else:
+                if isinstance(value, int) and not isinstance(value, bool):
+                    value = str(value)
                 if not isinstance(value, str) or not kind.match(value):
                     raise InvalidEvent("has an invalid format")
                 clean[name] = value
@@ -183,12 +227,28 @@ class EventStore:
         self.reports_dir = Path(reports_dir) if reports_dir else None
         self._lock = threading.Lock()
         self._cache = {}
+        self.homes = {}  # assessment_id -> run folder its assessment.started was read from
+
+    def append_kickoff(self, event):
+        """Write a kick-off answer from the dashboard where the agent will read it: the run folder's own
+        events-dashboard.jsonl, or the events folder for an assessment that has no run folder."""
+        home = self.homes.get(event["assessment_id"])
+        if home and self.reports_dir and home.parent.resolve() == self.reports_dir.resolve():
+            path = home / "events-dashboard.jsonl"
+        else:
+            path = self.events_dir / f"{event['assessment_id']}.jsonl"
+        line = json.dumps({"schema": SCHEMA, **event}, ensure_ascii=False)
+        with self._lock:
+            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND | O_BINARY, 0o600)
+            with os.fdopen(fd, "a", encoding="utf-8", newline="\n") as fh:
+                fh.write(line + "\n")
+        return path
 
     def append(self, events):
         with self._lock:
             for event in events:
                 line = json.dumps({"schema": SCHEMA, **event}, ensure_ascii=False)
-                with open(self.events_dir / f"{event['assessment_id']}.jsonl", "a", encoding="utf-8") as fh:
+                with open(self.events_dir / f"{event['assessment_id']}.jsonl", "a", encoding="utf-8", newline="\n") as fh:
                     fh.write(line + "\n")
 
     def _read_file(self, path):
@@ -231,13 +291,16 @@ class EventStore:
                 file_events, file_rejected = self._read_file(path)
                 events.extend(file_events)
                 rejected.extend(file_rejected)
+                for event in file_events:
+                    if event["type"] == "assessment.started" and path.parent != self.events_dir:
+                        self.homes[event["assessment_id"]] = path.parent
         return events, rejected
 
 
 def _new_assessment(aid):
     return {"id": aid, "skill": None, "skill_version": None, "target": None, "scope": None, "agent": None,
             "parent": None, "assets": {}, "mode": None, "modes_visited": [], "completed": False, "summary": None, "started": None, "updated": None,
-            "domains": {}, "findings": {}, "changes": [], "incident": None, "status": None}
+            "domains": {}, "findings": {}, "changes": [], "incident": None, "status": None, "kickoff": {}}
 
 
 def aggregate(events, rejected=()):
@@ -272,6 +335,14 @@ def aggregate(events, rejected=()):
             a["status"] = {"activity": data["activity"], "waiting_on": data.get("waiting_on", "nothing"), "time": time}
         elif etype == "incident.status":
             a["incident"] = {**data, "time": time}
+        elif etype == "kickoff.answered":
+            # Answers can come from the chat (written by the agent) or the dashboard, in different files,
+            # so the newest answer to each question wins regardless of file order.
+            for key in KICKOFF_KEYS:
+                if key in data:
+                    current = a["kickoff"].get(key)
+                    if current is None or (time or "") >= (current["time"] or ""):
+                        a["kickoff"][key] = {"value": data[key], "source": data.get("source", "chat"), "time": time}
         elif etype == "assessment.completed":
             a["completed"] = True
             a["summary"] = data.get("summary")
@@ -305,7 +376,8 @@ def aggregate(events, rejected=()):
             for p, n in by_id[child_id]["open_counts"].items():
                 rollup[p] += n
         a["rollup_counts"] = rollup
-    return {"generated": _now(), "assessments": result, "rejected": list(rejected)[-100:], "sources": []}
+    return {"generated": _now(), "assessments": result, "rejected": list(rejected)[-100:], "sources": [],
+            "kickoff_fields": [{"key": k, "question": q, "choices": c, "hint": h} for k, q, c, h in KICKOFF_FIELDS]}
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -366,6 +438,7 @@ class Handler(BaseHTTPRequestHandler):
             if self._authorized():
                 state = aggregate(*self.server.store.load())
                 state["sources"] = self.server.store.sources()
+                state["dashboard_access"] = self.server.access
                 self._json(HTTPStatus.OK, state)
         else:
             self._json(HTTPStatus.NOT_FOUND, {"error": "not found"})
@@ -375,27 +448,63 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         if not self._host_ok():
             return
-        if self.path.split("?", 1)[0] != "/api/events":
+        path = self.path.split("?", 1)[0]
+        if path not in ("/api/events", "/api/kickoff"):
             self._json(HTTPStatus.NOT_FOUND, {"error": "not found"})
             return
         if not self._authorized():
             return
+        payload = self._read_json()
+        if payload is _BAD:
+            return
+        if path == "/api/kickoff":
+            self._kickoff(payload)
+        else:
+            self._post_events(payload if isinstance(payload, list) else [payload])
+
+    def _read_json(self):
         if not (self.headers.get("Content-Type") or "").startswith("application/json"):
             self._json(HTTPStatus.UNSUPPORTED_MEDIA_TYPE, {"error": "Content-Type must be application/json"})
-            return
+            return _BAD
         try:
             length = int(self.headers.get("Content-Length", "0"))
         except ValueError:
             length = -1
         if length < 0 or length > MAX_BODY:
             self._json(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, {"error": f"body must be at most {MAX_BODY} bytes"})
-            return
+            return _BAD
         try:
-            payload = json.loads(self.rfile.read(length) or b"null")
+            return json.loads(self.rfile.read(length) or b"null")
         except json.JSONDecodeError:
             self._json(HTTPStatus.BAD_REQUEST, {"error": "body is not valid JSON"})
+            return _BAD
+
+    def _kickoff(self, payload):
+        """Kick-off answers typed into the dashboard: {"assessment_id": ..., "answers": {key: value}}."""
+        if not isinstance(payload, dict) or not isinstance(payload.get("answers"), dict):
+            self._json(HTTPStatus.BAD_REQUEST, {"error": "expected {assessment_id, answers}"})
             return
-        raw_events = payload if isinstance(payload, list) else [payload]
+        aid = payload.get("assessment_id")
+        state = aggregate(*self.server.store.load())
+        run = next((a for a in state["assessments"] if a["id"] == aid), None)
+        if run is None or run["parent"] or run["completed"]:
+            self._json(HTTPStatus.NOT_FOUND, {"error": "no open run with that assessment_id"})
+            return
+        # Blank answers are left out rather than erasing what was said in the chat.
+        answers = {k: v for k, v in payload["answers"].items() if k in KICKOFF_KEYS and v not in (None, "")}
+        if not answers:
+            self._json(HTTPStatus.BAD_REQUEST, {"error": "no answers given"})
+            return
+        try:
+            event = validate_event({"schema": SCHEMA, "assessment_id": aid, "time": _now(), "type": "kickoff.answered",
+                                    "data": {**answers, "source": "dashboard"}})
+        except InvalidEvent as exc:
+            self._json(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+            return
+        self.server.store.append_kickoff(event)
+        self._json(HTTPStatus.ACCEPTED, {"accepted": len(answers)})
+
+    def _post_events(self, raw_events):
         received = _now()
         accepted, errors = [], []
         for index, raw in enumerate(raw_events):
@@ -417,12 +526,30 @@ def load_token(data_dir):
         return env
     path = Path(data_dir) / "token"
     if path.exists():
-        return path.read_text().strip()
+        return path.read_text(encoding="utf-8").strip()
     token = secrets.token_urlsafe(32)
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    with os.fdopen(fd, "w") as fh:
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | O_BINARY, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as fh:
         fh.write(token + "\n")
     return token
+
+
+def lan_names():
+    """Addresses and names other devices on the LAN can use to reach this computer."""
+    names = []
+    try:
+        # Connecting a UDP socket sends nothing; it only picks the interface of the default route.
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
+            probe.connect(("192.0.2.1", 9))
+            names.append(probe.getsockname()[0])
+    except OSError:
+        pass
+    hostname = socket.gethostname().lower()
+    if hostname:
+        names.append(hostname)
+        if "." not in hostname:
+            names.append(hostname + ".local")
+    return [n for n in dict.fromkeys(names) if n and not n.startswith("127.")]
 
 
 def make_server(host, port, data_dir, token, extra_hosts=(), reports_dir=None):
@@ -431,10 +558,18 @@ def make_server(host, port, data_dir, token, extra_hosts=(), reports_dir=None):
     server.store = EventStore(data_dir, reports_dir)
     server.token = token
     server.allowed_hosts = {"localhost", "127.0.0.1", "[::1]", host.lower()} | {h.lower() for h in extra_hosts}
+    server.access = "local" if host in ("127.0.0.1", "localhost", "::1") else "lan"
     return server
 
 
 def cmd_serve(args):
+    lan = []
+    if args.lan:
+        lan = lan_names()
+        if not lan:
+            sys.exit("Couldn't find this computer's LAN address; use --host 0.0.0.0 --allow-host <address>.")
+        args.host = "0.0.0.0"
+        args.allow_host = list(args.allow_host) + lan
     if args.host in ("0.0.0.0", "::") and not args.allow_host:
         sys.exit("Listening on all interfaces requires --allow-host <name-or-ip> for each address you'll browse to.")
     data_dir = Path(args.data).expanduser()
@@ -446,9 +581,14 @@ def cmd_serve(args):
     shown = "127.0.0.1" if args.host in ("0.0.0.0", "::") else args.host
     url = f"http://{shown}:{server.server_address[1]}/#token={token}"
     print(f"Dashboard:   {url}")
+    for name in lan or (args.allow_host if args.host in ("0.0.0.0", "::") else []):
+        print(f"On your LAN: http://{name}:{server.server_address[1]}/#token={token}")
     print(f"Run folders: {reports_dir}/<run-id>/events.jsonl")
     print(f"Events dir:  {server.store.events_dir}")
     print(f"HTTP ingest: POST http://{shown}:{server.server_address[1]}/api/events (Bearer token)")
+    if server.access == "lan":
+        print("LAN mode: the page and token travel unencrypted on your network. Use it only on a network you "
+              "trust, and stop the dashboard when you're done.")
     print("Keep this dashboard off the internet: it is a map of your weaknesses.", flush=True)
     if args.open:
         import webbrowser
@@ -481,6 +621,9 @@ def main(argv=None):
     sub = parser.add_subparsers(dest="command", required=True)
     serve = sub.add_parser("serve", help="run the dashboard")
     serve.add_argument("--host", default="127.0.0.1")
+    serve.add_argument("--lan", action="store_true",
+                       help="let other devices on your local network view it (listens on all interfaces and "
+                            "accepts this computer's LAN address and name)")
     serve.add_argument("--port", type=int, default=DEFAULT_PORT)
     serve.add_argument("--data", default=str(DEFAULT_DATA), help=f"data directory (default {DEFAULT_DATA})")
     serve.add_argument("--reports", default=str(DEFAULT_REPORTS),

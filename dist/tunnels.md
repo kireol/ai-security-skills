@@ -1241,6 +1241,7 @@ owner-only permissions. It holds:
 | File | Contents |
 |---|---|
 | `events.jsonl` | Every event below, one per line, appended as you work. |
+| `events-dashboard.jsonl` | Written by the dashboard, not the agent: kick-off answers the user typed into it (`kickoff.answered` with `source: dashboard`). Read it; never write to it. |
 | `run-state.md` | For phased runs: what's done, what's next, and the scope and choices from kick-off, so a later session can resume. |
 | `raw/` | Raw tool output the findings are based on (scan results, command output), redacted of secrets. Keep it here, not in a temporary or scratch folder, so it survives as evidence. |
 | `report.md`, `report.html` | The final reports, generated at the end. |
@@ -1319,7 +1320,11 @@ Enumerated values are case-insensitive, and spaces or hyphens may be used instea
 | `incident.status` | `status`: `suspected` · `likely` · `confirmed` · `closed` | `summary`, `containment` (list of strings) |
 | `asset.upserted` | `id` (stable slug for the asset, e.g. `nas-1`) | `label`, `kind` (e.g. "NAS", "firewall", "IP camera"), `addresses` (list), `services` (list, e.g. "tcp/443 https admin UI"), `exposure` (`internet` · `vpn` · `lan` · `isolated` · `unknown`), `skill` (matching skill name), `coverage` (`pending` · `in_progress` · `assessed` · `no_skill` · `out_of_scope` · `skipped`), `assessment_id` (the per-asset assessment), `note` |
 | `status.updated` | `activity` (one short line: what you're doing or waiting for) | `waiting_on`: `nothing` · `user` · `background_task` (default `nothing`) |
+| `kickoff.answered` | none (send only the questions answered) | `source` (`chat` · `dashboard`; default `chat`), and any of: `environment` (`home` · `office` · `homelab` · `mixed`), `in_scope`, `out_of_scope`, `internet_edge`, `known_systems`, `discovery_level` (`0` · `1` · `2`), `access_depth` (`none` · `read_only` · `admin`), `access_available` (kinds of access only, never credentials), `fragile_devices`, `time_window`, `goal` (`discover` · `recommend` · `remediate`), `agents` (1–99), `pace` (`phases` · `all_at_once`), `dashboard` (`none` · `local` · `lan` · `already_running`) |
 | `assessment.completed` | none | `summary` (for a run: the overall summary that opens the final report) |
+
+For each kick-off question, the newest `kickoff.answered` (by `time`) wins, whether it came from the chat
+or the dashboard.
 
 The first `finding.upserted` for an ID should include `title`, `priority`, `confidence`, and `state`, and
 by the end of the assessment every open finding should have `evidence` and `recommendation`, because the

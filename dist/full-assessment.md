@@ -8,8 +8,8 @@ description: >-
   dashboard.
 license: CC-BY-4.0
 metadata:
-  version: "1.2"
-  last_reviewed: "2026-10-30"
+  version: "1.3"
+  last_reviewed: "2026-10-31"
   applies_to: "Any network the user owns or is authorized to assess"
   audience: "home, work, homelab"
   finding_prefix: "NET"
@@ -31,9 +31,10 @@ time, adds network-wide checks no single product skill can see, and merges the r
    `assessment.started` (`skill: full-assessment`) to its `events.jsonl`, and send `status.updated` with
    `activity: "Kick-off: waiting for your answers"` and `waiting_on: user`. If the user can't give you a
    writable folder, say so and continue without events.
-2. **Ask the kick-off questions and wait for the answers.** Do not probe the network in any way (no ping
-   or ARP sweeps, port scans, `nmap`, service or version detection, or vulnerability tools) until the user
-   has confirmed the scope and chosen a discovery level. A request for a "complete" or "full" assessment
+2. **Ask the kick-off questions and wait for the answers.** The user may answer in the conversation or,
+   if a dashboard is running, in its Kick-off settings tab (see "Answers from the dashboard"). Do not probe
+   the network in any way (no ping or ARP sweeps, port scans, `nmap`, service or version detection, or
+   vulnerability tools) until the user has confirmed the scope and chosen a discovery level. A request for a "complete" or "full" assessment
    is not approval to scan. If the user says "just use the defaults", the default is discovery level 0
    (passive, no probing).
 3. **Keep the record current while you work.** Record each system with `asset.upserted` as soon as you
@@ -89,8 +90,43 @@ Goal:               discover only / discover + recommend / allow remediation wit
 Agents:             1 / several (how many?)   (default 1; see "How many agents")
 Pace:               all at once / in phases   (default: phases for more than ~5 systems; see "Phased runs")
 Run folder:         <where to keep events and reports; default ~/ai-security-reports/<run-id>/>
-Live dashboard:     none / start it for me / already running (URL + token)
+Live dashboard:     none / this computer only / devices on my local network (LAN) / already running
 ```
+
+### Recording the answers
+
+Record every answer as a `kickoff.answered` event with `source: chat` as soon as the user gives it (only
+the questions answered; see the reporting protocol (included in this file)), so the
+dashboard and the final report show how each question was answered. Never record credentials: for
+"Access available", record only which kind of access exists for which system.
+
+### Answers from the dashboard
+
+If a dashboard is running, tell the user they can answer in the chat or in the dashboard's **Kick-off
+settings** tab, whichever is easier. The dashboard writes those answers to `events-dashboard.jsonl` in
+the run folder as `kickoff.answered` events with `source: dashboard`.
+
+- **Read them** when the user says they've answered in the dashboard, before you act on the kick-off, and
+  at every phase checkpoint. If your environment lets you watch a file in the background, you may also
+  watch for it; otherwise ask the user to tell you when they've saved.
+- **The newest answer to each question wins,** whichever place it came from (compare the event times).
+- **Confirm in the conversation before acting.** Dashboard answers count as the user's answers, but
+  summarize the resulting choices in the chat and get a "yes" before any probing, as for chat answers.
+- **Changes after the run has started** (for example, a higher discovery level or a wider scope) take
+  effect only after you confirm them with the user in the conversation. Narrowing changes (taking a
+  system out of scope, stopping probing) take effect immediately.
+
+### Dashboard viewing
+
+If the user wants a live dashboard, ask who should be able to view it:
+
+- **This computer only** (default): the most private. Choose it when the user works at the computer the
+  agent runs on. From another computer, the user can still reach it with an SSH tunnel
+  (`ssh -L 8770:127.0.0.1:8770 <agent computer>`, then open the link there).
+- **Devices on my local network (LAN):** needed when the agent runs on a computer without a screen (a
+  server, a VM, or a remote session) and the user doesn't want an SSH tunnel. The page and its token
+  travel unencrypted on the network, so only on a network the user trusts, never on guest or public
+  Wi-Fi, and never forwarded to the internet. Stop the dashboard at the end of the run.
 
 ### Access depth
 
@@ -162,11 +198,14 @@ background from the collection's folder (this is class R on the user's own machi
 starting):
 
 ```sh
-python3 tools/dashboard/dashboard.py serve --open --reports <parent of the run folder>
+python3 tools/dashboard/dashboard.py serve --open --reports <parent of the run folder>          # this computer only
+python3 tools/dashboard/dashboard.py serve --lan --reports <parent of the run folder>           # devices on the LAN
 ```
 
-It opens in the user's browser and shows run folders automatically. Otherwise point the user to
-`scripts/assess.sh --dashboard`, which does the same in one command.
+It prints the links to open, including the token (for LAN mode, one per address of this computer); give
+them to the user, and on a computer without a screen leave out `--open`. It shows run folders
+automatically. Otherwise point the user to `scripts/assess.sh --dashboard`, which does the same in one
+command. Stop it at the end with `scripts/assess.sh --stop`.
 
 Confirm the run's scope and choices back to the user in one short summary before starting. If the user
 doesn't own or administer a network, or can't confirm they're authorized to assess it, don't scan it.
@@ -390,6 +429,9 @@ NVR.
 
 ## Version history
 
+- **1.3** (2026-10-31): Kick-off asks who may view the dashboard (this computer only or the LAN); answers
+  are recorded as `kickoff.answered` events, and the user can answer in the dashboard's Kick-off settings
+  tab instead of the chat.
 - **1.2** (2026-10-30): "Before anything else" rules: set up the run and record events before the first
   question, never probe the network before the kick-off answers, report systems and status as you go,
   and keep raw output in the run folder.
@@ -1815,6 +1857,7 @@ owner-only permissions. It holds:
 | File | Contents |
 |---|---|
 | `events.jsonl` | Every event below, one per line, appended as you work. |
+| `events-dashboard.jsonl` | Written by the dashboard, not the agent: kick-off answers the user typed into it (`kickoff.answered` with `source: dashboard`). Read it; never write to it. |
 | `run-state.md` | For phased runs: what's done, what's next, and the scope and choices from kick-off, so a later session can resume. |
 | `raw/` | Raw tool output the findings are based on (scan results, command output), redacted of secrets. Keep it here, not in a temporary or scratch folder, so it survives as evidence. |
 | `report.md`, `report.html` | The final reports, generated at the end. |
@@ -1893,7 +1936,11 @@ Enumerated values are case-insensitive, and spaces or hyphens may be used instea
 | `incident.status` | `status`: `suspected` · `likely` · `confirmed` · `closed` | `summary`, `containment` (list of strings) |
 | `asset.upserted` | `id` (stable slug for the asset, e.g. `nas-1`) | `label`, `kind` (e.g. "NAS", "firewall", "IP camera"), `addresses` (list), `services` (list, e.g. "tcp/443 https admin UI"), `exposure` (`internet` · `vpn` · `lan` · `isolated` · `unknown`), `skill` (matching skill name), `coverage` (`pending` · `in_progress` · `assessed` · `no_skill` · `out_of_scope` · `skipped`), `assessment_id` (the per-asset assessment), `note` |
 | `status.updated` | `activity` (one short line: what you're doing or waiting for) | `waiting_on`: `nothing` · `user` · `background_task` (default `nothing`) |
+| `kickoff.answered` | none (send only the questions answered) | `source` (`chat` · `dashboard`; default `chat`), and any of: `environment` (`home` · `office` · `homelab` · `mixed`), `in_scope`, `out_of_scope`, `internet_edge`, `known_systems`, `discovery_level` (`0` · `1` · `2`), `access_depth` (`none` · `read_only` · `admin`), `access_available` (kinds of access only, never credentials), `fragile_devices`, `time_window`, `goal` (`discover` · `recommend` · `remediate`), `agents` (1–99), `pace` (`phases` · `all_at_once`), `dashboard` (`none` · `local` · `lan` · `already_running`) |
 | `assessment.completed` | none | `summary` (for a run: the overall summary that opens the final report) |
+
+For each kick-off question, the newest `kickoff.answered` (by `time`) wins, whether it came from the chat
+or the dashboard.
 
 The first `finding.upserted` for an ID should include `title`, `priority`, `confidence`, and `state`, and
 by the end of the assessment every open finding should have `evidence` and `recommendation`, because the

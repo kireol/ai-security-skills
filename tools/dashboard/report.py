@@ -98,6 +98,20 @@ def period(assessments):
     return (min(starts) if starts else "—"), (max(ends) if ends else "—")
 
 
+def kickoff_rows(assessments):
+    """(question, answer, where it was answered) for each answered kick-off question of the run."""
+    rows = []
+    for a in assessments:
+        if a["parent"] or not a.get("kickoff"):
+            continue
+        for key, question, choices, _ in dashboard.KICKOFF_FIELDS:
+            answer = a["kickoff"].get(key)
+            if answer:
+                shown = dict(choices or ()).get(answer["value"], answer["value"])
+                rows.append((question, shown, f"{answer['source']}, {answer['time'] or '—'}"))
+    return rows
+
+
 # ---------------------------------------------------------------- Markdown
 
 def md_cell(value):
@@ -138,6 +152,10 @@ def markdown(state, run_dir, t, rejected):
                 f"| {md_cell(x.get('skill'))} | {md_cell(x.get('coverage'))} |" for x in assets]
         out.append("")
     gap_items = gaps(assessments)
+    kickoff = kickoff_rows(assessments)
+    if kickoff:
+        out += ["## Kick-off choices", "", "| Question | Answer | Answered in |", "|---|---|---|"]
+        out += [f"| {md_cell(q)} | {md_cell(v)} | {md_cell(w)} |" for q, v, w in kickoff] + [""]
     if gap_items:
         out += ["## Not covered", ""] + [f"- {g}" for g in gap_items] + [""]
     out += ["## Details", ""]
@@ -237,6 +255,10 @@ def html_report(state, run_dir, t, rejected):
                  [[e(x.get("label") or x["id"]), e(x.get("kind")), e(x.get("exposure")), e(x.get("skill")),
                    e(x.get("coverage"))] for x in assets]))
     gap_items = gaps(assessments)
+    kickoff = kickoff_rows(assessments)
+    if kickoff:
+        p.append("<h2>Kick-off choices</h2>" + table(["Question", "Answer", "Answered in"],
+                 [[e(q), e(v), e(w)] for q, v, w in kickoff]))
     if gap_items:
         p.append("<h2>Not covered</h2><ul>" + "".join(f"<li>{html.escape(g)}</li>" for g in gap_items) + "</ul>")
     p.append("<h2>Details</h2>")
@@ -265,8 +287,8 @@ def html_report(state, run_dir, t, rejected):
 
 
 def write_private(path, text):
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_BINARY", 0), 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as fh:
         fh.write(text)
 
 
