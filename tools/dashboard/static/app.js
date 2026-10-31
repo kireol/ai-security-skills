@@ -127,16 +127,24 @@ function answeredBy(answer) {
   return `${where}, ${when(answer.time)}`;
 }
 
+const PREFILL_SOURCE = {
+  in_scope: "Suggested: the /24 network around this computer's address.",
+  internet_edge: "Suggested: this network's public address, as an outside service sees it.",
+  agents: "Suggested default.",
+};
 const ACCESS = { local: "This computer only", lan: "Devices on your local network (LAN)" };
 
 function kickoffForm(a) {
   const fields = lastState.kickoff_fields || [];
+  const prefill = lastState.kickoff_prefill || {};
   const locked = a.completed;
   const rows = fields.map((f) => {
     const answer = a.kickoff[f.key];
     const descId = `kickoff-${f.key}-description`;
     const description = f.description ? el("div", { id: descId, class: "description" }, f.description) : null;
-    const current = answer ? answer.value : "";
+    // Unanswered questions start with the launcher's suggestion, if it made one; saving makes it an answer.
+    const suggested = !answer && !locked && prefill[f.key] ? prefill[f.key] : "";
+    const current = answer ? answer.value : suggested;
     if (f.key === "dashboard") {
       // How this dashboard is reachable is set when it starts, so show it rather than offer to change it.
       return el("div", { class: "field" }, el("label", {}, f.question), description,
@@ -160,7 +168,10 @@ function kickoffForm(a) {
     input.id = `kickoff-${f.key}`;
     if (description) input.setAttribute("aria-describedby", descId);
     return el("div", { class: "field" }, el("label", { for: input.id }, f.question), description, input,
-      answer ? el("div", { class: "small muted" }, answeredBy(answer)) : null);
+      answer ? el("div", { class: "small muted" }, answeredBy(answer))
+        : suggested ? el("div", { class: "small muted" }, `${PREFILL_SOURCE[f.key] || "Suggested."} Check it; it's `
+          + "saved with your other answers when you press Save answers. Clear it to leave the question unanswered.")
+        : null);
   });
 
   async function save(e) {

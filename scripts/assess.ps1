@@ -8,6 +8,7 @@ One command to start a full security assessment (PowerShell version of scripts/a
 Options: -Agent claude|codex|gemini|print   skip the question and use this choice
          -Local | -Lan                      dashboard viewable from this computer only, or from your LAN
          -Port N                            dashboard port (default 8770)
+         -NoLookup                          don't ask an outside service for your public address
 
 Reports and run data go to ~/ai-security-reports/<run-id>/ (override with AISS_REPORTS).
 Works with Windows PowerShell 5.1 and PowerShell 7 on Windows, macOS, and Linux. If scripts are blocked, run:
@@ -21,6 +22,7 @@ param(
     [switch]$Local,
     [switch]$Lan,
     [int]$Port = 8770,
+    [switch]$NoLookup,
     [Alias("h")][switch]$Help
 )
 
@@ -28,7 +30,7 @@ Set-StrictMode -Version 2
 $ErrorActionPreference = "Stop"
 
 if ($Help) {
-    (Get-Content -LiteralPath $PSCommandPath -TotalCount 15 | Select-Object -Skip 1) -join "`n" | Write-Output
+    (Get-Content -LiteralPath $PSCommandPath -TotalCount 16 | Select-Object -Skip 1) -join "`n" | Write-Output
     exit 0
 }
 if ($Local -and $Lan) { [Console]::Error.WriteLine("Choose -Local or -Lan, not both."); exit 2 }
@@ -122,6 +124,60 @@ if ($KnownAgents -contains $Agent) {
     Fail "Unknown assistant: $Agent (use claude, codex, gemini, or print)" 2
 }
 
+# The dashboard needs Python 3.9+. On Windows, "python3" may be the Microsoft Store stub, so check each candidate.
+function Find-Python {
+    foreach ($candidate in @(@("python3"), @("python"), @("py", "-3"))) {
+        if (-not (Test-Command $candidate[0])) { continue }
+        $extra = @($candidate | Select-Object -Skip 1)
+        try {
+            $ok = & $candidate[0] @extra -I -c "import sys; print(sys.version_info >= (3, 9))" 2>$null
+            if ("$ok".Trim() -eq "True") { return ,$candidate }
+        } catch { }
+    }
+    return $null
+}
+
+# Is something already on the dashboard port? Reuse it only if it's this copy's dashboard, running this
+# version of the code, with this data folder's token; otherwise say what's there and stop.
+$Running = ""
+$StopCmd = "scripts/assess.ps1 -Stop"
+if ($Port -ne 8770) { $StopCmd += " -Port $Port" }
+$python = $null
+if ($Dashboard) {
+    $python = Find-Python
+    if (-not $python) { Fail "The dashboard needs Python 3.9 or later (python3, python, or py -3), and none was found." }
+    $extra = @($python | Select-Object -Skip 1)
+    $probe = @(& $python[0] @extra -I (Join-Path $Repo "tools/dashboard/dashboard.py") probe --port $Port --data $Data) + @("", "", "")
+    $probeStatus = "$($probe[0])".Trim(); $probeAccess = "$($probe[1])".Trim(); $probeRoot = "$($probe[2])".Trim()
+    switch ($probeStatus) {
+        "free" { }
+        "current" {
+            $Running = $probeAccess
+            if ($Access -and $Access -ne $Running) {
+                Write-Output "The dashboard already running on port $Port is set to '$Running', not '$Access'. To change it,"
+                Write-Output "stop it first ($StopCmd) and run this again. Using it as it is."
+            }
+            $Access = $Running
+        }
+        "outdated" {
+            $sameCopy = if ($OnWindows) { $probeRoot -ieq $Repo } else { $probeRoot -ceq $Repo }
+            if ($sameCopy) {
+                $msg = "A dashboard started before this copy was updated is running on port $Port, so it would show the old version."
+            } elseif ($probeRoot -eq "unknown") {
+                $msg = "A dashboard from an older version of this project is running on port $Port."
+            } else {
+                $msg = "A dashboard from another copy of this project is running on port ${Port}:`n  $probeRoot"
+            }
+            Fail "$msg`nStop it with '$StopCmd' and run this again, or use another port with -Port N."
+        }
+        "wrong_token" {
+            Fail ("A dashboard is running on port $Port, but it was started with a different data folder, so this script " +
+                "can't give you a working link to it.`nStop it with '$StopCmd' and run this again, or use another port with -Port N.")
+        }
+        default { Fail "Port $Port is in use by another program. Use another port with -Port N (for example -Port $($Port + 1))." }
+    }
+}
+
 # Who may view the dashboard. A headless computer has no browser, so "this computer only" would mean
 # nobody can see it unless they use an SSH tunnel.
 if ($Dashboard -and -not $Access) {
@@ -151,19 +207,6 @@ if ($OnWindows) {
     & chmod 700 $Reports
 }
 
-# The dashboard needs Python 3.9+. On Windows, "python3" may be the Microsoft Store stub, so check each candidate.
-function Find-Python {
-    foreach ($candidate in @(@("python3"), @("python"), @("py", "-3"))) {
-        if (-not (Test-Command $candidate[0])) { continue }
-        $extra = @($candidate | Select-Object -Skip 1)
-        try {
-            $ok = & $candidate[0] @extra -I -c "import sys; print(sys.version_info >= (3, 9))" 2>$null
-            if ("$ok".Trim() -eq "True") { return ,$candidate }
-        } catch { }
-    }
-    return $null
-}
-
 function Test-DashboardUp {
     $client = New-Object System.Net.Sockets.TcpClient
     try {
@@ -191,16 +234,34 @@ function Quote-Arg([string]$Value) {
     return $Value
 }
 
+# Suggested kick-off answers: the /24 around this computer's address, the network's public address (from an
+# outside service, unless -NoLookup), and one agent. The user confirms them; the dashboard pre-fills them.
+$Suggested = ""
+if (-not $python) { $python = Find-Python }
+if ($python) {
+    $prefillArgs = @($python | Select-Object -Skip 1) + @("-I", (Join-Path $Repo "tools/dashboard/dashboard.py"), "prefill")
+    if ($Dashboard) { $prefillArgs += @("--data", $Data) }
+    if ($NoLookup) { $prefillArgs += "--no-lookup" }
+    Write-Output ""
+    if ($NoLookup) { Write-Output "Finding suggested kick-off answers (this computer's network)..." }
+    else { Write-Output "Finding suggested kick-off answers (this computer's network and its public address)..." }
+    $suggestions = @()
+    try { $suggestions = @(& $python[0] @prefillArgs 2>$null | Where-Object { "$_".Trim() }) } catch { }
+    if ($suggestions.Count -gt 0) {
+        $suggestions | ForEach-Object { "  $_" } | Write-Output
+        $Suggested = " Suggested kick-off answers detected on this computer: $($suggestions -join '; '). " +
+            "Offer them as defaults, and record them only once I've confirmed or changed them."
+    }
+}
+
 $DashboardNote = ""
 if ($Dashboard) {
     New-Item -ItemType Directory -Force -Path $Data | Out-Null
     $log = Join-Path $Data "dashboard.log"
-    if (Test-DashboardUp) {
-        Write-Output "Dashboard already running on port $Port. To change who can view it, stop it first:"
-        Write-Output "  scripts/assess.ps1 -Stop"
+    if ($Running) {
+        Write-Output "Using the dashboard that's already running on port $Port. To change who can view it, stop it first:"
+        Write-Output "  $StopCmd"
     } else {
-        $python = Find-Python
-        if (-not $python) { Fail "The dashboard needs Python 3.9 or later (python3, python, or py -3), and none was found." }
         $pyArgs = @($python | Select-Object -Skip 1) + @("-I", (Join-Path $Repo "tools/dashboard/dashboard.py"), "serve")
         if ($Access -eq "lan") { $pyArgs += "--lan" }
         $pyArgs += @("--port", "$Port", "--data", $Data, "--reports", $Reports)
@@ -217,10 +278,10 @@ if ($Dashboard) {
         $tries = 0
         while (-not (Test-DashboardUp)) {
             $tries++
-            if ($tries -ge 20 -or $proc.HasExited) { Fail "Dashboard didn't start; see $log and $(Join-Path $Data 'dashboard.err.log')" }
+            if ($tries -ge 20 -or $proc.HasExited) { Fail "Dashboard didn't start; see $log and $(Join-Path $Data 'dashboard.err.log'). If port $Port is taken, use -Port N." }
             Start-Sleep -Milliseconds 250
         }
-        Write-Output "Dashboard started. When you're done, stop it with: scripts/assess.ps1 -Stop"
+        Write-Output "Dashboard started. When you're done, stop it with: $StopCmd"
     }
     if ($env:AISS_DASHBOARD_TOKEN) { $token = $env:AISS_DASHBOARD_TOKEN }
     else { $token = (Get-Content -LiteralPath (Join-Path $Data "token") -TotalCount 1).Trim() }
@@ -248,7 +309,7 @@ if ($Dashboard) {
 $Prompt = "Use the full-assessment skill from the ai-security-skills collection at $Repo " +
     "(skills/orchestration/full-assessment/SKILL.md; product skills are in dist/) to run a complete security " +
     "assessment of my network. Follow its 'Before anything else' rules: set up the run folder under $Reports first, " +
-    "then ask me the kick-off questions, and don't scan or probe my network until I've answered them.$DashboardNote " +
+    "then ask me the kick-off questions, and don't scan or probe my network until I've answered them.$Suggested$DashboardNote " +
     "Don't change anything without my approval."
 
 # The assistant takes over the terminal, so give the user time to copy the dashboard links first.

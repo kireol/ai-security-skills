@@ -71,6 +71,31 @@ Check event files without running the server:
 python3 tools/dashboard/dashboard.py validate path/to/events.jsonl
 ```
 
+Suggest kick-off answers detected on this computer (the launchers run this too):
+
+```sh
+python3 tools/dashboard/dashboard.py prefill [--data DIR] [--no-lookup]
+```
+
+It prints suggestions for three questions: **In-scope networks** (the /24 around this computer's address,
+left out unless it's a private LAN address), **Internet edge** (this network's public address, from an
+outside service: `api.ipify.org`, falling back to `ifconfig.me`; `--no-lookup` skips it), and
+**Agents** (1). With `--data`, it also saves them to `kickoff-prefill.json` there, and the Kick-off settings
+form fills them into unanswered questions. They become answers only when the user presses Save answers.
+The dashboard itself never contacts anything outside this computer.
+
+See what is on the dashboard port (the launchers run this before starting a dashboard):
+
+```sh
+python3 tools/dashboard/dashboard.py probe [--port 8770] [--data DIR]
+```
+
+It prints `free`, `current` (a dashboard from this copy, running this version, that accepts this data
+folder's token), `outdated` (from another copy, or started before this copy's code changed),
+`wrong_token` (started with another data folder), or `other` (not this dashboard). For `current` and
+`outdated` it also prints who can view it and the project folder it runs from. The launchers reuse only
+a `current` dashboard; for anything else they say what's on the port and stop.
+
 ## Security
 
 The dashboard is a map of your weaknesses. It is built to stay private:

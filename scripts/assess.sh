@@ -8,11 +8,12 @@
 # Options: --agent claude|codex|gemini|print   skip the question and use this choice
 #          --local | --lan                     dashboard viewable from this computer only, or from your LAN
 #          --port N                            dashboard port (default 8770)
+#          --no-lookup                         don't ask an outside service for your public address
 #
 # Reports and run data go to ~/ai-security-reports/<run-id>/ (override with AISS_REPORTS).
 
 set -eu
-REPO=$(cd "$(dirname "$0")/.." && pwd)
+REPO=$(cd "$(dirname "$0")/.." && pwd -P)
 DATA=${AISS_DASHBOARD_DATA:-$HOME/.ai-security-dashboard}
 REPORTS=${AISS_REPORTS:-$HOME/ai-security-reports}
 PORT=8770
@@ -20,6 +21,7 @@ DASHBOARD=no
 STOP=no
 AGENT=""
 ACCESS=""
+LOOKUP=yes
 KNOWN_AGENTS="claude codex gemini"
 
 while [ $# -gt 0 ]; do
@@ -30,7 +32,8 @@ while [ $# -gt 0 ]; do
     --local) ACCESS=local ;;
     --lan) ACCESS=lan ;;
     --port) PORT=${2:-}; shift ;;
-    -h|--help) sed -n '2,13p' "$0"; exit 0 ;;
+    --no-lookup) LOOKUP=no ;;
+    -h|--help) sed -n '2,14p' "$0"; exit 0 ;;
     *) echo "Unknown option: $1 (see --help)" >&2; exit 2 ;;
   esac
   shift
@@ -91,6 +94,49 @@ case "$AGENT" in
   *) echo "Unknown assistant: $AGENT (use claude, codex, gemini, or print)" >&2; exit 2 ;;
 esac
 
+# Is something already on the dashboard port? Reuse it only if it's this copy's dashboard, running this
+# version of the code, with this data folder's token; otherwise say what's there and stop.
+RUNNING=""
+STOP_CMD="scripts/assess.sh --stop"
+[ "$PORT" = 8770 ] || STOP_CMD="$STOP_CMD --port $PORT"
+if [ "$DASHBOARD" = yes ]; then
+  command -v python3 >/dev/null 2>&1 || { echo "The dashboard needs Python 3.9 or later (python3)." >&2; exit 1; }
+  probe=$(python3 -I "$REPO/tools/dashboard/dashboard.py" probe --port "$PORT" --data "$DATA")
+  probe_status=$(printf '%s\n' "$probe" | sed -n 1p)
+  probe_access=$(printf '%s\n' "$probe" | sed -n 2p)
+  probe_root=$(printf '%s\n' "$probe" | sed -n 3p)
+  case "$probe_status" in
+    free) ;;
+    current)
+      RUNNING=$probe_access
+      if [ -n "$ACCESS" ] && [ "$ACCESS" != "$RUNNING" ]; then
+        echo "The dashboard already running on port $PORT is set to '$RUNNING', not '$ACCESS'. To change it,"
+        echo "stop it first ($STOP_CMD) and run this again. Using it as it is."
+      fi
+      ACCESS=$RUNNING ;;
+    outdated)
+      if [ "$probe_root" = "$REPO" ]; then
+        echo "A dashboard started before this copy was updated is running on port $PORT, so it would show" >&2
+        echo "the old version." >&2
+      elif [ "$probe_root" = unknown ]; then
+        echo "A dashboard from an older version of this project is running on port $PORT." >&2
+      else
+        echo "A dashboard from another copy of this project is running on port $PORT:" >&2
+        echo "  $probe_root" >&2
+      fi
+      echo "Stop it with '$STOP_CMD' and run this again, or use another port with --port N." >&2
+      exit 1 ;;
+    wrong_token)
+      echo "A dashboard is running on port $PORT, but it was started with a different data folder, so this" >&2
+      echo "script can't give you a working link to it. Stop it with '$STOP_CMD' and run this" >&2
+      echo "again, or use another port with --port N." >&2
+      exit 1 ;;
+    *)
+      echo "Port $PORT is in use by another program. Use another port with --port N (for example --port $((PORT + 1)))." >&2
+      exit 1 ;;
+  esac
+fi
+
 # Who may view the dashboard. A headless computer has no browser, so "this computer only" would mean
 # nobody can see it unless they use an SSH tunnel.
 if [ "$DASHBOARD" = yes ] && [ -z "$ACCESS" ]; then
@@ -132,12 +178,30 @@ open_url() {
   return 0
 }
 
+# Suggested kick-off answers: the /24 around this computer's address, the network's public address (from an
+# outside service, unless --no-lookup), and one agent. The user confirms them; the dashboard pre-fills them.
+SUGGESTED=""
+if command -v python3 >/dev/null 2>&1; then
+  set --
+  [ "$DASHBOARD" = yes ] && set -- "$@" --data "$DATA"
+  [ "$LOOKUP" = no ] && set -- "$@" --no-lookup
+  echo
+  if [ "$LOOKUP" = yes ]; then echo "Finding suggested kick-off answers (this computer's network and its public address)..."
+  else echo "Finding suggested kick-off answers (this computer's network)..."; fi
+  suggestions=$(python3 -I "$REPO/tools/dashboard/dashboard.py" prefill "$@" 2>/dev/null) || suggestions=""
+  if [ -n "$suggestions" ]; then
+    printf '%s\n' "$suggestions" | sed 's/^/  /'
+    SUGGESTED=" Suggested kick-off answers detected on this computer: $(printf '%s\n' "$suggestions" | paste -sd ';' - \
+| sed 's/;/; /g'). Offer them as defaults, and record them only once I've confirmed or changed them."
+  fi
+fi
+
 DASHBOARD_NOTE=""
 if [ "$DASHBOARD" = yes ]; then
   mkdir -p "$DATA"
-  if dashboard_up; then
-    echo "Dashboard already running on port $PORT. To change who can view it, stop it first:"
-    echo "  scripts/assess.sh --stop"
+  if [ -n "$RUNNING" ]; then
+    echo "Using the dashboard that's already running on port $PORT. To change who can view it, stop it first:"
+    echo "  $STOP_CMD"
   else
     LAN_FLAG=""
     [ "$ACCESS" = lan ] && LAN_FLAG=--lan
@@ -147,10 +211,12 @@ if [ "$DASHBOARD" = yes ]; then
     tries=0
     until dashboard_up; do
       tries=$((tries + 1))
-      if [ $tries -ge 20 ]; then echo "Dashboard didn't start; see $DATA/dashboard.log" >&2; exit 1; fi
+      if [ $tries -ge 20 ]; then
+        echo "Dashboard didn't start; see $DATA/dashboard.log. If port $PORT is taken, use --port N." >&2; exit 1
+      fi
       sleep 0.25
     done
-    echo "Dashboard started. When you're done, stop it with: scripts/assess.sh --stop"
+    echo "Dashboard started. When you're done, stop it with: $STOP_CMD"
   fi
   if [ -n "${AISS_DASHBOARD_TOKEN:-}" ]; then TOKEN=$AISS_DASHBOARD_TOKEN; else TOKEN=$(cat "$DATA/token"); fi
   echo "Dashboard on this computer: http://127.0.0.1:$PORT/#token=$TOKEN"
@@ -169,7 +235,8 @@ fi
 PROMPT="Use the full-assessment skill from the ai-security-skills collection at $REPO \
 (skills/orchestration/full-assessment/SKILL.md; product skills are in dist/) to run a complete security \
 assessment of my network. Follow its \"Before anything else\" rules: set up the run folder under $REPORTS first, \
-then ask me the kick-off questions, and don't scan or probe my network until I've answered them.$DASHBOARD_NOTE \
+then ask me the kick-off questions, and don't scan or probe my network until I've answered them.$SUGGESTED\
+$DASHBOARD_NOTE \
 Don't change anything without my approval."
 
 # The assistant takes over the terminal, so give the user time to copy the dashboard links first.

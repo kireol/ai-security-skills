@@ -6,9 +6,13 @@ Standard library only; Python 3.9+.
   dashboard.py serve [--lan | --host 127.0.0.1] [--port 8770] [--data DIR] [--reports DIR] [--open]
   dashboard.py validate FILE.jsonl ...
   dashboard.py report RUN_DIR      write report.md and report.html for a run and print the totals
+  dashboard.py probe [--port 8770] [--data DIR]   what is on the port (used by the launchers; see cmd_probe)
+  dashboard.py prefill [--data DIR]   suggest kick-off answers detected on this computer (see cmd_prefill)
 """
 import argparse
+import hashlib
 import hmac
+import ipaddress
 import json
 import os
 import re
@@ -30,6 +34,11 @@ MAX_BODY = 1_000_000
 MAX_TEXT = 4000
 MAX_LIST = 50
 STATIC_DIR = Path(__file__).resolve().parent / "static"
+# Which copy of the project this is, and a fingerprint of this file as it was when the process started, so
+# the launchers can tell a running dashboard from this copy and version apart from an older or other one.
+PROJECT_ROOT = str(Path(__file__).resolve().parent.parent.parent)
+CODE_FINGERPRINT = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()[:16]
+SERVER_NAME = "ai-security-dashboard"
 STATIC_FILES = {
     "/": ("index.html", "text/html; charset=utf-8"),
     "/app.js": ("app.js", "text/javascript; charset=utf-8"),
@@ -125,6 +134,10 @@ KICKOFF_FIELDS = [
      "network you trust."),
 ]
 AGENT_COUNT = re.compile(r"^[1-9][0-9]?$")
+# Kick-off answers the launcher can suggest. They pre-fill the dashboard form until the user saves answers.
+PREFILL_FILE = "kickoff-prefill.json"
+PREFILL_KEYS = ("in_scope", "internet_edge", "agents")
+PUBLIC_ADDRESS_URLS = ("https://api.ipify.org", "https://ifconfig.me/ip")
 
 # type -> {field: (kind, required)}; kind is "text", "list", a regex, or a tuple of allowed values.
 EVENT_FIELDS = {
@@ -421,7 +434,7 @@ def aggregate(events, rejected=()):
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "ai-security-dashboard"
+    server_version = SERVER_NAME
     sys_version = ""
 
     def log_message(self, fmt, *args):
@@ -479,6 +492,8 @@ class Handler(BaseHTTPRequestHandler):
                 state = aggregate(*self.server.store.load())
                 state["sources"] = self.server.store.sources()
                 state["dashboard_access"] = self.server.access
+                state["server"] = dict(self.server.identity)
+                state["kickoff_prefill"] = read_prefill(self.server.data_dir)
                 self._json(HTTPStatus.OK, state)
         else:
             self._json(HTTPStatus.NOT_FOUND, {"error": "not found"})
@@ -599,6 +614,8 @@ def make_server(host, port, data_dir, token, extra_hosts=(), reports_dir=None):
     server.token = token
     server.allowed_hosts = {"localhost", "127.0.0.1", "[::1]", host.lower()} | {h.lower() for h in extra_hosts}
     server.access = "local" if host in ("127.0.0.1", "localhost", "::1") else "lan"
+    server.identity = {"root": PROJECT_ROOT, "code": CODE_FINGERPRINT}
+    server.data_dir = Path(data_dir)
     return server
 
 
@@ -639,6 +656,126 @@ def cmd_serve(args):
         pass
 
 
+def probe(port, data_dir, timeout=3):
+    """Say what is listening on 127.0.0.1:port: (status, access, root).
+
+    free         nothing is listening
+    current      a dashboard from this copy of the project, running this version of the code
+    outdated     a dashboard from another copy, or started before this copy's code changed
+    wrong_token  a dashboard that doesn't accept this data folder's token (started with another --data)
+    other        something that isn't this project's dashboard
+    """
+    import http.client
+    token = os.environ.get("AISS_DASHBOARD_TOKEN", "")
+    token_file = Path(data_dir).expanduser() / "token"
+    if not token and token_file.exists():  # read only; never create a token here
+        token = token_file.read_text(encoding="utf-8").strip()
+    conn = http.client.HTTPConnection("127.0.0.1", port, timeout=timeout)
+    try:
+        conn.request("GET", "/api/state", headers={"Host": f"127.0.0.1:{port}", "Authorization": f"Bearer {token}"})
+        response = conn.getresponse()
+        body = response.read()
+    except ConnectionRefusedError:
+        return "free", "", ""
+    except (OSError, http.client.HTTPException):
+        return "other", "", ""
+    finally:
+        conn.close()
+    if not (response.getheader("Server") or "").strip().startswith(SERVER_NAME):
+        return "other", "", ""
+    if response.status == HTTPStatus.UNAUTHORIZED:
+        return "wrong_token", "", ""
+    try:
+        state = json.loads(body)
+    except ValueError:
+        return "other", "", ""
+    if response.status != HTTPStatus.OK or not isinstance(state, dict):
+        return "other", "", ""
+    access = state.get("dashboard_access") or "unknown"
+    server = state.get("server") if isinstance(state.get("server"), dict) else {}  # absent in older versions
+    root = server.get("root") or "unknown"
+    same_copy = os.path.normcase(root) == os.path.normcase(PROJECT_ROOT)
+    status = "current" if same_copy and server.get("code") == CODE_FINGERPRINT else "outdated"
+    return status, access, root
+
+
+def local_subnet():
+    """The /24 around this computer's address on its default route, or "" if unknown or ambiguous."""
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("192.0.2.1", 9))  # a UDP connect sends nothing; it only picks the outgoing interface
+            address = ipaddress.ip_address(s.getsockname()[0])
+    except (OSError, ValueError):
+        return ""
+    # Only a private LAN address. Anything else (a public address on the interface, a carrier-grade NAT or
+    # VPN range, link-local, loopback) doesn't say which home network this is.
+    if not address.is_private or address.is_loopback or address.is_link_local or address.is_reserved \
+            or address.is_unspecified:
+        return ""
+    return str(ipaddress.ip_network(f"{address}/24", strict=False))
+
+
+def public_address(timeout=3):
+    """This network's public address as an outside service sees it, or "" if it can't be found."""
+    import urllib.request
+    for url in PUBLIC_ADDRESS_URLS:
+        try:
+            with urllib.request.urlopen(url, timeout=timeout) as response:
+                address = ipaddress.ip_address(response.read(64).decode("ascii", "replace").strip())
+        except (OSError, ValueError):
+            continue
+        if address.is_global:
+            return str(address)
+    return ""
+
+
+def read_prefill(data_dir):
+    """Validated suggestions from <data>/kickoff-prefill.json, or {} if there are none."""
+    try:
+        raw = json.loads((Path(data_dir) / PREFILL_FILE).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(raw, dict):
+        return {}
+    clean = {}
+    for key in PREFILL_KEYS:
+        value = raw.get(key)
+        if not isinstance(value, str) or not value.strip():
+            continue
+        try:
+            clean[key] = _text(value.strip()[:200])
+        except InvalidEvent:
+            continue
+    if "agents" in clean and not AGENT_COUNT.match(clean["agents"]):
+        del clean["agents"]
+    return clean
+
+
+def cmd_prefill(args):
+    # Prints "Question: answer" lines for the launcher's prompt; with --data, also saves them for the dashboard.
+    found = {"in_scope": local_subnet(), "internet_edge": "" if args.no_lookup else public_address(), "agents": "1"}
+    found = {k: v for k, v in found.items() if v}
+    if args.data:
+        data_dir = Path(args.data).expanduser()
+        data_dir.mkdir(parents=True, exist_ok=True)
+        path = data_dir / PREFILL_FILE
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | O_BINARY, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as fh:
+            json.dump(found, fh)
+            fh.write("\n")
+    questions = {key: question for key, question, *_ in KICKOFF_FIELDS}
+    for key in PREFILL_KEYS:
+        if key in found:
+            print(f"{questions[key]}: {found[key]}")
+    return 0
+
+
+def cmd_probe(args):
+    # One value per line (status, access, project folder), so shell and PowerShell can read it without parsing.
+    print("\n".join(probe(args.port, args.data)))
+    return 0
+
+
 def cmd_validate(args):
     status = 0
     for name in args.files:
@@ -673,6 +810,13 @@ def main(argv=None):
     serve.add_argument("--open", action="store_true", help="open the dashboard in the default browser")
     validate = sub.add_parser("validate", help="check event files without running the server")
     validate.add_argument("files", nargs="+")
+    probe_cmd = sub.add_parser("probe", help="say what is listening on the dashboard port (for the launchers)")
+    probe_cmd.add_argument("--port", type=int, default=DEFAULT_PORT)
+    probe_cmd.add_argument("--data", default=str(DEFAULT_DATA), help=f"data directory (default {DEFAULT_DATA})")
+    prefill = sub.add_parser("prefill", help="suggest kick-off answers detected on this computer (for the launchers)")
+    prefill.add_argument("--data", help="also save them in this data directory, for the dashboard's kick-off form")
+    prefill.add_argument("--no-lookup", action="store_true",
+                         help="don't ask an outside service for this network's public address")
     report = sub.add_parser("report", help="write report.md and report.html for a run folder and print totals")
     report.add_argument("run_dir")
     args = parser.parse_args(argv)
@@ -683,6 +827,10 @@ def main(argv=None):
         report_module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(report_module)
         return report_module.main(args.run_dir)
+    if args.command == "probe":
+        return cmd_probe(args)
+    if args.command == "prefill":
+        return cmd_prefill(args)
     return cmd_serve(args) if args.command == "serve" else cmd_validate(args)
 
 

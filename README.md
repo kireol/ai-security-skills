@@ -49,8 +49,18 @@ scripts/assess.sh --stop
 That stops it however it was started. (If you ran `tools/dashboard/dashboard.py serve` yourself in a
 terminal, Ctrl+C there also works.) Your reports stay in `~/ai-security-reports/`.
 
+The script also suggests three kick-off answers, which you confirm or change: **In-scope networks** (the
+/24 network around this computer's address), **Internet edge** (your network's public address, looked up
+with an outside service; `--no-lookup` skips it), and **Agents** (1). It passes them to the assistant and
+fills them into the dashboard's Kick-off settings form.
+
+If the dashboard port (8770) is already in use, the script reuses the dashboard only if it's this copy's,
+up to date, and using the same data folder. Otherwise it tells you what's there (an older dashboard,
+one from another copy, or another program) and stops without starting anything; stop the old dashboard
+or pick another port with `--port N`.
+
 **On Windows,** use the PowerShell launcher instead. It asks the same questions and takes the same
-options in PowerShell style (`-Dashboard`, `-Stop`, `-Agent`, `-Local`, `-Lan`, `-Port`):
+options in PowerShell style (`-Dashboard`, `-Stop`, `-Agent`, `-Local`, `-Lan`, `-Port`, `-NoLookup`):
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\assess.ps1 -Dashboard

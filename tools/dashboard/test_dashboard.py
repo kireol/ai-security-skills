@@ -1,10 +1,14 @@
 """Tests for dashboard.py. Run: python3 -m unittest discover tools/dashboard"""
 import http.client
+import http.server
 import json
+import os
+import socket
 import sys
 import tempfile
 import threading
 import unittest
+from unittest import mock
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -213,6 +217,105 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(state["assessments"][0]["mode"], "recommend")
         self.assertEqual(len(state["rejected"]), 2)
 
+
+
+class ProbeTests(unittest.TestCase):
+    """What the launchers see on the dashboard port."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.data = Path(self.tmp.name)
+        (self.data / "token").write_text("probe-token\n")
+        self.env = {k: os.environ.pop(k) for k in ["AISS_DASHBOARD_TOKEN"] if k in os.environ}
+
+    def tearDown(self):
+        os.environ.update(self.env)
+        self.tmp.cleanup()
+
+    def serve(self, server):
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        return server.server_address[1]
+
+    def dashboard(self, token="probe-token"):
+        server = dashboard.make_server("127.0.0.1", 0, self.data / "server", token)
+        return server, self.serve(server)
+
+    def test_nothing_listening(self):
+        with socket.socket() as s:
+            s.bind(("127.0.0.1", 0))
+            port = s.getsockname()[1]
+        self.assertEqual(dashboard.probe(port, self.data)[0], "free")
+
+    def test_dashboard_from_this_copy(self):
+        _, port = self.dashboard()
+        self.assertEqual(dashboard.probe(port, self.data), ("current", "local", dashboard.PROJECT_ROOT))
+
+    def test_older_code_or_other_copy(self):
+        server, port = self.dashboard()
+        server.identity["code"] = "0" * 16
+        self.assertEqual(dashboard.probe(port, self.data)[0], "outdated")
+        server.identity.update(code=dashboard.CODE_FINGERPRINT, root=str(self.data / "elsewhere"))
+        self.assertEqual(dashboard.probe(port, self.data)[0], "outdated")
+
+    def test_dashboard_with_another_token(self):
+        _, port = self.dashboard(token="someone-elses")
+        self.assertEqual(dashboard.probe(port, self.data)[0], "wrong_token")
+
+    def test_some_other_program(self):
+        server = http.server.HTTPServer(("127.0.0.1", 0), http.server.SimpleHTTPRequestHandler)
+        port = self.serve(server)
+        self.assertEqual(dashboard.probe(port, self.data)[0], "other")
+
+
+class PrefillTests(unittest.TestCase):
+    """Kick-off answers the launcher suggests."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.data = Path(self.tmp.name)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def run_prefill(self, *argv):
+        with mock.patch.object(dashboard, "local_subnet", return_value="192.0.2.0/24"), \
+                mock.patch.object(dashboard, "public_address", return_value="203.0.113.7") as lookup, \
+                mock.patch("sys.stdout"):
+            dashboard.main(["prefill", "--data", str(self.data), *argv])
+        return lookup
+
+    def test_saves_suggestions_for_the_dashboard(self):
+        self.run_prefill()
+        self.assertEqual(dashboard.read_prefill(self.data),
+                         {"in_scope": "192.0.2.0/24", "internet_edge": "203.0.113.7", "agents": "1"})
+
+    def test_no_lookup_skips_the_outside_service(self):
+        lookup = self.run_prefill("--no-lookup")
+        lookup.assert_not_called()
+        self.assertNotIn("internet_edge", dashboard.read_prefill(self.data))
+
+    def test_bad_or_unexpected_values_are_dropped(self):
+        (self.data / dashboard.PREFILL_FILE).write_text(json.dumps(
+            {"in_scope": "192.0.2.0/24", "agents": "many", "goal": "remediate", "internet_edge": ["x"]}))
+        self.assertEqual(dashboard.read_prefill(self.data), {"in_scope": "192.0.2.0/24"})
+
+    def test_subnet_is_a_slash_24_or_blank(self):
+        found = dashboard.local_subnet()
+        self.assertTrue(found == "" or found.endswith(".0/24"), "expected a /24 network or nothing")
+
+    def test_dashboard_state_carries_the_suggestions(self):
+        self.run_prefill("--no-lookup")
+        server = dashboard.make_server("127.0.0.1", 0, self.data, "test-token")
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        conn = http.client.HTTPConnection("127.0.0.1", server.server_address[1])
+        conn.request("GET", "/api/state", headers={"Authorization": "Bearer test-token"})
+        state = json.loads(conn.getresponse().read())
+        conn.close()
+        self.assertEqual(state["kickoff_prefill"], {"in_scope": "192.0.2.0/24", "agents": "1"})
 
 
 class ReportTests(unittest.TestCase):
