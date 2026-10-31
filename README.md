@@ -19,65 +19,91 @@ Every skill covers four modes:
 
 ## Quick start
 
-First, get the collection: `git clone https://github.com/kireol/ai-security-skills.git` and `cd` into it.
-There are three ways to run it.
+Get the collection and run the launcher. It asks which AI assistant to use (Claude Code, Codex, or
+Gemini CLI, or it prints the prompt for any other) and whether to start a live dashboard you can watch
+in a browser, then starts the assessment. Pick your system:
 
-### Option 1: full assessment, with an optional live dashboard
-
-Run one command:
+<details>
+<summary><b>macOS</b></summary>
 
 ```sh
+git clone https://github.com/kireol/ai-security-skills.git
+cd ai-security-skills
 scripts/assess.sh
 ```
 
-It asks two questions:
+Needs Git and Python 3.9 or later; both come with the Xcode Command Line Tools
+(`xcode-select --install`). Stop the dashboard when you're done with `scripts/assess.sh --stop`.
 
-1. **Which AI assistant to use:** Claude Code, Codex, or Gemini CLI (whichever you have installed),
-   printing the prompt to paste into another assistant, or exiting without doing anything.
-2. **Whether to start a live [dashboard](tools/dashboard/README.md)** you can watch in a browser, and who
-   may view it: **only this computer**, **any device on your local network** (pick this when you're
-   running it on a computer without a screen), or **no dashboard**. `--local`, `--lan`, or
-   `--no-dashboard` skips the question.
+</details>
 
-Then it starts the dashboard in the background if you chose one, opens it or prints its links, and
-starts the assistant with the kick-off prompt. You can answer the kick-off questions in the chat or in
-the dashboard's **Kick-off settings** tab, which also shows every answer however it was given. As the
-agent works, the dashboard fills in with the inventory, each system's checks, findings, and changes.
-(Already in an AI session? Ask it to "start the dashboard" during the kick-off and it will do the same.)
-
-**When you're done,** stop the dashboard with:
+<details>
+<summary><b>Linux</b></summary>
 
 ```sh
-scripts/assess.sh --stop
+git clone https://github.com/kireol/ai-security-skills.git
+cd ai-security-skills
+scripts/assess.sh
 ```
 
-That stops it however it was started. (If you ran `tools/dashboard/dashboard.py serve` yourself in a
-terminal, Ctrl+C there also works.) Your reports stay in `~/ai-security-reports/`.
+Needs Git and Python 3.9 or later, for example `sudo apt install git python3` (Debian, Ubuntu),
+`sudo dnf install git python3` (Fedora), or `sudo pacman -S git python` (Arch). On a computer without a
+screen, choose the dashboard option for **any device on my local network** and open the link it prints
+from another device. Stop the dashboard when you're done with `scripts/assess.sh --stop`.
 
-The script also suggests three kick-off answers, which you confirm or change: **In-scope networks** (the
-/24 network around this computer's address), **Internet edge** (your network's public address, looked up
-with an outside service; `--no-lookup` skips it), and **Agents** (1). It passes them to the assistant and
-fills them into the dashboard's Kick-off settings form.
+</details>
 
-If the dashboard port (8770) is already in use, the script reuses the dashboard only if it's this copy's,
-up to date, and using the same data folder. Otherwise it tells you what's there (an older dashboard,
-one from another copy, or another program) and stops without starting anything; stop the old dashboard
-or pick another port with `--port N`.
+<details>
+<summary><b>Windows</b></summary>
 
-**On Windows,** use the PowerShell launcher instead. It asks the same questions and takes the same
-options in PowerShell style (`-Stop`, `-Agent`, `-Local`, `-Lan`, `-NoDashboard`, `-Port`, `-NoLookup`):
+In PowerShell:
 
 ```powershell
+git clone https://github.com/kireol/ai-security-skills.git
+cd ai-security-skills
 powershell -ExecutionPolicy Bypass -File scripts\assess.ps1
-powershell -ExecutionPolicy Bypass -File scripts\assess.ps1 -Stop
 ```
 
-It needs Python 3.9 or later (`python3`, `python`, or `py -3`) for the dashboard. It also runs under
-PowerShell 7 on macOS and Linux.
+Needs [Git](https://git-scm.com/download/win) and Python 3.9 or later from
+[python.org](https://www.python.org/downloads/) (tick "Add python.exe to PATH") or the Microsoft Store.
+Stop the dashboard when you're done with
+`powershell -ExecutionPolicy Bypass -File scripts\assess.ps1 -Stop`.
 
-### Option 2: full assessment without the script
+</details>
 
-Paste this into your AI assistant from inside the collection's folder:
+Your reports are saved in `~/ai-security-reports/`. To check a single device instead of the whole
+network, see [Check just one device](#check-just-one-device).
+
+<details>
+<summary><b>More:</b> options, suggested answers, the dashboard port, and running without the script</summary>
+
+**Options.** Each one skips a question or changes a default. PowerShell uses the same names in its own
+style (`-Agent`, `-Local`, `-Lan`, `-NoDashboard`, `-Port`, `-NoLookup`, `-Stop`).
+
+| Option | What it does |
+|---|---|
+| `--agent claude\|codex\|gemini\|print` | Use this assistant, or print the prompt to paste into another one. |
+| `--local`, `--lan`, `--no-dashboard` | Start the dashboard viewable from this computer only, or from your local network, or don't start one. |
+| `--port N` | Dashboard port (default 8770). |
+| `--no-lookup` | Don't ask an outside service for your public address. |
+| `--stop` | Stop the dashboard, however it was started. |
+
+**The dashboard.** You can answer the kick-off questions in the chat or in the dashboard's **Kick-off
+settings** tab, which also shows every answer however it was given. As the agent works, the dashboard
+fills in with the inventory, each system's checks, findings, and changes. Already in an AI session? Ask
+it to "start the dashboard" during the kick-off. See the [dashboard README](tools/dashboard/README.md).
+
+**Suggested answers.** The launcher suggests three kick-off answers, which you confirm or change:
+**In-scope networks** (the /24 network around this computer's address), **Internet edge** (your
+network's public address, looked up with an outside service; `--no-lookup` skips it), and **Agents** (1).
+It passes them to the assistant and fills them into the dashboard's Kick-off settings form.
+
+**If the dashboard port is in use,** the launcher reuses the dashboard only if it's this copy's, up to
+date, and using the same data folder. Otherwise it tells you what's there (an older dashboard, one from
+another copy, or another program) and stops without starting anything; stop the old dashboard or pick
+another port with `--port N`.
+
+**Without the script,** paste this into your AI assistant from inside the collection's folder:
 
 ```text
 Use the full-assessment skill (skills/orchestration/full-assessment/SKILL.md) to run a complete security
@@ -86,7 +112,9 @@ me the kick-off questions, and don't scan or probe my network until I've answere
 anything without my approval.
 ```
 
-### Option 3: check just one device
+</details>
+
+### Check just one device
 
 No kick-off, no inventory: point your AI assistant at one system and the skill for it (see the
 [catalog](#catalog) below). From inside the collection's folder, ask for example:
