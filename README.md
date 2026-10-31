@@ -22,23 +22,28 @@ Every skill covers four modes:
 First, get the collection: `git clone https://github.com/kireol/ai-security-skills.git` and `cd` into it.
 There are three ways to run it.
 
-### Option 1: full assessment with a live dashboard you can watch
+### Option 1: full assessment, with an optional live dashboard
 
 Run one command:
 
 ```sh
-scripts/assess.sh --dashboard
+scripts/assess.sh
 ```
 
-It asks which AI assistant to use (Claude Code, Codex, or Gemini CLI, whichever you have installed), or
-lets you print the prompt to paste into another assistant, or exit without doing anything. It also asks
-who may view the dashboard: **only this computer**, or **any device on your local network** (pick this
-when you're running it on a computer without a screen; `--local` or `--lan` skips the question). Then it
-starts the [dashboard](tools/dashboard/README.md) in the background, opens it or prints its links, and
+It asks two questions:
+
+1. **Which AI assistant to use:** Claude Code, Codex, or Gemini CLI (whichever you have installed),
+   printing the prompt to paste into another assistant, or exiting without doing anything.
+2. **Whether to start a live [dashboard](tools/dashboard/README.md)** you can watch in a browser, and who
+   may view it: **only this computer**, **any device on your local network** (pick this when you're
+   running it on a computer without a screen), or **no dashboard**. `--local`, `--lan`, or
+   `--no-dashboard` skips the question.
+
+Then it starts the dashboard in the background if you chose one, opens it or prints its links, and
 starts the assistant with the kick-off prompt. You can answer the kick-off questions in the chat or in
 the dashboard's **Kick-off settings** tab, which also shows every answer however it was given. As the
-agent works, the dashboard fills in with the inventory, each system's checks, findings, and changes. (Already in an AI session? Ask it to "start the dashboard" during
-the kick-off and it will do the same.)
+agent works, the dashboard fills in with the inventory, each system's checks, findings, and changes.
+(Already in an AI session? Ask it to "start the dashboard" during the kick-off and it will do the same.)
 
 **When you're done,** stop the dashboard with:
 
@@ -60,24 +65,19 @@ one from another copy, or another program) and stops without starting anything; 
 or pick another port with `--port N`.
 
 **On Windows,** use the PowerShell launcher instead. It asks the same questions and takes the same
-options in PowerShell style (`-Dashboard`, `-Stop`, `-Agent`, `-Local`, `-Lan`, `-Port`, `-NoLookup`):
+options in PowerShell style (`-Stop`, `-Agent`, `-Local`, `-Lan`, `-NoDashboard`, `-Port`, `-NoLookup`):
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\assess.ps1 -Dashboard
+powershell -ExecutionPolicy Bypass -File scripts\assess.ps1
 powershell -ExecutionPolicy Bypass -File scripts\assess.ps1 -Stop
 ```
 
 It needs Python 3.9 or later (`python3`, `python`, or `py -3`) for the dashboard. It also runs under
 PowerShell 7 on macOS and Linux.
 
-### Option 2: full assessment, just the AI (no dashboard)
+### Option 2: full assessment without the script
 
-```sh
-scripts/assess.sh
-```
-
-Same question about which assistant to use, without the dashboard. Or skip the script and paste this
-into your AI assistant from inside the collection's folder:
+Paste this into your AI assistant from inside the collection's folder:
 
 ```text
 Use the full-assessment skill (skills/orchestration/full-assessment/SKILL.md) to run a complete security

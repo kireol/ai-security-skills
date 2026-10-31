@@ -1,12 +1,13 @@
 #!/bin/sh
 # One command to start a full security assessment.
 #
-#   scripts/assess.sh                 ask which AI assistant to use, then start it with the kick-off prompt
-#   scripts/assess.sh --dashboard     also start the live dashboard and open it in your browser
+#   scripts/assess.sh                 ask which AI assistant to use and whether to start the live dashboard,
+#                                     then start the assistant with the kick-off prompt
 #   scripts/assess.sh --stop          stop the dashboard
 #
 # Options: --agent claude|codex|gemini|print   skip the question and use this choice
-#          --local | --lan                     dashboard viewable from this computer only, or from your LAN
+#          --local | --lan | --no-dashboard    skip the dashboard question: viewable from this computer only,
+#                                              from your LAN, or no dashboard
 #          --port N                            dashboard port (default 8770)
 #          --no-lookup                         don't ask an outside service for your public address
 #
@@ -17,7 +18,7 @@ REPO=$(cd "$(dirname "$0")/.." && pwd -P)
 DATA=${AISS_DASHBOARD_DATA:-$HOME/.ai-security-dashboard}
 REPORTS=${AISS_REPORTS:-$HOME/ai-security-reports}
 PORT=8770
-DASHBOARD=no
+DASHBOARD=""
 STOP=no
 AGENT=""
 ACCESS=""
@@ -26,14 +27,14 @@ KNOWN_AGENTS="claude codex gemini"
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    --dashboard) DASHBOARD=yes ;;
     --stop) STOP=yes ;;
     --agent) AGENT=${2:-}; shift ;;
-    --local) ACCESS=local ;;
-    --lan) ACCESS=lan ;;
+    --local) DASHBOARD=yes; ACCESS=local ;;
+    --lan) DASHBOARD=yes; ACCESS=lan ;;
+    --no-dashboard) DASHBOARD=no ;;
     --port) PORT=${2:-}; shift ;;
     --no-lookup) LOOKUP=no ;;
-    -h|--help) sed -n '2,14p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,16p' "$0"; exit 0 ;;
     *) echo "Unknown option: $1 (see --help)" >&2; exit 2 ;;
   esac
   shift
@@ -94,6 +95,30 @@ case "$AGENT" in
   *) echo "Unknown assistant: $AGENT (use claude, codex, gemini, or print)" >&2; exit 2 ;;
 esac
 
+# Whether to start the live dashboard, and who may view it. A computer without a screen has no browser, so
+# "this computer only" would mean nobody can see it unless they use an SSH tunnel.
+if [ -z "$DASHBOARD" ]; then
+  if [ ! -t 0 ]; then
+    DASHBOARD=no
+  else
+    echo
+    echo "Start a live dashboard so you can watch the assessment in a web browser?"
+    echo "  1) Yes, viewable only from this computer (most private; from another computer, use an SSH tunnel:"
+    echo "     ssh -L $PORT:127.0.0.1:$PORT <this computer>, then open the link on that computer)"
+    echo "  2) Yes, viewable from any device on my local network (choose this for a computer without a"
+    echo "     screen; the page is unencrypted on your network, so only on a network you trust)"
+    echo "  3) No dashboard"
+    printf "Choose 1-3: "
+    read -r choice
+    case "$choice" in
+      1) DASHBOARD=yes; ACCESS=local ;;
+      2) DASHBOARD=yes; ACCESS=lan ;;
+      3) DASHBOARD=no ;;
+      *) echo "Not a valid choice; nothing started."; exit 1 ;;
+    esac
+  fi
+fi
+
 # Is something already on the dashboard port? Reuse it only if it's this copy's dashboard, running this
 # version of the code, with this data folder's token; otherwise say what's there and stop.
 RUNNING=""
@@ -135,28 +160,6 @@ if [ "$DASHBOARD" = yes ]; then
       echo "Port $PORT is in use by another program. Use another port with --port N (for example --port $((PORT + 1)))." >&2
       exit 1 ;;
   esac
-fi
-
-# Who may view the dashboard. A headless computer has no browser, so "this computer only" would mean
-# nobody can see it unless they use an SSH tunnel.
-if [ "$DASHBOARD" = yes ] && [ -z "$ACCESS" ]; then
-  if [ ! -t 0 ]; then
-    ACCESS=local
-  else
-    echo
-    echo "Who should be able to view the dashboard?"
-    echo "  1) Only this computer (most private; from another computer, use an SSH tunnel:"
-    echo "     ssh -L $PORT:127.0.0.1:$PORT <this computer>, then open the link on that computer)"
-    echo "  2) Any device on my local network (choose this for a computer without a screen;"
-    echo "     the page is unencrypted on your network, so only on a network you trust)"
-    printf "Choose 1-2: "
-    read -r choice
-    case "$choice" in
-      1) ACCESS=local ;;
-      2) ACCESS=lan ;;
-      *) echo "Not a valid choice; nothing started."; exit 1 ;;
-    esac
-  fi
 fi
 
 mkdir -p "$REPORTS"

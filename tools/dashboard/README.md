@@ -16,8 +16,8 @@ Python file with no dependencies (Python 3.9+).
 
 ## Run it
 
-The easiest way is `scripts/assess.sh --dashboard`, which starts the dashboard, opens it, and starts the
-assessment in one command. `scripts/assess.sh --stop` stops the dashboard however it was started. To run the dashboard on its own:
+The easiest way is `scripts/assess.sh`: answer yes to its dashboard question (or pass `--local` or `--lan`)
+and it starts the dashboard, opens it, and starts the assessment in one command. `scripts/assess.sh --stop` stops the dashboard however it was started. To run the dashboard on its own:
 
 ```sh
 python3 tools/dashboard/dashboard.py serve --open
@@ -101,7 +101,7 @@ a `current` dashboard; for anything else they say what's on the port and stop.
 The dashboard is a map of your weaknesses. It is built to stay private:
 
 - **Localhost only by default.** To view it from another device on your LAN (for example when the agent
-  runs on a computer without a screen), run with `--lan` (or `scripts/assess.sh --dashboard --lan`). It
+  runs on a computer without a screen), run with `--lan` (or `scripts/assess.sh --lan`). It
   then listens on all interfaces, accepts this computer's LAN address and name, and prints a link for each.
   Plain HTTP means the page and token can be read by anyone who can watch your network traffic, so use LAN
   mode only on a network you trust and stop the dashboard when you're done. The more private alternative

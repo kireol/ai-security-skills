@@ -1,12 +1,13 @@
 <#
 One command to start a full security assessment (PowerShell version of scripts/assess.sh).
 
-  scripts/assess.ps1                ask which AI assistant to use, then start it with the kick-off prompt
-  scripts/assess.ps1 -Dashboard     also start the live dashboard and open it in your browser
+  scripts/assess.ps1                ask which AI assistant to use and whether to start the live dashboard,
+                                    then start the assistant with the kick-off prompt
   scripts/assess.ps1 -Stop          stop the dashboard
 
 Options: -Agent claude|codex|gemini|print   skip the question and use this choice
-         -Local | -Lan                      dashboard viewable from this computer only, or from your LAN
+         -Local | -Lan | -NoDashboard       skip the dashboard question: viewable from this computer only,
+                                            from your LAN, or no dashboard
          -Port N                            dashboard port (default 8770)
          -NoLookup                          don't ask an outside service for your public address
 
@@ -16,11 +17,11 @@ Works with Windows PowerShell 5.1 and PowerShell 7 on Windows, macOS, and Linux.
 #>
 [CmdletBinding()]
 param(
-    [switch]$Dashboard,
     [switch]$Stop,
     [string]$Agent = "",
     [switch]$Local,
     [switch]$Lan,
+    [switch]$NoDashboard,
     [int]$Port = 8770,
     [switch]$NoLookup,
     [Alias("h")][switch]$Help
@@ -30,10 +31,12 @@ Set-StrictMode -Version 2
 $ErrorActionPreference = "Stop"
 
 if ($Help) {
-    (Get-Content -LiteralPath $PSCommandPath -TotalCount 16 | Select-Object -Skip 1) -join "`n" | Write-Output
+    (Get-Content -LiteralPath $PSCommandPath -TotalCount 18 | Select-Object -Skip 1) -join "`n" | Write-Output
     exit 0
 }
-if ($Local -and $Lan) { [Console]::Error.WriteLine("Choose -Local or -Lan, not both."); exit 2 }
+if ([int][bool]$Local + [int][bool]$Lan + [int][bool]$NoDashboard -gt 1) {
+    [Console]::Error.WriteLine("Choose one of -Local, -Lan, or -NoDashboard."); exit 2
+}
 
 $OnWindows = ($PSVersionTable.PSVersion.Major -lt 6) -or $IsWindows
 $Repo = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
@@ -41,6 +44,8 @@ $Data = if ($env:AISS_DASHBOARD_DATA) { $env:AISS_DASHBOARD_DATA } else { Join-P
 $Reports = if ($env:AISS_REPORTS) { $env:AISS_REPORTS } else { Join-Path $HOME "ai-security-reports" }
 $KnownAgents = @("claude", "codex", "gemini")
 $Access = if ($Local) { "local" } elseif ($Lan) { "lan" } else { "" }
+# $null until answered: -Local and -Lan mean yes, -NoDashboard means no, otherwise the script asks.
+$Dashboard = if ($Access) { $true } elseif ($NoDashboard) { $false } else { $null }
 $Interactive = -not [Console]::IsInputRedirected
 $PidFile = Join-Path $Data "dashboard.pid"
 
@@ -137,6 +142,29 @@ function Find-Python {
     return $null
 }
 
+# Whether to start the live dashboard, and who may view it. A computer without a screen has no browser, so
+# "this computer only" would mean nobody can see it unless they use an SSH tunnel.
+if ($null -eq $Dashboard) {
+    if (-not $Interactive) {
+        $Dashboard = $false
+    } else {
+        Write-Output ""
+        Write-Output "Start a live dashboard so you can watch the assessment in a web browser?"
+        Write-Output "  1) Yes, viewable only from this computer (most private; from another computer, use an SSH tunnel:"
+        Write-Output "     ssh -L ${Port}:127.0.0.1:${Port} <this computer>, then open the link on that computer)"
+        Write-Output "  2) Yes, viewable from any device on my local network (choose this for a computer without a"
+        Write-Output "     screen; the page is unencrypted on your network, so only on a network you trust)"
+        Write-Output "  3) No dashboard"
+        $choice = Read-Host "Choose 1-3"
+        switch ($choice) {
+            "1" { $Dashboard = $true; $Access = "local" }
+            "2" { $Dashboard = $true; $Access = "lan" }
+            "3" { $Dashboard = $false }
+            default { Write-Output "Not a valid choice; nothing started."; exit 1 }
+        }
+    }
+}
+
 # Is something already on the dashboard port? Reuse it only if it's this copy's dashboard, running this
 # version of the code, with this data folder's token; otherwise say what's there and stop.
 $Running = ""
@@ -175,27 +203,6 @@ if ($Dashboard) {
                 "can't give you a working link to it.`nStop it with '$StopCmd' and run this again, or use another port with -Port N.")
         }
         default { Fail "Port $Port is in use by another program. Use another port with -Port N (for example -Port $($Port + 1))." }
-    }
-}
-
-# Who may view the dashboard. A headless computer has no browser, so "this computer only" would mean
-# nobody can see it unless they use an SSH tunnel.
-if ($Dashboard -and -not $Access) {
-    if (-not $Interactive) {
-        $Access = "local"
-    } else {
-        Write-Output ""
-        Write-Output "Who should be able to view the dashboard?"
-        Write-Output "  1) Only this computer (most private; from another computer, use an SSH tunnel:"
-        Write-Output "     ssh -L ${Port}:127.0.0.1:${Port} <this computer>, then open the link on that computer)"
-        Write-Output "  2) Any device on my local network (choose this for a computer without a screen;"
-        Write-Output "     the page is unencrypted on your network, so only on a network you trust)"
-        $choice = Read-Host "Choose 1-2"
-        switch ($choice) {
-            "1" { $Access = "local" }
-            "2" { $Access = "lan" }
-            default { Write-Output "Not a valid choice; nothing started."; exit 1 }
-        }
     }
 }
 

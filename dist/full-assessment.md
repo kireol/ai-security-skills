@@ -211,8 +211,8 @@ python3 tools/dashboard/dashboard.py serve --lan --reports <parent of the run fo
 
 It prints the links to open, including the token (for LAN mode, one per address of this computer); give
 them to the user, and on a computer without a screen leave out `--open`. It shows run folders
-automatically. Otherwise point the user to `scripts/assess.sh --dashboard`, which does the same in one
-command. Stop it at the end with `scripts/assess.sh --stop`.
+automatically. Otherwise point the user to `scripts/assess.sh`, which asks whether to start it and does the
+same in one command. Stop it at the end with `scripts/assess.sh --stop`.
 
 Confirm the run's scope and choices back to the user in one short summary before starting. If the user
 doesn't own or administer a network, or can't confirm they're authorized to assess it, don't scan it.
