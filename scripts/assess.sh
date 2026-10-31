@@ -172,6 +172,19 @@ assessment of my network. Follow its \"Before anything else\" rules: set up the 
 then ask me the kick-off questions, and don't scan or probe my network until I've answered them.$DASHBOARD_NOTE \
 Don't change anything without my approval."
 
+# The assistant takes over the terminal, so give the user time to copy the dashboard links first.
+if [ "$DASHBOARD" = yes ] && [ "$AGENT" != print ] && [ -t 0 ]; then
+  echo
+  printf "Press any key to start %s (Ctrl+C to cancel)... " "$AGENT"
+  old_stty=$(stty -g)
+  trap 'stty "$old_stty"; echo; exit 130' INT
+  stty -icanon -echo min 1
+  dd bs=1 count=1 >/dev/null 2>&1
+  stty "$old_stty"
+  trap - INT
+  echo
+fi
+
 cd "$REPO"
 case "$AGENT" in
   claude) exec claude "$PROMPT" ;;

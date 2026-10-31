@@ -251,6 +251,14 @@ $Prompt = "Use the full-assessment skill from the ai-security-skills collection 
     "then ask me the kick-off questions, and don't scan or probe my network until I've answered them.$DashboardNote " +
     "Don't change anything without my approval."
 
+# The assistant takes over the terminal, so give the user time to copy the dashboard links first.
+if ($Dashboard -and $Agent -ne "print" -and $Interactive) {
+    Write-Output ""
+    Write-Host -NoNewline "Press any key to start $Agent (Ctrl+C to cancel)... "
+    try { [Console]::ReadKey($true) | Out-Null } catch { Read-Host | Out-Null }  # ReadKey fails in some hosts, e.g. the ISE
+    Write-Output ""
+}
+
 Set-Location -LiteralPath $Repo
 switch ($Agent) {
     "claude" { & claude $Prompt; exit $LASTEXITCODE }
