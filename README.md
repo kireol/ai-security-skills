@@ -20,8 +20,8 @@ Every skill covers four modes:
 ## Quick start
 
 Get the collection and run the launcher. It asks which AI assistant to use (Claude Code, Codex, or
-Gemini CLI, or it prints the prompt for any other) and whether to start a live dashboard you can watch
-in a browser, then starts the assessment. Pick your system:
+Gemini CLI, or it prints the prompt for any other) and whether to start a [live dashboard](#live-dashboard)
+you can watch in a browser, then starts the assessment. Pick your system:
 
 <details>
 <summary><b>macOS</b></summary>
@@ -222,9 +222,14 @@ Suggestions for new skills are welcome; start from `templates/skill-template/`.
 
 ## Live dashboard
 
-Run `python3 tools/dashboard/dashboard.py serve` to get a private local web page showing what your agents
-have found as they work: mode, domain status, findings, changes, and incidents. See
-[tools/dashboard/README.md](tools/dashboard/README.md).
+Run `python3 tools/dashboard/dashboard.py serve` (or answer yes to the launcher's dashboard question) to
+get a private local web page showing what your agents have found as they work: the inventory, mode,
+domain status, findings, changes, and incidents. See [tools/dashboard/README.md](tools/dashboard/README.md).
+
+![The dashboard during an example run: a list of assessments with open findings by priority, and the
+run's inventory, network-wide domains, and findings](docs/images/dashboard.png)
+
+*An example run, from the dashboard's invented sample data.*
 
 ## Contributing
 
