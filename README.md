@@ -17,6 +17,17 @@ Every skill covers four modes:
 | **Remediate** | Makes changes. | Explicit approval for each change, or a bounded standing authorization. |
 | **Respond** (incident response) | Walks the user through containment, evidence preservation, and recovery after a suspected compromise. | Urgent manual steps are advised immediately; disruptive actions still need approval. |
 
+## Live dashboard
+
+Run `python3 tools/dashboard/dashboard.py serve` (or answer yes to the launcher's dashboard question) to
+get a private local web page showing what your agents have found as they work: the inventory, mode,
+domain status, findings, changes, and incidents. See [tools/dashboard/README.md](tools/dashboard/README.md).
+
+![The dashboard during an example run: a list of assessments with open findings by priority, and the
+run's inventory, network-wide domains, and findings](docs/images/dashboard.png)
+
+*An example run, from the dashboard's invented sample data.*
+
 ## Quick start
 
 Get the collection and run the launcher. It asks which AI assistant to use (Claude Code, Codex, or
@@ -156,17 +167,6 @@ report at the end.
    only goes ahead with your approval.
 
 Everything about your systems stays on your machine in `~/ai-security-reports/`, readable only by you.
-
-## Live dashboard
-
-Run `python3 tools/dashboard/dashboard.py serve` (or answer yes to the launcher's dashboard question) to
-get a private local web page showing what your agents have found as they work: the inventory, mode,
-domain status, findings, changes, and incidents. See [tools/dashboard/README.md](tools/dashboard/README.md).
-
-![The dashboard during an example run: a list of assessments with open findings by priority, and the
-run's inventory, network-wide domains, and findings](docs/images/dashboard.png)
-
-*An example run, from the dashboard's invented sample data.*
 
 ## Layout
 
