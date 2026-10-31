@@ -26,8 +26,6 @@ domain status, findings, changes, and incidents. See [tools/dashboard/README.md]
 ![The dashboard during an example run: a list of assessments with open findings by priority, and the
 run's inventory, network-wide domains, and findings](docs/images/dashboard.png)
 
-*An example run, from the dashboard's invented sample data.*
-
 ## Quick start
 
 Get the collection and run the launcher. It asks which AI assistant to use (Claude Code, Codex, or
