@@ -1,0 +1,55 @@
+# MFA: References
+
+Always prefer current vendor documentation. Edition features, firmware capabilities, and app backup
+behavior change. Re-verify links and contents when updating this skill.
+
+Last verified: 2026-10-31
+
+## Vendor (authoritative)
+
+### Yubico (YubiKey)
+
+- Security advisories: https://www.yubico.com/support/security-advisories/
+- Example advisory, YSA-2024-03 (firmware before 5.7.0; physical possession required): https://www.yubico.com/support/security-advisories/ysa-2024-03/
+- YubiKey technical manual and firmware capabilities: https://docs.yubico.com/hardware/yubikey/yk-tech-manual/
+- YubiKey Manager CLI (`ykman`) documentation: https://docs.yubico.com/software/yubikey/tools/ykman/
+- Yubico Authenticator: https://www.yubico.com/products/yubico-authenticator/
+
+### FIDO Alliance and passkeys
+
+- Passkeys overview: https://fidoalliance.org/passkeys/
+- Apple passkeys (iCloud Keychain): https://support.apple.com/guide/iphone/use-passkeys-iphf538ea8d0/ios
+- Google passkeys: https://support.google.com/accounts/answer/13548313
+- Microsoft passkeys and Windows Hello: https://support.microsoft.com/en-us/windows/passkeys-in-windows-301c8944-5ea2-452b-9886-97e4d2ef4422
+
+### Duo Security (Cisco)
+
+- Policy guide (new user policy, authentication methods, bypass, remembered devices): https://duo.com/docs/policy
+- User administration (bypass codes, user status, enrollment): https://duo.com/docs/administration-users
+- Getting started (editions, Duo Free after trial): https://duo.com/docs/getting-started
+- Editions and pricing (Duo Free user limit): https://duo.com/editions-and-pricing
+- Authentication Proxy reference (failmode, configuration): https://duo.com/docs/authproxy-reference
+- Authentication Proxy release notes: https://duo.com/docs/authproxy-notes
+- Duo security advisories (Cisco PSIRT): https://sec.cloudapps.cisco.com/security/center/publicationListing.x
+
+### Authenticator apps
+
+- Google Authenticator backup and sync: https://support.google.com/accounts/answer/1066447
+- Microsoft Authenticator backup and recovery: https://support.microsoft.com/en-us/account-billing/back-up-account-credentials-in-microsoft-authenticator-bb939936-7a8d-4e88-bc43-49bc1a700a40
+- Aegis Authenticator (open source; encrypted vault and backups): https://getaegis.app/
+
+Generic vulnerability and incident sources (CISA KEV, NVD, CVE, CISA ransomware guidance, IC3) are listed in
+the core documents.
+
+## Government and standards
+
+- CISA, Implementing phishing-resistant MFA (fact sheet): https://www.cisa.gov/sites/default/files/publications/fact-sheet-implementing-phishing-resistant-mfa-508c.pdf
+- CISA, Implementing number matching in MFA applications (fact sheet): https://www.cisa.gov/sites/default/files/publications/fact-sheet-implement-number-matching-in-mfa-applications-508c.pdf
+- CISA, Turn on MFA (Secure Our World): https://www.cisa.gov/secure-our-world/turn-mfa
+- NIST SP 800-63B-4, authenticators (SMS as a restricted authenticator; phishing resistance): https://pages.nist.gov/800-63-4/sp800-63b.html
+- NIST SP 800-63B-4 supplement on syncable authenticators: https://pages.nist.gov/800-63-4/sp800-63b/syncable/
+
+## Third-party (not authoritative)
+
+- Published summaries of NIST SP 800-63-4 and Duo edition comparisons exist from vendors and consultancies;
+  use them only to find what to verify in the primary documents above.

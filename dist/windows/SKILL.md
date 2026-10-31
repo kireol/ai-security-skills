@@ -2,15 +2,18 @@
 name: windows
 description: >-
   Security assessment, hardening, remediation, and incident response for Windows 10 and 11 desktops and
-  laptops, and small Windows Server installs in homes and small offices. Use when auditing a Windows PC or
-  small server, reviewing its support status, updates, Microsoft Defender, BitLocker, accounts and UAC,
-  firewall, RDP and remote-support tools, file sharing, logging, persistence, or backups, or when a Windows
-  machine may have been compromised (including tech-support scams and ransomware).
+  laptops, and small Windows Server installs in homes and small offices, including a small office's or
+  homelab's Active Directory domain controllers. Use when auditing a Windows PC or small server, reviewing
+  its support status, updates, Microsoft Defender, BitLocker, accounts and UAC, firewall, RDP and
+  remote-support tools, file sharing, logging, persistence, or backups; when reviewing a small Active
+  Directory domain (privileged groups, Windows LAPS, krbtgt and service accounts, LDAP and SMB signing,
+  NTLM, Group Policy, AD backups); or when a Windows machine or domain may have been compromised
+  (including tech-support scams and ransomware).
 license: CC-BY-4.0
 metadata:
-  version: "1.0"
-  last_reviewed: "2026-10-30"
-  applies_to: "Windows 11, Windows 10 22H2 with ESU, small Windows Server 2016-2025 installs (verify the live build and edition)"
+  version: "1.1"
+  last_reviewed: "2026-10-31"
+  applies_to: "Windows 11, Windows 10 22H2 with ESU, small Windows Server 2016-2025 installs, and small Active Directory domains (one forest, one domain, a few domain controllers); verify the live build and edition"
   audience: "home, work, homelab"
   finding_prefix: "WIN"
   modes: "discover, recommend, remediate, respond"
@@ -74,6 +77,15 @@ and advisories are in [references.md](references.md).
   Control, ASR rules, Controlled Folder Access, BitLocker, Windows Hello, and Windows LAPS are built in and
   free on supported editions. Third-party "PC optimizers", registry cleaners, and debloat scripts are not
   security tools and frequently break updates or disable protections.
+- **A domain controller is tier 0.** Whoever controls a domain controller, a Domain Admins account, the
+  krbtgt account, the AD backups, or anything that can change those (Group Policy, the hypervisor hosting
+  the DC, an Entra Connect sync server, a certificate authority) controls every domain-joined PC and
+  account. Treat all of them as one security zone, and treat any change to them as at least **C2**.
+- **Keep it small-office scale.** This skill covers a single forest with one domain and a handful of
+  domain controllers, run by one person or a small IT provider. For larger or multi-domain estates, AD
+  Certificate Services, hybrid identity design, or full tiering projects, point the user to Microsoft's
+  privileged access and Active Directory security guidance (see [references.md](references.md)) and a
+  specialist.
 - **Managed devices have someone else in charge.** If the PC is joined to Entra ID or Active Directory, or
   enrolled in Intune or another MDM, settings may be enforced centrally and local changes will be reverted
   or conflict. Find out who manages it before recommending local changes.
@@ -92,7 +104,9 @@ and advisories are in [references.md](references.md).
 | **Local accounts only** | Accounts show "Local account". | No cloud key escrow; device encryption may stay unprotected. Recovery depends entirely on keys and backups the user keeps. |
 | **Entra ID joined / Intune enrolled** | `dsregcmd /status` shows `AzureAdJoined : YES`; Settings → Accounts → Access work or school. | Policy is central. Recovery keys go to Entra ID; Windows LAPS can back up local admin passwords to Entra ID. Coordinate with the tenant admin. |
 | **Active Directory domain member** | `DomainJoined : YES`; domain shown in About. | Group Policy from the domain controllers wins. LAPS backs up to AD. Domain admin compromise compromises the PC. |
-| **Small Windows Server** (2016–2025; file server, domain controller, or line-of-business app host) | Server edition; Server Manager present. | Usually always-on, often reachable over RDP and SMB, often running the office's only domain controller. Check the lifecycle date of the exact version (Windows Server 2016 extended support ends January 12, 2027). Domain-controller changes are a specialist area (see hard stops). |
+| **Small Windows Server** (2016–2025; file server or line-of-business app host) | Server edition; Server Manager present. | Usually always-on, often reachable over RDP and SMB. Check the lifecycle date of the exact version (Windows Server 2016 extended support ends January 12, 2027). |
+| **Domain controller** (small office or homelab AD DS) | `Get-ADDomainController` returns the server; Server Manager shows the AD DS role; `(Get-CimInstance Win32_ComputerSystem).DomainRole` is 4 or 5. | Tier 0: assess with domain P as well. Often also the office's DNS and DHCP server and, wrongly, its file server. A domain with **only one DC** has no redundancy: losing it without a good backup loses the domain. Defaults differ by version: Windows Server 2025 DCs require LDAP signing on new deployments and default channel binding to "When supported"; 2022 and earlier accept unsigned binds unless configured. In-place upgrades keep the existing policy. Many changes are specialist work (see hard stops). |
+| **Virtualized domain controller** | DC is a VM on Hyper-V, Proxmox, ESXi, or similar. | The hypervisor admin and its backups are tier 0 too. Never revert a DC to a hypervisor snapshot unless the hypervisor supports VM-GenerationID and Microsoft's virtualized-DC guidance is followed; otherwise the revert can cause USN rollback and break replication. Restore AD from a backup made for that purpose. |
 | **Virtual machine** | Hypervisor guest services; virtual NIC vendor. | The hypervisor admin controls the VM, its disks, and snapshots. Snapshots are useful for rollback and evidence. |
 
 ## Detection
@@ -110,8 +124,18 @@ Defaults can be changed, so confirm with the user before relying on a match.
 - **RDP on TCP 3389** (and UDP 3389 for newer clients) only on Pro, Enterprise, and Server editions, and
   only when Remote Desktop is enabled. The RDP certificate's subject is usually the computer name.
 - **WinRM** on TCP 5985 (HTTP) and 5986 (HTTPS): enabled by default on Windows Server, not on clients.
-- **RPC endpoint mapper** on TCP 135, commonly open on servers and domain controllers. Domain controllers
-  also expose Kerberos (88), LDAP (389/636), and DNS (53).
+- **RPC endpoint mapper** on TCP 135, commonly open on servers and domain controllers.
+- **Domain controllers** expose a characteristic set together: DNS (TCP/UDP 53, when the DC runs DNS, as
+  it usually does), Kerberos (TCP/UDP 88), RPC endpoint mapper (TCP 135), LDAP (TCP/UDP 389), SMB (TCP 445,
+  for SYSVOL and NETLOGON), Kerberos password change (TCP/UDP 464), LDAPS (TCP 636, only with a suitable
+  certificate), Global Catalog (TCP 3268) and Global Catalog over TLS (TCP 3269), Active Directory Web
+  Services (TCP 9389), and the dynamic RPC range (TCP 49152–65535). Seeing 88, 389, and 3268 together is a
+  strong DC signal.
+- **AD discovery announcements**: DNS SRV records such as `_ldap._tcp.dc._msdcs.<domain>` and
+  `_kerberos._tcp.<domain>` list the DCs; DHCP options often hand out the DC as the DNS server. An LDAP
+  RootDSE query (allowed without credentials by design) returns the domain's naming contexts, the DC's
+  DNS name, and its functional levels. The LDAPS and RDP certificates usually carry the DC's
+  fully qualified name.
 - **Name resolution chatter**: LLMNR on UDP 5355 and mDNS on UDP 5353 announce or answer for the
   computer name; WS-Discovery (UDP 3702) and SSDP (UDP 1900) appear when network discovery is on. Microsoft
   has been moving away from LLMNR and NetBIOS name resolution, so verify which are active on the version.
@@ -217,6 +241,74 @@ vssadmin list shadows                                                           
 Get-ComputerRestorePoint                                                        # Windows PowerShell 5.1 only
 ```
 
+**Domain controllers** (run on a DC or an admin workstation with the RSAT Active Directory and Group
+Policy modules; a normal domain user can read most of this, admin is needed for some registry and log
+reads). The cmdlets are vendor-documented; registry value names are *not yet verified* on every
+version, and the Windows Server 2025 LDAP signing enforcement policy may not be visible in the older
+registry value.
+
+```powershell
+# Topology, functional levels, roles, health (read-only)
+Get-ADForest | Select-Object Name,ForestMode,SchemaMaster,DomainNamingMaster,Domains
+Get-ADDomain | Select-Object DNSRoot,DomainMode,PDCEmulator,RIDMaster,InfrastructureMaster
+Get-ADDomainController -Filter * | Select-Object HostName,OperatingSystem,IsGlobalCatalog,IsReadOnly,Site
+repadmin /replsummary                                                           # replication health
+repadmin /showbackup                                                            # last backup per partition
+dcdiag /q                                                                       # errors only; never add /fix
+Get-ADOptionalFeature -Filter 'Name -like "Recycle Bin*"' | Select-Object Name,EnabledScopes
+
+# Privileged groups (recursive membership)
+'Domain Admins','Enterprise Admins','Schema Admins','Administrators','Account Operators',
+'Backup Operators','Server Operators','Print Operators','DnsAdmins','Group Policy Creator Owners',
+'Protected Users' | ForEach-Object {
+  [pscustomobject]@{ Group = $_; Members = (Get-ADGroupMember $_ -Recursive | ForEach-Object Name) -join ', ' } }
+Get-ADUser -Filter 'AdminCount -eq 1' -Properties AdminCount,LastLogonDate,PasswordLastSet,Enabled |
+  Select-Object Name,Enabled,LastLogonDate,PasswordLastSet
+
+# krbtgt, service accounts, risky account flags
+Get-ADUser krbtgt -Properties PasswordLastSet | Select-Object Name,PasswordLastSet
+Get-ADUser -Filter 'ServicePrincipalName -like "*"' -Properties ServicePrincipalName,PasswordLastSet,
+  'msDS-SupportedEncryptionTypes',MemberOf | Select-Object Name,PasswordLastSet,'msDS-SupportedEncryptionTypes'
+Get-ADServiceAccount -Filter * | Select-Object Name,ObjectClass,Enabled          # gMSA / dMSA
+Get-ADUser -Filter 'DoesNotRequirePreAuth -eq $true' | Select-Object Name        # AS-REP roastable
+Get-ADUser -Filter 'PasswordNeverExpires -eq $true -and Enabled -eq $true' | Select-Object Name
+Get-ADComputer -Filter 'TrustedForDelegation -eq $true' | Select-Object Name     # unconstrained delegation
+Get-ADDefaultDomainPasswordPolicy
+Get-ADFineGrainedPasswordPolicy -Filter *
+
+# Windows LAPS state (expiry only; never the password)
+Get-ADComputer -Filter * -Properties 'msLAPS-PasswordExpirationTime' |
+  Select-Object Name,'msLAPS-PasswordExpirationTime'
+Find-LapsADExtendedRights -Identity '<computers-ou>'                            # who can read passwords
+
+# LDAP signing and channel binding on the DC (admin; not yet verified on every version)
+Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Services\NTDS\Parameters' |
+  Select-Object LDAPServerIntegrity,LdapEnforceChannelBinding
+Get-WinEvent -FilterHashtable @{LogName='Directory Service'; Id=2886,2887,3040,3041} -MaxEvents 20
+
+# NTLM and Kerberos encryption (admin)
+Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\Lsa\MSV1_0' |
+  Select-Object RestrictSendingNTLMTraffic,RestrictReceivingNTLMTraffic,AuditReceivingNTLMTraffic
+Get-WinEvent -LogName 'Microsoft-Windows-NTLM/Operational' -MaxEvents 50
+# KDCSVC RC4 audit and block events (201-209, per Microsoft KB5073381; verify the IDs on the live KB)
+Get-WinEvent -FilterHashtable @{LogName='System'; Id=201,202,203,204,205,206,207,208,209} -MaxEvents 50
+
+# Group Policy and SYSVOL
+Get-GPO -All | Select-Object DisplayName,GpoStatus,ModificationTime
+Get-GPInheritance -Target (Get-ADDomain).DistinguishedName
+# Group Policy Preferences passwords: record file paths only, never the matching line
+Get-ChildItem "\\<domain>\SYSVOL\<domain>\Policies" -Recurse -Include *.xml |
+  Select-String -Pattern 'cpassword' -List | Select-Object Path
+
+# DNS on the DC
+Get-DnsServerZone | Select-Object ZoneName,ZoneType,IsDsIntegrated,DynamicUpdate
+Get-DnsServerForwarder
+Get-DnsServerRecursion
+
+# AD backups (admin)
+wbadmin get versions                                                            # lists backups only
+```
+
 **Never run these** (they print secrets, disable protection, or destroy recovery points). Several are C3,
 not R:
 
@@ -231,7 +323,14 @@ not R:
   Defender "to test".
 - Credential dumping of any kind: LSASS memory dumps (procdump, Task Manager "create dump file" on
   `lsass.exe`, `comsvcs.dll MiniDump`), `reg save HKLM\SAM` / `HKLM\SECURITY`, Mimikatz or similar tools,
-  copying `NTDS.dit` from a domain controller.
+  copying `NTDS.dit` from a domain controller, `ntdsutil` "IFM" media creation, DCSync-style replication
+  requests (`Get-ADReplAccount`, `secretsdump`), and Kerberoasting or AS-REP roasting "to test" password
+  strength.
+- Decrypting a Group Policy Preferences `cpassword` value, or printing the matching XML line.
+- On domain controllers: `dcdiag /fix`, `repadmin /syncall` or other forced replication, `ntdsutil`
+  metadata cleanup or role transfer/seizure, `New-KrbtgtKeys` in any mode other than its documented
+  simulation mode, `Set-ADAccountPassword` on any account, and `Get-GPOReport ... -Path` (writes a file;
+  fine with approval, not needed for Discover).
 - `vssadmin delete shadows`, `wmic shadowcopy delete`, `wbadmin delete catalog`, `bcdedit /set
   {default} recoveryenabled no`, `Disable-ComputerRestore`: these are exactly what ransomware runs.
 - `wevtutil cl` or `Clear-EventLog` (destroys evidence).
@@ -506,6 +605,96 @@ Accepted risk).
 - Disposal: devices being sold or recycled are reset with "clean the drive" or securely erased (advice
   only; never automate).
 
+#### P. Active Directory domain controllers (small office and homelab)
+
+Not applicable when there is no domain. Run this domain once per domain, plus the per-server domains
+(A–O) on each DC. Microsoft's guidance for larger estates (enterprise access model, Active Directory
+security best practices) is linked in [references.md](references.md); this domain covers the checks
+that matter most at small scale.
+
+- **Topology and support**: how many DCs, their Windows Server versions and support dates (domain A),
+  domain and forest functional levels, which DC holds the FSMO roles, whether the DCs are physical or
+  virtual and who administers the hypervisor. `repadmin /replsummary` with no failures and `dcdiag /q`
+  with no errors. **A single DC** is a finding (P3, or P2 if there is also no tested backup): losing it
+  loses every account and Group Policy.
+- **What else runs on the DC**: a DC should run AD DS, DNS, and perhaps DHCP, and little else. File
+  shares, line-of-business apps, remote-support tools, web browsing, email, or a print server on a DC
+  give everyone who uses those services a path into tier 0. Internet exposure of any DC port (RDP, LDAP,
+  SMB, DNS) is P1.
+- **Tier-0 accounts and Domain Admins membership**: list members (recursive) of Domain Admins,
+  Enterprise Admins, Schema Admins, built-in Administrators, and the operator groups (Account, Backup,
+  Server, Print Operators), plus DnsAdmins and Group Policy Creator Owners. At small scale, expect two or
+  three named admin accounts, each **separate from the person's daily account** (no email or browsing
+  as a domain admin), plus the built-in Administrator kept as a break-glass account with a long unique
+  password stored offline. Findings: daily-use accounts in Domain Admins, service accounts or an IT
+  provider's shared login in Domain Admins, members in operator groups (normally empty), Enterprise and
+  Schema Admins with permanent members, `AdminCount = 1` accounts that are disabled or stale, and accounts
+  nobody can name. Ask whether domain admins sign in to ordinary PCs: each such sign-in leaves
+  credentials an attacker on that PC can reuse.
+- **Protected Users**: whether admin accounts are members (no NTLM, no RC4/DES, no delegation, no cached
+  logons, four-hour tickets). Microsoft warns not to add every privileged account at once, and never
+  service or computer accounts; keep the break-glass account out until it has been tested.
+- **Windows LAPS**: every member PC and server has a unique, rotating local admin password (domain L),
+  passwords are **encrypted** in AD (requires Windows Server 2016 domain functional level), and only
+  Domain Admins or a named admin group can read or decrypt them (`Find-LapsADExtendedRights`). On DCs,
+  whether Windows LAPS backs up the **DSRM** password (AD only, and only with encryption enabled). If not,
+  ask whether anyone knows each DC's DSRM password and where it is stored; nobody knowing it is a
+  recovery finding.
+- **krbtgt**: `PasswordLastSet`. Never reset since the domain was built (often years) is a finding
+  (P3), and it must be reset in any incident where a domain admin or DC may have been compromised. Note
+  any read-only DC `krbtgt_<number>` accounts; they are separate.
+- **Service accounts**: user accounts with SPNs are open to Kerberoasting (any domain user can request a
+  ticket and crack it offline), so a weak or old password on one is P2, and P1 if it is also a Domain
+  Admin. Prefer group managed service accounts (gMSA; Windows Server 2025 adds delegated MSAs, which
+  need a Windows Server 2025 DC and current updates, since an early privilege-escalation issue with them
+  was fixed in 2025). Also flag accounts that don't require Kerberos pre-authentication, passwords that
+  never expire on privileged accounts, and computers or users trusted for unconstrained delegation
+  (other than DCs).
+- **Kerberos encryption (RC4)**: Microsoft's phased change for CVE-2026-20833 (KB5073381) moved DCs to
+  AES-only by default for accounts without explicit settings during 2026, with enforcement in the July
+  2026 updates. Check that the DCs have those updates, review KDCSVC events 201–209 for anything still
+  asking for RC4 (old NAS units, appliances, Linux or Java clients), and flag accounts explicitly set to
+  allow RC4. Verify the current phase on the live KB.
+- **LDAP signing and channel binding**: on each DC, whether unsigned SASL binds and clear-text simple
+  binds are rejected (Windows Server 2025 new deployments require signing by default; 2022 and earlier,
+  and upgraded DCs that kept old policy, don't) and whether channel binding is "When supported" or
+  "Always" rather than "Never". Directory Service events 2886/2887 (unsigned binds allowed) and 3040/3041
+  (unprotected LDAPS binds) mean the DC is still permissive. Scanners, printers, firewalls, VPNs, and
+  NAS units using LDAP for user lookups are the usual reasons; they should use LDAPS or signed binds.
+- **SMB signing**: required for inbound connections on DCs (the Default Domain Controllers Policy has long
+  required it) and required on members where supported. Windows 11 24H2 Pro, Enterprise, and Education
+  require inbound and outbound signing by default; Windows Server 2025 requires outbound signing by
+  default; Windows 11 Home requires neither. A GPO that turns signing off domain-wide is P2.
+- **NTLM**: NTLMv1 and LM refused (`LmCompatibilityLevel` 5 on DCs by policy), NTLM auditing enabled on
+  DCs (enhanced NTLM auditing is available on Windows Server 2025 and Windows 11 24H2), and a list of what
+  still uses NTLM. Microsoft has announced that network NTLM will be disabled by default in a future
+  major Windows Server release, so the inventory is worth starting now. Restricting NTLM domain-wide is
+  a project, not a toggle; record the current state.
+- **Group Policy hygiene**: who can edit or link GPOs (Group Policy Creator Owners, delegated edit
+  rights on individual GPOs, and write access to SYSVOL); the Default Domain Policy holding only password
+  and account policies; **Group Policy Preferences passwords** (`cpassword` in SYSVOL XML; P1, since any
+  domain user can read and decrypt them) and credentials in logon scripts under NETLOGON; disabled,
+  unlinked, or empty GPOs that nobody can explain; and whether a Microsoft security baseline (Security
+  Compliance Toolkit) or an equivalent is applied. A recently modified GPO that nobody remembers changing
+  is an indicator (see Respond).
+- **Password and lockout policy**: domain password policy (length at least 14 for people, or a
+  passphrase policy; fine-grained policies for admins), account lockout threshold set, and no accounts
+  with "password not required".
+- **DNS on the DC**: AD-integrated zones accept **secure dynamic updates only**; recursion and
+  forwarders configured on purpose; the DC's DNS is not reachable from the internet (open resolver).
+  Members of DnsAdmins can run code on DCs; keep it empty.
+- **Auditing on DCs**: advanced audit policy for account management, security group management,
+  directory service changes, Kerberos authentication and service tickets, and logon events; Security log
+  large enough to keep weeks, not hours; logs forwarded off the DC where possible.
+- **AD backup and recovery**: a **system state** (or full-server) backup of at least one DC, taken more
+  often than the forest's tombstone lifetime (`repadmin /showbackup` shows the last one), with one copy
+  offline or immutable and not deletable with domain admin credentials; the AD Recycle Bin enabled; a
+  restore tested (to an isolated network); and the DSRM password retrievable. VM-level backups of a DC
+  count only if the backup product is AD-aware.
+- **Adjacent tier-0 systems**: an Entra Connect (Microsoft Entra Connect Sync or Cloud Sync agent) server,
+  AD Certificate Services, backup servers that hold DC backups, and the hypervisor. Record that they
+  exist and who administers them; AD Certificate Services misconfiguration is a specialist review.
+
 ---
 
 ## Recommend
@@ -532,6 +721,12 @@ Before recommending a change, find out what relies on the current state:
   local changes.
 - **For servers**: every user, share, mapped drive, printer, and application that depends on it, and
   whether it's the only domain controller or DNS server.
+- **For domain controllers**: every device and app that authenticates against AD or queries it over
+  LDAP (printers and scanners with address books, firewalls and VPNs, NAS units, Wi-Fi RADIUS, line-of-
+  business apps, Linux hosts joined with SSSD or Samba), every service that runs under a domain account,
+  and every GPO the change touches. A domain-wide policy change reaches every PC at its next Group Policy
+  refresh (about every 90 minutes), and a DC change that breaks authentication can lock out the admin
+  who made it. Confirm a working break-glass account and a current system-state backup first.
 
 ### Recommendation guidance
 
@@ -569,6 +764,20 @@ Before recommending a change, find out what relies on the current state:
 | LSA protection off | Enable LSA protection (or rely on Credential Guard where enabled). | Some third-party drivers or plugins that load into LSA may fail; check audit events first. |
 | Memory integrity off | Turn it on in Core isolation. | Incompatible drivers (some games, old hardware) block it or fail; check the incompatible-driver list first. |
 | Server near end of support | Plan the migration to a supported Windows Server version or a cloud service. | Project, licensing cost, downtime window. |
+| Single domain controller | Add a second DC (it can be a small VM on different hardware), or for very small offices consider whether Entra ID join without on-premises AD fits. | Licensing and one more server to patch; replication must be monitored. |
+| Daily accounts in Domain Admins, or an IT provider's shared admin login | Create separate named admin accounts used only for administration; remove daily accounts from Domain Admins; give the provider named accounts with MFA on their remote path. | Admins sign in twice; scripts or scheduled tasks running as the old account break and must move to a gMSA. |
+| Members in Account/Server/Backup/Print Operators or DnsAdmins | Remove them; delegate the specific task on an OU instead. | Whoever relied on the membership loses that right; check scheduled backups first. |
+| Admin accounts not in Protected Users | Add named admin accounts one at a time after confirming they use Kerberos with AES; keep the break-glass account out until tested. | No NTLM, no cached sign-in (admins can't sign in offline), four-hour tickets; apps that need NTLM or delegation fail for those accounts. |
+| No Windows LAPS on members, or passwords unencrypted in AD | Deploy Windows LAPS by GPO with AD password encryption and a named reader group; enable DSRM password backup on DCs. | Helpers who used the shared password need the new retrieval method; requires Windows Server 2016 domain functional level for encryption. |
+| krbtgt password never reset | Reset it twice, at least 10 hours (the maximum ticket lifetime) apart, after confirming replication is healthy, using Microsoft's documented procedure. | Kerberos tickets issued before the reset stop working after the second reset; some non-Windows clients may need to re-authenticate. |
+| Service account with SPN and old or weak password | Move the service to a gMSA (or dMSA on Windows Server 2025), or set a long random password (25+ characters) and remove it from privileged groups. | The service must be reconfigured and restarted; test in a maintenance window. |
+| RC4 still requested or allowed | Find the client or account behind each KDCSVC event and update it to AES; allow RC4 only per account, as a documented exception. | Old NAS units, appliances, or keytabs may fail until regenerated with AES keys. |
+| LDAP signing or channel binding not enforced | Enable diagnostic logging (event 2889 and 3039/3074/3075), fix the clients it names (use LDAPS or signed binds), then require signing and set channel binding to "Always". | Devices still using simple binds over port 389 or unsigned binds stop authenticating. |
+| NTLMv1 or LM accepted; no NTLM auditing | Set LAN Manager authentication level to refuse LM and NTLMv1 on DCs; enable NTLM auditing and start an inventory. | Very old devices that only speak NTLMv1 fail; they are the finding. |
+| Group Policy Preferences passwords in SYSVOL | Treat the password as exposed: change it on every system that uses it, then delete the preference item. | Whatever used that account must be updated; any domain user may already have read it. |
+| Unexplained or overly delegated GPOs | Review each with its owner; remove edit rights from non-admins; disable (don't delete) unexplained GPOs after backing them up. | Settings the GPO applied disappear at the next refresh. |
+| DNS zones allow nonsecure dynamic updates | Set AD-integrated zones to secure updates only. | Non-domain devices that registered themselves stop updating their records; give them static records. |
+| No AD backup, or backups older than the tombstone lifetime | Schedule a daily system-state backup of at least one DC to a target domain admins can't delete, enable the AD Recycle Bin, and test a restore in isolation. | Disk space; the Recycle Bin can't be turned off once enabled. |
 
 Changing the RDP port, renaming the Administrator account, and hiding the computer from the network are
 supplementary only. Never recommend them as the main fix.
@@ -610,6 +819,23 @@ Apply only approved changes, one at a time, following the core rules. Windows sp
   revoke the device from the vendor's web console and change that account's password. If the tool may
   have been installed by an attacker, go to Respond first and preserve evidence.
 - **Firewall rules:** disable before deleting, and test the affected app between steps.
+- **Domain controllers and domain-wide policy:** every change is **C2** at least. Before starting: a
+  system-state backup newer than the change window, replication healthy, a tested break-glass account,
+  and console (not only RDP) access to at least one DC. Make GPO changes in a new, narrowly linked GPO
+  (one test OU first), back up existing GPOs (`Backup-GPO`) before editing them, and wait for refresh or
+  run `gpupdate` on a test machine before widening the link.
+- **Privileged group cleanup:** remove one membership at a time and confirm the person or service still
+  works. Never remove the last working Domain Admins member, and never remove the account you are
+  signed in with.
+- **LDAP signing, channel binding, NTLM restrictions:** audit first, fix the clients the events name,
+  then enforce on one DC before the others. Keep the previous setting recorded so it can be restored
+  quickly if a critical device stops authenticating.
+- **Routine krbtgt reset:** use Microsoft's procedure (or its `New-KrbtgtKeys` script, simulation mode
+  first). Reset once, confirm replication of the change to every writable DC, wait at least the maximum
+  ticket lifetime (10 hours by default), then reset the second time. Never do both resets in quick
+  succession outside an incident.
+- **Windows LAPS rollout:** link the policy to a test OU first; confirm a password appears (expiry
+  visible) and an authorized admin can retrieve it before linking it more widely.
 - **If something breaks:** roll back the single change (restore the recorded value, the restore point,
   or the VM snapshot), and report. Use Windows Recovery Environment only with the user present.
 
@@ -628,8 +854,13 @@ work, and record before and after.
 - Disabling Defender, tamper protection, or the firewall as a troubleshooting step.
 - Running debloat, "privacy", or hardening scripts downloaded from the internet that change many settings
   at once.
-- Changes to a domain controller (AD, Group Policy at domain level, DNS on the DC, FSMO roles, demotion)
-  or to Exchange or other server roles beyond simple settings: refer to someone experienced with that role.
+- On domain controllers: restoring AD (authoritative or non-authoritative restore, DSRM boots), forest
+  recovery, seizing or transferring FSMO roles, metadata cleanup, demotion, raising functional levels,
+  schema changes, rapid back-to-back krbtgt resets, AD Certificate Services changes, and anything that
+  modifies `NTDS.dit` or SYSVOL directly: refer to someone experienced with AD, using Microsoft's forest
+  recovery guide. The same applies to Exchange or other server roles beyond simple settings.
+- Reading, decrypting, or recording any account's password or hash from AD, including LAPS and DSRM
+  passwords and Group Policy Preferences `cpassword` values.
 - Paying for, downloading, or running ransomware decryptors (see core Respond guidance).
 
 ---
@@ -643,7 +874,11 @@ Windows P0 indicators include: a remote-access tool the user didn't knowingly in
 installed during a phone call; ransom notes or mass-renamed files; Defender turned off, tamper protection
 off, or broad exclusions nobody added; new admin accounts; Security log cleared (event 1102); shadow
 copies deleted; BitLocker enabled unexpectedly with an unknown key; or sign-in alerts on the Microsoft
-account from unknown locations.
+account from unknown locations. On domain controllers, also: an unexpected member of Domain Admins,
+Enterprise Admins, or another privileged group (events 4728, 4732, 4756); a new or modified GPO nobody
+made, especially one that runs scripts or scheduled tasks; replication requests from a computer that
+isn't a DC (DCSync); a new DC, trust, or `AdminSDHolder` change; or a krbtgt or DSRM password change
+nobody made.
 
 ---
 
@@ -683,3 +918,10 @@ fails).
 ## Version history
 
 - **1.0** (2026-10-30): Initial version.
+- **1.1** (2026-10-31): Added small-office and homelab Active Directory domain controller coverage:
+  deployment variants for DCs and virtualized DCs, DC detection ports and announcements, read-only DC
+  baseline commands, assessment domain P (tier-0 accounts and Domain Admins, Protected Users, Windows LAPS
+  with DSRM backup, krbtgt, service accounts and gMSA/dMSA, Kerberos RC4 phase-out, LDAP signing and
+  channel binding, SMB signing, NTLM auditing and deprecation, Group Policy hygiene, DNS, auditing, AD
+  system-state backup), DC recommendations, remediation rules and hard stops, DC incident indicators and
+  Respond steps, and Microsoft references.

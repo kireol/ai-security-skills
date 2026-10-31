@@ -1,0 +1,72 @@
+# UPS: Respond (Incident Response)
+
+Use with the core playbook, [incident-response.md](../../../core/incident-response.md), which always
+applies. This file adds only UPS-specific steps.
+
+## Triage and containment
+
+- **Keep the load powered.** Don't switch the UPS off, pull its input, or factory-reset the card as a
+  first step. Containment means cutting the attacker's path to the card or NUT server, not cutting power.
+- **Isolate the management path from a clean device:** disable the card's switch port or move it to an
+  isolated VLAN, remove port forwards and UPnP mappings, and disable vendor cloud access from the cloud
+  account. For a NUT server, firewall TCP 3493 to known clients or stop remote listening.
+- **Protect shutdown clients from forged signals.** If someone may control the card or NUT server, they can
+  shut down every client. Consider, with the user, temporarily pausing network shutdown on critical
+  clients, accepting that they will then not shut down cleanly in a real outage. Tell the user about that
+  trade-off plainly.
+- **If outlets were switched off or a shutdown was triggered,** record what went down and when before
+  restoring anything; then bring systems up in dependency order (network, storage, hypervisor, services).
+- **Don't change thresholds, schedules, or outlet settings back yet.** Record them first; they are
+  evidence of what the attacker intended.
+
+## Evidence to preserve (UPS-specific)
+
+- Card event log and data log (export through the web UI or file transfer before any reset; card logs
+  are small and roll over).
+- Card user list, active sessions, network and service settings, SNMP communities and v3 users (names
+  only), trap and email destinations, syslog settings, and the list of registered PowerChute or
+  PowerPanel clients.
+- Outlet-group settings, scheduled shutdowns, and shutdown thresholds.
+- Card and UPS firmware versions; compare with what the user installed.
+- A configuration export (`config.ini` on APC cards), stored securely: it contains secrets.
+- NUT: `upsd`, `upsmon`, and driver logs (syslog or journal), `upsd.users` account names and rights,
+  `upsd.conf`, and client `upsmon.conf` files (redact passwords).
+- Host logs on every client showing shutdown events and their trigger (FSD, low battery, communication
+  lost).
+- Remote syslog copies from the card, if forwarded.
+
+## Scope checks specific to a UPS
+
+- Every system the UPS powers, and every shutdown client: were they shut down, and did they come back
+  cleanly? Unclean shutdowns can corrupt storage and databases; check those systems with their own skills.
+- Every device that shared the card's password, SNMP community, or PowerChute authentication phrase.
+- NUT clients: their stored monitor password is now suspect everywhere it is reused.
+- The vendor cloud account and anyone else with access to it.
+- The NUT or shutdown host itself: if it was compromised, assess it with its own skill
+  ([Linux](../../operating-systems/linux/SKILL.md), [Windows](../../operating-systems/windows/SKILL.md),
+  or the NAS or firewall skill).
+
+## Eradication and recovery
+
+- Update the card to the vendor's current firmware using the vendor procedure (C2); if the card is past
+  support, replace it. Never improvise firmware recovery.
+- If the card's integrity is in doubt, reset it to factory defaults only after evidence export and with
+  the user's approval, then reconfigure on an isolated network from scratch, not from a configuration
+  backup taken during the incident window.
+- Rotate card credentials, SNMP secrets, PowerChute authentication phrases, NUT passwords, and cloud
+  account credentials, on the server and all clients together.
+- Restore shutdown thresholds, schedules, and outlet settings from the user's known-good values.
+- Before reconnecting: card on a management network, defaults changed, legacy services off, SNMP v3 or
+  restricted, NUT accounts least-privilege, and the initial access path closed. Confirm every client
+  reconnects (without triggering a shutdown).
+
+## Quick checklist tailored for a UPS
+
+When the user says "my UPS shut everything down and I don't know why," start with the core quick
+checklist, plus:
+
+- [ ] Keep the UPS powered; from a clean device, isolate its card or NUT server from the LAN and the
+      internet.
+- [ ] Export the card event log, user list, client list, and settings before changing anything.
+- [ ] List every system that shut down or lost power; check storage and databases on each.
+- [ ] Find every place the card's or NUT server's credentials are stored or reused, and plan rotation.

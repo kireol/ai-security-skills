@@ -1,0 +1,46 @@
+# MikroTik RouterOS: References
+
+Always prefer current MikroTik documentation. The manual moved from help.mikrotik.com (now frozen) to
+manual.mikrotik.com; menus, defaults, and syntax change between RouterOS versions.
+
+Last verified: 2026-10-31
+
+## Vendor (authoritative)
+
+- Security announcements and vulnerability reporting: https://mikrotik.com/supportsec
+- Meris botnet advisory (indicators and recommended steps): https://mikrotik.com/supportsec/meris-botnet/
+- CVE-2018-14847 Winbox vulnerability advisory: https://mikrotik.com/supportsec/cve-2018-14847-winbox-vulnerability
+- RouterOS manual (current): https://manual.mikrotik.com/
+- Securing your router (users, services, MAC server, neighbor discovery, DNS, proxy, SOCKS, UPnP):
+  https://help.mikrotik.com/docs/display/ROS/Securing+your+router
+- Services (default service ports and other ports used by RouterOS):
+  https://help.mikrotik.com/docs/spaces/ROS/pages/103841820/Services
+- Device-mode (modes, restricted features, flagged state, physical confirmation):
+  https://manual.mikrotik.com/docs/system-information-and-utilities/device-mode/
+- RoMON (EtherType, secrets, no encryption): https://manual.mikrotik.com/docs/management-tools/romon
+- Default password (factory-set password on newer devices):
+  https://help.mikrotik.com/docs/spaces/RKB/pages/285147143/Default+password
+- CHR licensing: https://manual.mikrotik.com/docs/getting-started/routeros-licensing/chr/chr-licensing/
+- Downloads and changelogs (channels: long-term, stable, testing, development):
+  https://mikrotik.com/download and https://mikrotik.com/download/changelogs
+- Release announcements (forum): https://forum.mikrotik.com/
+
+## Upstream and government
+
+- CISA Known Exploited Vulnerabilities catalog (search for MikroTik RouterOS):
+  https://www.cisa.gov/known-exploited-vulnerabilities-catalog
+- IEEE OUI registry (to confirm MAC prefix owners): https://regauth.standards.ieee.org/standards-ra-web/pub/view.html#registries
+
+Generic vulnerability and incident sources (CISA KEV, NVD, CVE, CISA ransomware guidance, IC3) are listed in
+the core documents.
+
+## Third-party (not authoritative)
+
+- endoflife.date, RouterOS: https://endoflife.date/routeros Convenient summary of long-term and stable
+  lines; confirm on MikroTik's download page.
+- The Hacker News, 2022 report on MikroTik routers used by botnets:
+  https://thehackernews.com/2022/03/over-200000-microtik-routers-worldwide.html Background on the scale
+  of abuse; MikroTik disputed some figures.
+- Nozomi Networks, analysis of Winbox payloads used in the wild:
+  https://www.nozominetworks.com/blog/technical-analysis-of-the-winbox-payload-in-windigo Context on how
+  old Winbox flaws remain in use.

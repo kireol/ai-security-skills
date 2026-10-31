@@ -1,0 +1,485 @@
+---
+name: cloud-providers
+description: >-
+  Security assessment, hardening, remediation, and incident response for small personal, homelab, and
+  small-office accounts on public cloud providers: Amazon Web Services, Microsoft Azure, Google Cloud,
+  DigitalOcean, and Linode/Akamai Cloud. Covers root or owner account MFA and root access keys, IAM users
+  and long-lived access keys, budget and billing alerts (crypto-mining abuse), public storage buckets,
+  security groups and firewalls open to the internet, publicly shared snapshots and images, API tokens,
+  and keys leaked in code repositories. Discovery is read-only, through the providers' consoles and CLIs.
+  Use when auditing a personal or homelab cloud account, after a surprise bill, or when a cloud key may
+  have leaked or an account may have been compromised.
+license: CC-BY-4.0
+metadata:
+  version: "1.0"
+  last_reviewed: "2026-10-31"
+  applies_to: "AWS (standalone accounts and small AWS Organizations), Microsoft Azure subscriptions with Microsoft Entra ID, Google Cloud projects with or without an organization, DigitalOcean teams, Linode/Akamai Cloud accounts (verify the live consoles and CLI versions; features and defaults change often)"
+  audience: "home, work, homelab, web"
+  finding_prefix: "CLD"
+  modes: "discover, recommend, remediate, respond"
+---
+
+# Cloud Provider Account Security
+
+Act as a careful, evidence-driven cloud security engineer. A small cloud account is a credit card
+attached to an API: anyone with a leaked access key can start hundreds of GPU instances for
+cryptocurrency mining in regions the owner never uses, copy data out of storage buckets, or use the
+account to attack others, and the bill arrives weeks later. Small accounts are also where defaults hurt
+most: a single root login without MFA, a long-lived key in a laptop's dotfiles, a test bucket made
+public, an SSH port open to the world. Identify, explain, prioritize, remediate (only when authorized),
+and verify weaknesses in the account's identities, keys, network exposure, storage, and cost controls.
+
+## How to use this skill
+
+This skill holds only cloud-provider guidance. It builds on the shared core, which always applies:
+
+| Core document | Covers |
+|---|---|
+| [modes-and-authorization.md](../../../core/modes-and-authorization.md) | The four modes, transitions, operation classes (R/C1/C2/C3), standing authorization |
+| [operating-principles.md](../../../core/operating-principles.md) | Principles, capability discovery, scope, communication, untrusted data |
+| [vulnerability-triage.md](../../../core/vulnerability-triage.md) | Lifecycle, CVE/KEV validation, P0–P4 priority scale |
+| [evidence-and-reporting.md](../../../core/evidence-and-reporting.md) | Evidence labels, statuses, finding template, report format, cadence |
+| [tool-use-contract.md](../../../core/tool-use-contract.md) | Rules for commands, APIs, MCP tools, and third-party integrations |
+| [reporting-protocol.md](../../../core/reporting-protocol.md) | Optional live progress reporting to a dashboard |
+| [incident-response.md](../../../core/incident-response.md) | The generic Respond playbook |
+
+Cloud-provider-specific Respond steps are in [incident-response.md](incident-response.md). Vendor
+documentation is in [references.md](references.md). Related skills: [Linux](../../operating-systems/linux/SKILL.md)
+for the virtual machines themselves, [web servers](../../web/web-servers/SKILL.md) for what they publish,
+[Cloudflare](../../edge/cloudflare/SKILL.md) for DNS and proxying in front of cloud hosts,
+[domain registrars](../domain-registrars/SKILL.md) for DNS records pointing at cloud resources,
+[Docker](../../containers/docker/SKILL.md), [self-hosted object storage](../../storage/object-storage/SKILL.md)
+for S3-compatible buckets outside the big providers, and [MFA](../../identity/mfa/SKILL.md).
+
+## Cloud-provider-specific principles
+
+- **Credentials never enter the conversation.** Don't ask for, print, or paste access keys, secret keys,
+  API tokens, service account key files, client secrets, or passwords. The user configures credentials
+  with the provider's own CLI login (`aws sso login` or `aws configure`, `az login`, `gcloud auth login`,
+  `doctl auth init`, `linode-cli configure`), which stores them in the CLI's credential store or config
+  file, or through environment variables in their own shell. The agent runs commands that use those
+  credentials; it never reads the credential files. When showing a config file, list only profile names
+  and regions.
+- **Use a read-only identity for discovery.** Ask the user to create, or sign in with, a dedicated
+  read-only principal for the assessment, with short-lived credentials where the provider supports them:
+  AWS `SecurityAudit` (metadata-only; add `ViewOnlyAccess` if needed), Azure **Reader** plus **Security
+  Reader**, Google Cloud **Viewer** plus **Security Reviewer**, a DigitalOcean token with **read-only**
+  or custom read scopes, and a Linode personal access token with read-only scopes and an expiry. Avoid
+  broad read roles that also read data (AWS `ReadOnlyAccess` can read S3 objects and secrets). Ask the
+  user to delete the assessment credential afterwards.
+- **Check every region.** Attackers start resources in regions the owner never opens. Inventory compute,
+  storage, and keys in all enabled regions, not just the default one.
+- **Cost is a security signal.** An unexplained bill increase is often the first and only sign of a
+  compromised account. Budget alerts are detection controls; most providers' budgets alert but don't stop
+  spending.
+- **Control plane versus data plane.** Discovery reads configuration (who can do what, what is exposed).
+  It doesn't read objects in buckets, database contents, or instance disks.
+- **Probing is not reading.** Listing a security group is reading. Port-scanning the instance from the
+  internet is active probing and needs explicit approval (core: modes and authorization), and only for
+  addresses the user owns.
+- **Defaults have changed over time.** Several providers now ship safer defaults for new accounts (for
+  example S3 Block Public Access on new buckets, Google Cloud's secure-by-default organization policies,
+  disabled anonymous blob access on new Azure storage accounts). Older accounts and resources keep their
+  old settings. Verify each resource; don't assume the current default applies.
+
+## Deployment variants
+
+| Variant | How to recognize it | What changes |
+|---|---|---|
+| **AWS standalone account** | One account; the root user signs in with an email address; maybe a few IAM users. | Root MFA is mandatory for console sign-in; root access keys must not exist. IAM users with long-lived keys are the common risk; IAM Identity Center gives short-lived credentials instead. |
+| **AWS Organizations (small)** | Management account plus member accounts. | Centralized root access management can remove member root credentials; service control policies and organization-wide CloudTrail apply. The management account is the crown jewel. |
+| **Azure subscription** | Azure portal; a Microsoft Entra tenant (possibly created automatically with a personal Microsoft account). | Identity lives in Entra ID; Azure enforces MFA for portal and, in phases, CLI and API sign-ins. Subscription Owner role and Global Administrator are the high-value targets. Storage account anonymous access, NSGs, and public IPs are the exposure. |
+| **Google Cloud without an organization** | Projects under a personal Google account; no Organization node. | No organization policies; the Google account's own security is everything. Projects may have the default VPC with permissive firewall rules. |
+| **Google Cloud with an organization** | Organization node tied to a Workspace or Cloud Identity domain. | Super Admin of the domain controls the organization. Organizations created since May 2024 get secure-by-default policies (for example, no service account key creation). |
+| **DigitalOcean team** | Team with an owner and members; Droplets, Spaces, App Platform. | Team 2FA and member roles; personal access tokens with full or custom scopes; Spaces access keys; Cloud Firewalls attach to Droplets by tag. |
+| **Linode/Akamai Cloud account** | Cloud Manager; users with restricted or unrestricted access. | Two-factor authentication per user; personal access tokens with per-service scopes; Cloud Firewalls; Lish console access; StackScripts that may be public. |
+| **Infrastructure as code** | Terraform, Pulumi, or CloudFormation files and state. | State files and variables often contain secrets; changes made by hand get reverted by the next apply. Make fixes in code. |
+| **CI/CD with cloud credentials** | GitHub Actions, GitLab CI, or similar deploying to the account. | Prefer OIDC federation (short-lived) over stored long-lived keys; repository secrets and fork-pull-request settings matter. |
+
+## Detection
+
+Hints for recognizing use of these providers from a device or network (used by the `full-assessment`
+skill). Confirm with the user before relying on a match. Note only that a file exists and its
+permissions; never read credential files.
+
+- **CLI configuration on a computer:** `~/.aws/config` and `~/.aws/credentials` (AWS CLI); `~/.azure/`
+  (Azure CLI); `~/.config/gcloud/` (gcloud; `%APPDATA%\gcloud` on Windows); `doctl`'s `config.yaml`
+  under the user's config directory (on macOS, `~/Library/Application Support/doctl/`);
+  `~/.config/linode-cli` (Linode CLI).
+- **Installed tools:** `aws`, `az`, `gcloud`, `doctl`, `linode-cli`, `terraform`, `pulumi`; provider
+  SDKs in project folders; Terraform state (`terraform.tfstate`) and `.env` files that may hold keys.
+- **DNS names in resolver logs:** `amazonaws.com` and `signin.aws.amazon.com`; `management.azure.com`
+  and `portal.azure.com`; `googleapis.com` and `console.cloud.google.com`; `api.digitalocean.com` and
+  `digitaloceanspaces.com`; `api.linode.com` and `linodeobjects.com`.
+- **DNS records the user owns** pointing at cloud resources: CNAMEs to `s3.amazonaws.com`,
+  `cloudfront.net`, `azurewebsites.net`, `blob.core.windows.net`, `storage.googleapis.com`,
+  `ondigitalocean.app`, or `linodeobjects.com` (also a subdomain-takeover check; see
+  [domain registrars](../domain-registrars/SKILL.md)).
+- **On cloud VMs:** provider guest agents (for example the SSM agent, Azure VM agent, Google guest
+  agent, DigitalOcean droplet agent, or Linode's Lish and metadata services).
+
+---
+
+## Discover
+
+All operations in this mode are class **R** (read-only). Confirm scope and access first (core: operating
+principles). Mark anything you can't inspect **Not assessed**.
+
+### Access and baseline
+
+Start with the console's own security summaries where they exist (AWS Security Hub or Trusted Advisor
+free checks, IAM dashboard and credential report; Microsoft Defender for Cloud free recommendations;
+Google Cloud Security Command Center Standard where enabled, and Recommender; DigitalOcean and Linode
+account security pages). Validate their high-risk items; they don't see everything.
+
+Confirm the identity first, so commands run against the intended account:
+
+```sh
+aws sts get-caller-identity                     # account and principal (vendor-documented)
+az account show                                 # subscription and tenant (vendor-documented)
+gcloud config list                              # active account and project (vendor-documented)
+doctl account get                               # team account (vendor-documented)
+linode-cli profile view                         # user (vendor-documented)
+```
+
+Candidate read-only commands. The commands are **vendor-documented**; filters, flags, and output fields
+change between CLI versions, so treat the exact arguments as **not yet verified** and check `--help`
+first. Loop over every enabled region where noted.
+
+```sh
+# AWS (IAM is global; EC2 and S3 settings are per region)
+aws iam get-account-summary                     # AccountMFAEnabled, AccountAccessKeysPresent (root keys)
+aws iam generate-credential-report              # creates a report; changes no configuration
+aws iam get-credential-report --query Content --output text | base64 --decode   # keys, MFA, last used
+aws iam list-users
+aws iam list-access-keys --user-name <user>
+aws iam get-access-key-last-used --access-key-id <key-id>
+aws s3control get-public-access-block --account-id <account-id>
+aws s3api list-buckets
+aws s3api get-bucket-policy-status --bucket <bucket>
+aws ec2 describe-regions --query 'Regions[].RegionName' --output text
+aws ec2 describe-instances --region <region>
+aws ec2 describe-security-groups --region <region> --filters Name=ip-permission.cidr,Values=0.0.0.0/0
+aws ec2 describe-snapshots --region <region> --owner-ids self --restorable-by-user-ids all   # public snapshots
+aws ec2 describe-images --region <region> --owners self --filters Name=is-public,Values=true
+aws ec2 get-snapshot-block-public-access-state --region <region>
+aws ec2 get-image-block-public-access-state --region <region>
+aws budgets describe-budgets --account-id <account-id>
+aws cloudtrail describe-trails
+aws guardduty list-detectors --region <region>
+
+# Azure
+az role assignment list --all --output table
+az storage account list --query "[].{name:name,anonymousBlob:allowBlobPublicAccess,publicNetwork:publicNetworkAccess,minTls:minimumTlsVersion}"
+az network nsg list --output table
+az network nsg rule list --resource-group <rg> --nsg-name <nsg> --output table
+az network public-ip list --output table
+az vm list --show-details --output table
+az snapshot list --query "[].{name:name,networkAccess:networkAccessPolicy,publicNetwork:publicNetworkAccess}"
+az consumption budget list
+az ad app list --show-mine                      # app registrations (check credential expiry)
+
+# Google Cloud (per project)
+gcloud projects list
+gcloud projects get-iam-policy <project>
+gcloud iam service-accounts list --project <project>
+gcloud iam service-accounts keys list --iam-account <service-account> --managed-by=user
+gcloud compute firewall-rules list --project <project>
+gcloud compute instances list --project <project>
+gcloud storage buckets list --project <project>
+gcloud storage buckets get-iam-policy gs://<bucket>    # look for allUsers / allAuthenticatedUsers
+gcloud compute images list --project <project> --no-standard-images
+gcloud services api-keys list --project <project>
+gcloud billing budgets list --billing-account <billing-account>
+
+# DigitalOcean
+doctl compute droplet list
+doctl compute firewall list
+doctl compute snapshot list
+doctl compute image list-user
+doctl kubernetes cluster list
+doctl databases list
+doctl balance get
+
+# Linode/Akamai Cloud (field names not yet verified)
+linode-cli linodes list
+linode-cli firewalls list
+linode-cli firewalls rules-list <firewall-id>
+linode-cli images list
+linode-cli profile tokens-list
+linode-cli account logins-list
+linode-cli events list
+```
+
+**Never do these during Discover:**
+
+- Read, print, or upload credential files, key files, Terraform state, `.env` files, instance user data,
+  or secrets manager values. Report that they exist, where, and their permissions.
+- Create access keys, tokens, or service account keys for the assessment (ask the user to create a
+  read-only principal instead), or rotate or deactivate keys "to test".
+- Read bucket objects, database contents, or snapshots' data, or make a bucket public to check access.
+- Port-scan or connect to instances without explicit approval of scope.
+- Run third-party scanners (Prowler, ScoutSuite, and similar) without the user approving the tool, its
+  version, and its permissions; they are useful but run with the credentials you give them.
+
+### Assessment domains
+
+Every domain must end with a status in the report (Pass / Finding / Not assessed / Not applicable /
+Accepted risk).
+
+#### A. Root, owner, and account-level identity
+
+- **AWS root user:** MFA registered (preferably a passkey or security key, and more than one), **no root
+  access keys** (`AccountAccessKeysPresent` = 0), root not used for daily work, root email address
+  secured with strong MFA and not a shared or forwarded mailbox, alternate contacts (security, billing,
+  operations) set so AWS can reach the owner. For Organizations, whether centralized root access
+  management is enabled.
+- **Azure:** who holds subscription Owner and Entra Global Administrator; MFA for each (Azure's mandatory
+  MFA covers the portal and, in later phases, CLI and API create/update/delete operations; check whether
+  enforcement was postponed for the tenant). A personal Microsoft account as the subscription's only owner
+  is fragile; note recovery options.
+- **Google Cloud:** the Google account or Workspace Super Admin that owns projects or the organization;
+  2-Step Verification (mandatory for Google Cloud sign-in), preferably security keys; who holds
+  `roles/owner` and organization admin roles.
+- **DigitalOcean:** team owner 2FA, the team's "require secure sign-in" setting (members must use 2FA or a
+  Google or GitHub sign-in, whose own MFA then matters), member roles, and pending invitations.
+- **Linode:** two-factor authentication for every user, security questions set, which users are
+  unrestricted (full account) versus restricted, and the account's login history.
+- The account email: whoever controls it can reset the console password. It needs strong MFA and should
+  not be on a domain that depends on this cloud account.
+
+#### B. IAM users, roles, and long-lived keys
+
+- Human access: short-lived (AWS IAM Identity Center, Azure Entra sign-in, gcloud user login) versus
+  IAM users with passwords and access keys. Each human IAM user should have MFA.
+- **Every long-lived key:** AWS access keys (age, last used, attached user's permissions), Google service
+  account user-managed keys, Azure app registration client secrets and certificates (expiry), DigitalOcean
+  personal access tokens and Spaces keys, Linode personal access tokens (scopes and expiry). Flag keys
+  older than a year, unused for 90 days, with admin-level permissions, or with no expiry.
+- Overly broad permissions: `AdministratorAccess` or `*:*` policies on users or keys used by scripts;
+  `Owner` or `Editor` on service accounts (the default Compute Engine service account historically got
+  Editor); full-access DigitalOcean tokens used by a single DDNS or backup script.
+- Cross-account trust: AWS roles trusting other accounts, Google service accounts usable by outside
+  principals, Azure guest users with roles. Each should be explained.
+- **Workload identity:** VMs and containers using instance roles, managed identities, or attached
+  service accounts (good) versus keys copied onto disk (risky). Instance metadata protection (AWS IMDSv2
+  required) where applicable.
+
+#### C. Leaked credentials and secrets in code
+
+- Where keys live on the user's devices: CLI config files, `.env` files, scripts, shell history, Terraform
+  state and variable files, CI/CD settings. Check presence and file permissions only.
+- Code repositories (public and private) the user controls: whether secret scanning and push protection
+  are enabled (for example on GitHub), and whether any alerts are open. With approval, a local secret
+  scanner (for example gitleaks or TruffleHog) can scan the user's own repositories and history; report
+  file and commit locations with values redacted.
+- Provider leak notices: AWS attaches a quarantine policy (`AWSCompromisedKeyQuarantine` versions) and
+  opens a support case when it finds a key in public code; Google, DigitalOcean, and others notify or
+  revoke exposed credentials through secret-scanning partnerships. Any such notice or attached policy is
+  a P0 indicator.
+- Public container images, StackScripts (Linode), App Platform or Droplet user data, and instance user
+  data that may embed secrets.
+
+#### D. Network exposure: security groups and firewalls
+
+- Inbound rules allowing `0.0.0.0/0` or `::/0`, especially to SSH (22), RDP (3389), databases (3306,
+  5432, 6379, 27017), Docker API (2375/2376), Kubernetes API, and admin panels. AWS security groups and
+  network ACLs; Azure NSGs and public IPs; Google Cloud VPC firewall rules (the default network created
+  `default-allow-ssh` and `default-allow-rdp` rules open to any source); DigitalOcean Cloud Firewalls
+  (and Droplets with no firewall attached); Linode Cloud Firewalls (and Linodes with none).
+- Managed services with public endpoints: databases, Kubernetes control planes, and caches reachable from
+  the internet without IP allowlists.
+- Better remote access paths in use or available: AWS Systems Manager Session Manager, Azure Bastion,
+  Google Cloud IAP TCP forwarding, a VPN, or a tunnel (see [Cloudflare](../../edge/cloudflare/SKILL.md))
+  instead of open SSH or RDP.
+- Host firewall and SSH configuration on the VMs (see [Linux](../../operating-systems/linux/SKILL.md)).
+
+#### E. Storage buckets and object access
+
+- **AWS S3:** account-level and bucket-level Block Public Access; bucket policies or ACLs granting
+  `Principal: "*"`; buckets intended to be public (static sites) separated from private data; default
+  encryption; versioning on important buckets.
+- **Azure Storage:** `allowBlobPublicAccess` at the account level, container access level, shared access
+  signature (SAS) tokens with long expiry, shared key access enabled, and public network access.
+- **Google Cloud Storage:** public access prevention, uniform bucket-level access, `allUsers` or
+  `allAuthenticatedUsers` bindings, and signed URLs with long lifetimes.
+- **DigitalOcean Spaces and Linode Object Storage:** bucket and object ACLs (public-read files), CDN
+  settings, access key scopes.
+- Static website buckets referenced by DNS records the user owns (deleted buckets with live DNS records
+  are subdomain-takeover risks).
+
+#### F. Snapshots, images, and backups
+
+- **Publicly shared snapshots and images:** AWS EBS snapshots and AMIs shared publicly (and the regional
+  block-public-access settings for each); Azure managed disk snapshots with public network access or
+  long-lived SAS export URLs; Google Cloud images or disks shared with `allAuthenticatedUsers`;
+  DigitalOcean and Linode images shared outside the account. A public snapshot of a server disk exposes
+  everything on it, including keys.
+- Snapshots or images shared with unknown accounts.
+- Backups: whether important data has a copy outside the account (an attacker with admin rights can
+  delete snapshots and backups), and whether backup deletion is protected (for example AWS Backup vault
+  lock, Azure soft delete, Google Cloud backup retention).
+
+#### G. Billing, budgets, and abuse detection
+
+- **Budgets and alerts:** AWS Budgets and Cost Anomaly Detection; Azure Cost Management budgets and
+  anomaly alerts; Google Cloud billing budgets (alerts only, they don't cap spending); DigitalOcean
+  billing alerts; for Linode, whatever spending alerts the account currently offers (verify), otherwise
+  invoice review. Recipients must be monitored.
+- Spending caps where they exist (Azure spending limits on credit-based subscriptions; free-tier or
+  free-plan limits, which change; check the provider's current terms).
+- Service quotas: high GPU or vCPU quotas in unused regions increase the possible damage. Note them;
+  requesting lower quotas is a remediation option.
+- Unused regions: whether they can be disabled or restricted (AWS opt-in regions, service control
+  policies, Azure Policy allowed locations, Google Cloud resource location organization policy).
+- Recent invoices and the current month's spend by service and region: anything unexplained is a P0
+  indicator until explained.
+
+#### H. Logging, threat detection, and notifications
+
+- **AWS:** CloudTrail event history (90 days by default) and whether a trail stores logs longer in a
+  bucket the attacker can't easily delete; GuardDuty enabled in used regions (it detects crypto-mining
+  and credential misuse); IAM Access Analyzer for external access.
+- **Azure:** Activity log retention or export; Microsoft Defender for Cloud free tier recommendations;
+  Entra sign-in logs.
+- **Google Cloud:** Admin Activity audit logs (always on), Data Access logs (off by default for most
+  services), log retention; Security Command Center tier.
+- **DigitalOcean:** team security history and activity; **Linode:** account events and login history.
+- Security contact information set with each provider, and the owner actually reads mail sent there.
+
+#### I. Workload and lifecycle hygiene
+
+- Forgotten resources: VMs, load balancers, managed databases, Kubernetes clusters, and IP addresses
+  nobody can explain; old test projects. Each is attack surface and cost.
+- VM operating system and application patching (see [Linux](../../operating-systems/linux/SKILL.md) and
+  [web servers](../../web/web-servers/SKILL.md)); marketplace or one-click images that ship with default
+  credentials or admin panels.
+- Public IP addresses released and DNS records still pointing at them (dangling records).
+- Tags or labels to show what each resource is for, so anomalies stand out.
+
+---
+
+## Recommend
+
+No changes are made in this mode. For each finding, produce a recommendation using the core finding
+template, including **Dependencies / blast radius** and the **operation class**.
+
+### Dependency and blast-radius check (required)
+
+- **Scripts and integrations using each key:** DDNS updaters, backup jobs, Terraform, CI/CD pipelines,
+  home automation, and monitoring. Deactivating or rotating a key breaks them; find them first (AWS
+  last-used data and CloudTrail help).
+- **Who reaches instances through an open rule:** the user's SSH from changing home IPs, monitoring
+  services, or a website's visitors. Narrowing a rule without a replacement access path locks people out.
+- **Public buckets that are meant to be public:** static websites and download links. Turning on Block
+  Public Access account-wide breaks them; separate them first.
+- **Infrastructure as code:** changes made in the console are reverted by the next apply; fix the code.
+- **Billing and account ownership:** changing the root or owner email, payment method, or MFA device can
+  lock the user out if the new factor isn't tested.
+
+### Recommendation guidance
+
+| Area | Typical recommendation | Consequences to explain |
+|---|---|---|
+| Root/owner without MFA | Register two phishing-resistant factors (passkeys or security keys) for the root or owner. | Keep a backup factor stored safely. |
+| Root access keys exist (AWS) | Delete them after confirming nothing uses them; use IAM Identity Center or roles. | Anything using them breaks. |
+| Long-lived admin keys for scripts | Replace with a least-privilege role or scoped token with expiry; prefer short-lived or OIDC credentials. | Each script must be updated. |
+| Old or unused keys | Deactivate, wait, then delete. | Forgotten integrations surface. |
+| Keys on disk in plain files | Move to the CLI's SSO login or an OS keychain-backed credential helper; restrict file permissions. | Workflow change. |
+| Keys in git history | Treat as leaked: rotate first, then clean history; enable secret scanning and push protection. | Rotation breaks users of the old key. |
+| SSH/RDP open to the internet | Remove the rule; use Session Manager, Bastion, IAP, VPN, or a tunnel; or restrict to a known address. | Users need the new access path first. |
+| Database or admin panel public | Restrict to private networks or allowlisted addresses. | Clients outside must use a VPN or tunnel. |
+| Public bucket with private data | Turn on Block Public Access or public access prevention; move intentionally public content to its own bucket. | Public links to that bucket stop working. |
+| Public snapshot or image | Make it private; turn on regional block public access for snapshots and images. | Anyone legitimately using the shared image loses it. |
+| No budget alert | Create a budget with alerts at low thresholds to a monitored address; enable anomaly detection. | Alert noise if thresholds are too tight. |
+| High quotas in unused regions | Restrict regions (SCP, Azure Policy, organization policy) or request lower quotas. | New regions need a policy change. |
+| No logging retention | Create an organization or account trail to a protected bucket; enable GuardDuty or equivalent. | Storage and service cost. |
+| Forgotten resources | Inventory, tag, and remove what nobody needs (after snapshot if data matters). | Removal is C3; confirm first. |
+
+Changing SSH ports, hiding buckets behind unguessable names, and geoblocking are supplementary only.
+Never recommend them as the main fix for open management ports or public data.
+
+Group the plan: immediate containment (if any) → urgent fixes (root MFA, root keys, leaked keys,
+public data, open management ports) → high-priority hardening (least-privilege keys, budgets and alerts,
+logging) → routine maintenance (unused keys and resources) → optional defense in depth. Then ask for
+approval (core: modes and authorization).
+
+---
+
+## Remediate
+
+Apply only approved changes, one at a time, following the core rules. Cloud-provider specifics:
+
+- **The user applies credential changes.** New keys or tokens are created by the user and written
+  straight into the consuming system's secret store or the CLI's credential store; the agent never sees
+  the value. Deactivate the old key (reversible) before deleting it (irreversible).
+- **Capture before change.** Save the current security group rules, bucket policy, IAM policy, or
+  firewall configuration (`describe`/`get` output) before editing.
+- **Keep a way back in.** Before removing an open SSH or RDP rule, confirm the replacement access path
+  works (Session Manager, Bastion, IAP, VPN, or a rule for the user's current address). For root or owner
+  MFA changes, register the new factor and test it before removing the old one.
+- **Network rule changes are C2.** Add the narrow rule first, test, then remove the broad one.
+- **Block Public Access** at the account level is C2 if any bucket is intentionally public; apply at the
+  bucket level first.
+- **Deleting resources, snapshots, images, keys, or buckets is C3.** Snapshot important data first and
+  get explicit approval for each deletion.
+- **Infrastructure as code:** make the change in code and apply it, or the next run reverts it.
+
+After each change, follow the core "after a change" steps, and re-run the affected Discover checks.
+
+### Hard stops (refer to a specialist; never automate)
+
+- Closing or deleting an account, project, subscription, or organization.
+- Deleting the only copy of data (buckets, volumes, databases, snapshots) or backup vaults.
+- Changing the root or owner email address, payment method, or support plan.
+- Removing the last owner, Global Administrator, or organization admin.
+- Bulk deletion of resources across regions without a per-resource inventory and approval.
+
+---
+
+## Respond
+
+On any P0 indicator (a provider leak notice or quarantine policy, resources in unused regions, unknown
+IAM users, keys, or roles, an unexplained bill spike, public snapshots the user didn't make), switch to
+Respond immediately. Follow the core playbook plus the cloud-provider-specific steps in
+[incident-response.md](incident-response.md).
+
+---
+
+## Worked example (invented)
+
+### CLD-001: Long-lived admin access key for a backup script, root account without MFA, and no budget alert
+
+**Confidence:** Confirmed
+**Priority:** P1. An IAM user with `AdministratorAccess` has an access key over two years old stored in
+a plain file on a home server; anyone who copies it controls the account and can run up large bills
+unnoticed, since no budget alert exists. Root MFA is not registered.
+**State:** Open
+**Component:** Personal AWS account (standalone), IAM and Billing
+**Evidence:** Observed 2026-10-25 using a read-only `SecurityAudit` role: `get-account-summary` shows
+`AccountMFAEnabled: 0` and `AccountAccessKeysPresent: 0`; the credential report shows one IAM user with
+an active key created over two years ago, last used yesterday from a single address in
+`198.51.100.0/24`, attached to `AdministratorAccess`. `describe-budgets` returns no budgets. The user
+confirms the key is used only by a nightly backup script that writes to one S3 bucket.
+**Expected secure state:** root MFA registered; scripts use least-privilege, regularly rotated or
+short-lived credentials; a budget alert exists (AWS IAM and Budgets documentation).
+**Exposure and prerequisites:** anyone who reads the key file on the home server, or any backup or
+repository containing it.
+**Dependencies / blast radius:** the nightly backup script; nothing else uses the key (CloudTrail shows
+only S3 calls from it).
+**Recommended remediation:** register two phishing-resistant MFA factors on root; create a new IAM
+policy allowing only the needed S3 actions on the one bucket; the user creates a new key for a new user
+with that policy and installs it in the script's credential store; confirm the next backup succeeds;
+deactivate, then later delete, the old key; create a monthly budget with alerts at low thresholds.
+**Operation class:** C2 (key rotation can break the backup if done out of order).
+**Approval required:** Yes.
+**Verification:** `get-account-summary` shows root MFA enabled; the old key is inactive and the backup
+succeeded with the new key; the new user's policy simulator check denies non-S3 actions; a budget
+exists with a confirmed alert recipient.
+**Rollback:** reactivate the old key (temporary only) if the backup fails.
+
+---
+
+## Version history
+
+- **1.0** (2026-10-31): Initial version.

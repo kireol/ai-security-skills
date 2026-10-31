@@ -1,0 +1,83 @@
+# MFA: Respond (Incident Response)
+
+Use with the core playbook, [incident-response.md](../../../core/incident-response.md), which always
+applies. This file adds only MFA-specific steps.
+
+Never ask for, accept, or record codes, recovery codes, bypass codes, seeds, or PINs during an incident.
+An attacker on a phone call pretending to help is a common part of these incidents; the agent should
+never be another voice asking for a code.
+
+## Triage and containment
+
+- **Unexpected prompts or codes:** the password for that account is probably known. Deny the prompt (and
+  report it as fraud where the app offers that), then, from a trusted device, change the account's
+  password and sign out other sessions. Don't wait for a second prompt.
+- **A prompt was approved or a code was shared by mistake:** treat the account as taken over. From a
+  trusted device: change the password, sign out all sessions, review and remove unknown factors,
+  devices, phone numbers, recovery emails, app passwords, and mail forwarding rules, and regenerate
+  recovery codes. Do the email account first if it's a different account.
+- **Lost or stolen security key:** sign in to each account with the backup key or another factor and
+  remove the lost key. Order: email, password manager, Apple/Google/Microsoft account, then the rest. A
+  key with a FIDO2 PIN gives the finder limited use, but remove it everywhere anyway.
+- **Lost or stolen phone with authenticators:** lock or erase it with the phone vendor's tools (see the
+  [phones](../../mobile/phones/SKILL.md) skill), restore authenticators on a new phone from the app's
+  backup or re-enroll using recovery codes, and remove the old phone from Duo and from each account's
+  device list.
+- **Phone suddenly shows "No service" or "SOS only" without reason:** possible SIM swap. Contact the
+  carrier from another phone immediately, then secure accounts that use SMS (phones skill).
+- **Duo:** if a user's device or account may be compromised, set the user's status to disabled or remove
+  the compromised device in the Admin Panel (**C2**); delete unexpected bypass codes and remove
+  unexpected bypass status; if an administrator account may be compromised, use another administrator to
+  review admin accounts and roles, and rotate API application secret keys. If an integration's secret key
+  may have leaked, rotate it in the Admin Panel and update the protected system in the same window.
+- **Push bombing at scale (Duo):** consider temporarily requiring a phishing-resistant method or Verified
+  Duo Push for the targeted users or application, and reset their passwords.
+
+## Evidence to preserve (MFA-specific)
+
+- Screenshots or exports of each affected account's security page: methods, devices, sessions, recovery
+  options, and recent security events, before removing anything.
+- Provider security alert emails and texts (sign-in attempts, new factor added, recovery started), with
+  timestamps and full headers.
+- Duo: the Authentication Log (including denied and fraud-reported pushes), Administrator Actions log,
+  the affected users' device lists, and bypass code lists, exported before changes. Telephony log for SMS
+  and phone-call activity.
+- Carrier records of SIM changes or port requests, requested by the user from the carrier.
+- For lost keys: which accounts the key was registered on and when it was removed from each.
+
+## Scope checks specific to MFA
+
+- Every account that uses the compromised factor, phone number, or authenticator app. A known password
+  plus a SIM swap exposes every SMS-protected account at once.
+- Accounts whose recovery goes to a compromised email or phone number.
+- If a TOTP seed store or password manager holding seeds was exposed, every account with a seed in it
+  (see the [password-managers](../password-managers/SKILL.md) skill).
+- If a synced passkey provider account was compromised (Apple, Google, Microsoft, or a vault), every
+  passkey synced through it.
+- Duo: every application the affected user can reach, and every system behind the Authentication Proxy if
+  its host or secret key is compromised.
+
+## Eradication and recovery
+
+- Re-enroll factors from scratch on trusted devices for every affected account; don't restore an
+  authenticator backup that may have been copied by the attacker without rotating the seeds (re-enroll
+  TOTP so new seeds are issued).
+- Regenerate recovery codes and store the new ones offline; destroy old copies.
+- Add phishing-resistant factors where the account supports them, and remove SMS where possible, now that
+  the user has seen the attack.
+- Duo: re-enable users only after their device is re-activated on a trusted phone; review policies for
+  the gap that was used (new-user policy, bypass, authorized networks, SMS).
+- Before declaring recovery: only known factors and devices on each account, recovery options correct,
+  new recovery codes stored, and the user can sign in with both their main and backup factor.
+
+## Quick checklist tailored for MFA
+
+When the user says "I'm getting codes or prompts I didn't ask for," start with the core quick checklist,
+plus:
+
+- [ ] Deny the prompt and never share a code, even with someone claiming to be support.
+- [ ] From a trusted device, change that account's password and sign out other sessions.
+- [ ] Check the account's factors, phone numbers, recovery email, and app passwords for additions.
+- [ ] If the phone lost service, call the carrier from another phone about a SIM swap.
+- [ ] Regenerate recovery codes and store them offline.
+- [ ] For Duo: export the Authentication Log, then disable the affected user's devices or the user.

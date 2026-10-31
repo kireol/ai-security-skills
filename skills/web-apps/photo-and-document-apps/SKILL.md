@@ -1,0 +1,408 @@
+---
+name: photo-and-document-apps
+description: >-
+  Security assessment, hardening, remediation, and incident response for self-hosted photo and document
+  archives: Immich (photo and video library) and Paperless-ngx (scanned-document management), which hold
+  some of the most sensitive data a household or small office has. Use when auditing either app,
+  reviewing its admin accounts, public sharing links, OAuth/SSO, API keys, machine-learning or parser
+  containers, storage locations, consumption folders, mail fetching, mobile access, or backups, or when
+  one may have been compromised.
+license: CC-BY-4.0
+metadata:
+  version: "1.0"
+  last_reviewed: "2026-10-31"
+  applies_to: "Immich and Paperless-ngx, usually run with Docker Compose (verify the live version of each; both release often)"
+  audience: "home, homelab, work"
+  finding_prefix: "PDA"
+  modes: "discover, recommend, remediate, respond"
+---
+
+# Photo and Document Apps Security
+
+Act as a careful, evidence-driven homelab security engineer. Photo libraries and document archives are
+where a household keeps its passports, tax returns, bank statements, medical letters, contracts, and
+fifteen years of family photos with location data. They are often exposed to the internet so phones can
+upload, and their data is rarely backed up as carefully as it deserves. Identify, explain, prioritize,
+remediate (only when authorized), and verify weaknesses that could leak, alter, or destroy that data,
+and treat **confidentiality and recoverability** as equally important.
+
+## How to use this skill
+
+This skill holds only guidance specific to Immich and Paperless-ngx. It builds on the shared core, which
+always applies:
+
+| Core document | Covers |
+|---|---|
+| [modes-and-authorization.md](../../../core/modes-and-authorization.md) | The four modes, transitions, operation classes (R/C1/C2/C3), standing authorization |
+| [operating-principles.md](../../../core/operating-principles.md) | Principles, capability discovery, scope, communication, untrusted data |
+| [vulnerability-triage.md](../../../core/vulnerability-triage.md) | Lifecycle, CVE/KEV validation, P0–P4 priority scale |
+| [evidence-and-reporting.md](../../../core/evidence-and-reporting.md) | Evidence labels, statuses, finding template, report format, cadence |
+| [tool-use-contract.md](../../../core/tool-use-contract.md) | Rules for commands, APIs, MCP tools, and third-party integrations |
+| [reporting-protocol.md](../../../core/reporting-protocol.md) | Optional live progress reporting to a dashboard |
+| [incident-response.md](../../../core/incident-response.md) | The generic Respond playbook |
+
+App-specific Respond steps are in [incident-response.md](incident-response.md). Vendor documentation and
+advisories are in [references.md](references.md).
+
+Related skills: the reverse proxy and TLS are assessed with
+[web-servers](../../web/web-servers/SKILL.md); the container host with
+[docker](../../containers/docker/SKILL.md); public access paths with [tunnels](../../edge/tunnels/SKILL.md)
+and [cloudflare](../../edge/cloudflare/SKILL.md); SSO with
+[identity-providers](../../identity/identity-providers/SKILL.md); backups with
+[backup-tools](../../storage/backup-tools/SKILL.md). For other small apps, use
+[self-hosted-web-apps](../self-hosted-web-apps/SKILL.md). For Nextcloud's photo and file features, use
+[nextcloud](../nextcloud/SKILL.md).
+
+## Photo- and document-app principles
+
+- **Never open the user's photos or documents.** You need settings, counts, and metadata about
+  configuration, not content. Don't display thumbnails, document text, OCR output, EXIF locations, or
+  file names that reveal personal details. When a check needs an example, describe it ("a shared album
+  with 40 items"), never its contents.
+- **The data is the asset; the containers are disposable.** Upload and media folders, the database, and
+  (for Paperless) the original files are what matter. Every remediation starts with a verified backup of
+  those, not of the containers.
+- **Share links are credentials.** A public link's random URL is the only thing protecting it unless a
+  password and expiry are set. Treat the list of active links as part of access control.
+- **Location and identity leak through metadata.** Photos carry GPS coordinates and faces; documents
+  carry names, account numbers, and addresses. Settings that show metadata on shared links, or that send
+  data to an external provider (AI features, remote OCR, map tiles), are confidentiality decisions.
+- **First visitor becomes admin.** Both apps can create the admin from first-run setup or environment
+  variables. An unfinished setup on a reachable instance is claimable.
+- **Release cadence is fast.** Both projects ship frequently and publish security advisories on GitHub.
+  Check the installed version against the project's releases and advisories every time; don't rely on
+  memory.
+
+## Deployment variants
+
+| Variant | How to recognize it | What changes |
+|---|---|---|
+| **Immich, official Docker Compose** | Containers for `immich-server`, `immich-machine-learning`, a Valkey/Redis cache, and a Postgres database (with a vector extension); `.env` with `UPLOAD_LOCATION`, `DB_DATA_LOCATION`, `DB_PASSWORD`, `IMMICH_VERSION`. | Server on 2283; ML service on 3003 inside the Compose network. Upload folder and database are the data. Database on network shares is not supported. |
+| **Immich with external libraries** | Extra host folders mounted into the server container and added as external libraries by an admin. | Without `:ro`, Immich can delete or write to those originals. Library ownership is set at creation and can't be changed. |
+| **Immich with separate or remote ML** | ML container on another host (often a GPU box), set in the admin's machine-learning URL. | The ML service has no authentication of its own; its port must not be reachable beyond the server that uses it. |
+| **Paperless-ngx, Docker Compose** | `paperless-ngx` webserver container, Redis broker, database (Postgres, MariaDB, or SQLite), often Gotenberg and Apache Tika for Office files. | Web on 8000 inside the container (`PAPERLESS_PORT`). Data, media, consume, and export folders mounted from the host. Gotenberg and Tika parse untrusted files. |
+| **Paperless-ngx bare metal** | Python app with systemd units for webserver, consumer, task worker, and scheduler. | Service user, file permissions, and updates are manual. |
+| **NAS or homelab platform app** (Unraid, TrueNAS, CasaOS, NAS package centers) | Platform template. | The template decides mounts, ports, and default credentials; check it as well as the app. |
+| **Behind a reverse proxy or tunnel** | Reached through a hostname. | Exposure, TLS, and any auth layer come from the proxy; mobile apps and share links constrain what that layer can require. |
+
+## Detection
+
+Hints for recognizing this product during a network inventory (used by the `full-assessment` skill).
+Defaults can be changed, so confirm with the user before relying on a match.
+
+- **Immich:** web UI on port 2283 (the vendor default `IMMICH_PORT`), page title "Immich"; an API under
+  `/api/` (for example `/api/server/ping`). The machine-learning service on 3003 and optional metrics
+  ports 8081 and 8082 should not be reachable from other hosts; if they answer from the LAN, note it.
+- **Paperless-ngx:** web UI on port 8000 (vendor default `PAPERLESS_PORT`), page title "Paperless-ngx";
+  a REST API under `/api/` that returns 401/403 without credentials and a Django admin at `/admin/`.
+  Gotenberg (commonly 3000 inside the Compose network) and Tika (commonly 9998) should not be published.
+- Container images named `ghcr.io/immich-app/immich-server`, `immich-machine-learning`, or
+  `ghcr.io/paperless-ngx/paperless-ngx`, and the reverse proxy's route list.
+- MAC address vendors don't help: both run on general-purpose hosts, VMs, and NAS devices.
+
+---
+
+## Discover
+
+All operations in this mode are class **R** (read-only). Confirm scope and access first (core: operating
+principles). Mark anything you can't inspect **Not assessed**.
+
+### Baseline commands
+
+Prefer the compose and `.env` files, the apps' admin settings pages, and user-run checks. These are
+*candidate* read-only commands, **not yet verified** on every version; check each exists first.
+
+```sh
+docker ps --format '{{.Names}}\t{{.Image}}\t{{.Ports}}\t{{.Status}}'   # containers, tags, published ports
+docker inspect <container> --format '{{json .HostConfig.Binds}}'        # mounted host folders and :ro flags
+docker inspect <container> --format '{{.Config.User}} {{.HostConfig.Privileged}}'
+docker image inspect <image> --format '{{index .RepoDigests 0}} {{.Created}}'
+curl -s http://<immich-host>:2283/api/server/ping                      # Immich answers "pong"
+curl -s -o /dev/null -w '%{http_code}\n' http://<paperless-host>:8000/api/documents/   # expect 401/403
+ls -ld <upload-location> <paperless-consume-dir> <paperless-media-dir>  # owner and mode only
+```
+
+- **`.env` files and `docker inspect` output contain `DB_PASSWORD`, `PAPERLESS_SECRET_KEY`,
+  `PAPERLESS_ADMIN_PASSWORD`, and mail or API secrets.** Read them to learn *which* secrets are set and
+  whether they are defaults, then report only "set / default / missing". Use format strings, not bare
+  `docker inspect`.
+- Immich version: the admin's *Server stats* or about page, the image tag and digest, or the
+  `IMMICH_VERSION` value. Paperless version: the UI's about/settings page or image tag.
+- **Never** during Discover: list, open, download, or search photos or documents; open share links
+  (count and inspect their settings in the admin or owner's view instead); complete a first-run admin
+  registration; run Paperless management commands that change data (the importer, the retagger,
+  bulk edits); trigger library scans, ML jobs,
+  mail fetches, or workflows; print secrets.
+
+### Assessment domains
+
+Every domain must end with a status in the report (Pass / Finding / Not assessed / Not applicable /
+Accepted risk). Assess each app separately.
+
+#### A. Inventory, version, and update path
+
+- App, version, image tag and digest, and how updates happen. Immich documents pinning
+  `IMMICH_VERSION` to a release; a floating major tag pulls new minors automatically. Paperless images
+  are tagged by version and `latest`.
+- Installed version vs. the project's releases and GitHub security advisories (both projects publish
+  them). Recent advisories have included an unauthenticated path-injection issue in Immich's ML service
+  and cross-user disclosure issues in Paperless; check which apply to the installed version.
+- Breaking-change notes: both projects document migration steps in release notes; an install stuck
+  far behind may need staged upgrades.
+- Supporting containers (Postgres, Valkey/Redis, Gotenberg, Tika): their image versions and whether
+  they're updated with the app.
+
+#### B. Admin accounts, users, and authentication (both apps)
+
+- Who is admin (Immich admin users; Paperless superusers and staff). Shared admin accounts; the admin
+  account used daily from a phone.
+- **Immich:** first-run admin registration completed? Users created by the admin; OAuth settings:
+  *auto register* (default on), *auto launch*, the role claim (`immich_role` by default can grant admin
+  from the identity provider), storage quota claim, and whether password login is still enabled for
+  everyone or only as break-glass (verify the setting on the installed version).
+- **Paperless:** `PAPERLESS_ADMIN_USER`/`PAPERLESS_ADMIN_PASSWORD` still in the compose or `.env`
+  file after first start (it creates the superuser; leaving the password there leaves it readable);
+  `PAPERLESS_AUTO_LOGIN_USERNAME` set (the vendor says not to use it on an internet-exposed instance);
+  `PAPERLESS_ACCOUNT_ALLOW_SIGNUPS` (default off); with social login, `PAPERLESS_SOCIALACCOUNT_ALLOW_SIGNUPS`
+  (default **on**), group and superuser sync settings, and `PAPERLESS_SOCIAL_ACCOUNT_MFA_TRUSTED_AMR`
+  (only values that really mean a second factor).
+- **Paperless remote-user header auth:** `PAPERLESS_ENABLE_HTTP_REMOTE_USER` and `_API`. If enabled, the
+  app trusts a request header for identity; anyone who reaches Paperless directly, bypassing the proxy,
+  can set it and log in as anyone. Check that the port is not reachable except through the proxy and
+  that the proxy strips the header from client requests.
+- `PAPERLESS_DISABLE_REGULAR_LOGIN` doesn't disable the Django admin login or API token login; check
+  whether `/admin/` is blocked at the proxy where SSO-only was intended.
+- **MFA:** Paperless supports TOTP for users (superusers can reset it); is it enabled for superusers?
+  Immich relies on OAuth for MFA; is OAuth used with an MFA-enforcing provider?
+- Stale users, test users, and family members who no longer need access.
+
+#### C. API keys, tokens, and mobile access
+
+- **Immich API keys:** which users have them, their names and age, and (on versions with scoped keys)
+  their permissions. Keys used by scripts, backup tools, or photo-frame integrations often have full
+  rights.
+- **Paperless API tokens:** per-user tokens (used by mobile apps and scripts) and their owners; tokens
+  belonging to superusers are as powerful as the superuser. `PAPERLESS_TOKEN_THROTTLE_RATE` (default
+  `5/min`) limits brute force on the token endpoint.
+- **Mobile apps:** how they reach the server (LAN only, VPN, public hostname). Immich's mobile app backs
+  up the camera roll in the background; a public hostname is common. The mobile OAuth redirect setting
+  (the custom scheme or the documented mobile-redirect route) must match what the provider allows.
+- Session lifetime: Paperless `PAPERLESS_SESSION_COOKIE_AGE` (default two weeks) and remember-me; Immich
+  sessions per device (users can review and log out devices).
+
+#### D. Sharing
+
+- **Immich shared links:** count, owners, expiry, password, and the allowed actions (upload, download,
+  show metadata/EXIF; verify the toggles on the installed version). Links without expiry or password to
+  whole albums are the main exposure. Links that show metadata leak GPS locations.
+- **Immich partner sharing:** shares a user's entire library with another user; check it's intended.
+- **Paperless share links:** count, owners, expiry. Each gives anyone holding it the document without
+  login. Note whether the reverse proxy exempts the share-link path from its auth layer (the vendor
+  cautions about bypassing proxy auth for links).
+- **Paperless permissions:** documents with no owner are visible to every user with view permission on
+  documents; workflows are global (anyone who can see workflows sees all of them). Check the default
+  owner and permission assignment for new documents, and which users can edit workflows.
+
+#### E. Network exposure and the path in
+
+- Where each app is reachable: same host, LAN, VPN, internet (port forward, proxy, tunnel). Whether the
+  reverse proxy or tunnel adds an auth layer, and which paths it exempts for mobile apps and share links.
+- **Direct-port bypass:** published ports (`2283`, `8000`) bound to all interfaces while the intended
+  path is the proxy.
+- **Supporting services published:** Immich ML (3003) and metrics ports, Postgres, Redis/Valkey,
+  Gotenberg, Tika. None should be reachable from other hosts unless a documented remote-ML setup needs
+  it, and then only from the server.
+- **Trusted proxies and hosts:** Immich `IMMICH_TRUSTED_PROXIES`; Paperless `PAPERLESS_URL` or
+  `PAPERLESS_ALLOWED_HOSTS` (default `*`), `PAPERLESS_CSRF_TRUSTED_ORIGINS`, `PAPERLESS_TRUSTED_PROXIES`.
+  Paperless's docs say to trust `X-Forwarded-For` only when clients can't connect directly.
+- TLS on the public path, and upload size and timeout limits on the proxy (failed uploads push users to
+  insecure workarounds).
+
+#### F. Secrets and configuration
+
+- **Paperless `PAPERLESS_SECRET_KEY`:** required, no default; it signs sessions and other sensitive data.
+  Check it is unique, long, not copied from an example, and not committed to git.
+- **Database passwords:** Immich `DB_PASSWORD` (the example value is `postgres`; the vendor says to
+  change it, and Postgres is not exposed by default); Paperless `PAPERLESS_DBPASS`. Redis passwords if
+  Redis is reachable beyond the Compose network.
+- **Paperless mail accounts:** IMAP credentials or OAuth tokens for the user's mailbox are stored in the
+  Paperless database (verify how the installed version stores them). A mailbox password here gives
+  access to the user's whole email, which usually resets every other account. Prefer OAuth or an
+  app-specific password with the least mailbox access.
+- Mail rules with the **Delete** action (immediate) and the rules' scope (which folders, which senders).
+- Notification and webhook settings: Paperless workflow webhook and email actions; where they send
+  document data. Paperless documents options to restrict webhook ports and block local URLs.
+- `.env`, compose files, and secret files: permissions, location, and whether they're in git.
+
+#### G. Storage locations and file permissions
+
+- **Immich `UPLOAD_LOCATION`** (originals, thumbnails, encoded video, profile images) and
+  `DB_DATA_LOCATION`: on which disk, permissions, and whether other services or users can read them (an
+  SMB share over the upload folder exposes every photo without Immich's access control).
+- **Immich external libraries:** each mount `:ro` unless the user deliberately wants Immich to delete or
+  write sidecars; import paths; which user owns each library; exclusion patterns.
+- **Paperless consumption folder:** anything placed there is ingested and assigned per the consumer's
+  rules. If it is an SMB/NFS share or a scanner's upload target, check who can write to it (a share
+  writable by the whole LAN lets any device inject documents, and Office files are parsed by
+  Gotenberg/Tika). The vendor says the folder must be readable and writable by the Paperless user; it
+  should not be writable by everyone.
+- **Paperless media and data folders** (originals, archived PDFs, thumbnails, index): permissions and
+  whether they are shared out.
+- Paperless trash (`PAPERLESS_EMPTY_TRASH_DELAY`, default 30 days) and Immich trash: the window for
+  recovering deletions.
+
+#### H. External processing and outbound data
+
+- **Immich ML:** models downloaded at runtime; ML runs locally by default. Remote ML URLs: where photos
+  are sent for face and object recognition.
+- **Paperless AI features and remote OCR:** the vendor documents that AI features send document content
+  to the configured provider and remote OCR sends documents to a cloud service when enabled. Record
+  which provider, which documents, and whether the user agreed to that.
+- Map and reverse-geocoding features in Immich, and any other external lookups the installed version
+  makes (verify in its docs).
+- Outbound access from the containers: do they need the internet beyond updates and model downloads?
+
+#### I. Backups and recoverability
+
+- **What must be backed up:** Immich's upload location *and* a database dump (Immich documents its own
+  database backup; the database holds albums, faces, users, and links); Paperless's media folder, data
+  folder, and database, or its documented exporter output.
+- Off-host and preferably offline or immutable copy: can a compromised app host delete every backup?
+- Restore test: has a restore of the database and a sample of originals ever been done to a separate
+  instance? (These archives are often irreplaceable.)
+- Backups are as sensitive as the app: encrypted at rest, keys stored outside the host.
+- For phone photo backup: users often delete photos from phones once Immich has them, so Immich may be
+  the only copy.
+
+#### J. Logging and monitoring
+
+- Container logs retained and rotated; login failures visible (for fail2ban/CrowdSec at the proxy).
+- Whether anyone would notice new users, new API keys, new share links, new mail rules, or new
+  workflows.
+
+---
+
+## Recommend
+
+No changes are made in this mode. For each finding, produce a recommendation using the core finding
+template, including **Dependencies / blast radius** and the **operation class**.
+
+### Dependency and blast-radius check (required)
+
+- **Phones:** background photo backup (Immich) and document upload apps (Paperless mobile clients) break
+  when the URL, auth layer, or token changes. An auth proxy in front usually breaks mobile apps unless
+  the app supports it; check before recommending.
+- **Share-link recipients:** family members and others viewing shared albums or documents. Tightening
+  links or adding proxy auth breaks them.
+- **Scanners and email:** network scanners writing to the consumption folder; mail rules fetching
+  documents. Changing folder permissions or mail credentials stops ingestion.
+- **Scripts and integrations** using API keys or tokens (photo frames, backup tools, home automation).
+- **The identity provider and proxy**, shared with other apps.
+- **External libraries:** making mounts read-only disables deletion and sidecar writing from Immich.
+
+### Recommendation guidance
+
+| Area | Typical recommendation | Consequences to explain |
+|---|---|---|
+| Outdated version with a relevant advisory | Update to a fixed release after backing up data and database; pin the version. | Read migration notes; some updates need staged steps. |
+| Unfinished first-run setup on a reachable instance | The user completes it now, or the app is stopped until then. | None; urgent if reachable from untrusted networks. |
+| Paperless admin password in `.env`/compose | Remove the variables after first start; change the admin password. | None after the account exists. |
+| Paperless auto-login or remote-user auth reachable directly | Remove auto-login; for remote-user auth, stop publishing the port and make the proxy strip the header. | Users must log in, or go through the proxy. |
+| Weak, default, or committed secrets | Set a strong unique `PAPERLESS_SECRET_KEY`; change database passwords; move secrets out of git. | Changing the secret key logs everyone out; database password changes need a coordinated restart. |
+| Shared links without expiry or password | Add expiry and passwords; remove links nobody needs; turn off metadata display. | Recipients need new links or passwords. |
+| Supporting services published (ML, DB, Redis, Gotenberg, Tika) | Stop publishing them; keep them on the Compose network; for remote ML, allow only the server's address. | None for standard installs. |
+| Direct port reachable beside the proxy | Bind to `127.0.0.1` or the proxy network only. | Clients using the raw port must switch. |
+| OAuth auto-register or role claim too broad | Restrict the client at the identity provider to the right users; review role mapping. | New users must be added at the provider. |
+| Mailbox password stored | Use OAuth or an app-specific password; limit the rule to a dedicated folder or mailbox. | Re-authorize the mail account. |
+| Consumption folder writable by everyone | Restrict to the scanner's account and the Paperless user. | Devices that used the open share must use credentials. |
+| External libraries mounted read-write | Mount `:ro` unless deletion from Immich is wanted. | Deleting from Immich no longer deletes originals. |
+| AI or remote OCR sending documents out | Confirm the user wants it; otherwise disable or use a local provider. | Features stop or need local resources. |
+| No database backup or no off-host copy | Add the vendor-documented database backup plus an off-host, protected copy of originals; test a restore. | Storage cost; restore tests take time. |
+| Superusers without MFA | Enable TOTP (Paperless) or OAuth with MFA (Immich). | Users enroll an authenticator. |
+
+Hidden URLs, non-standard ports, and "nobody knows the hostname" are supplementary only. Never recommend
+them as the main fix.
+
+Group the plan: immediate containment (if any) → urgent fixes (vulnerable version on an exposed instance,
+claimable setup, header-auth bypass, published database or ML service) → high-priority hardening (share
+links, secrets, MFA, mail credentials, folder permissions) → routine maintenance (updates, backups and
+restore tests) → optional defense in depth. Then ask for approval (core: modes and authorization).
+
+---
+
+## Remediate
+
+Apply only approved changes, one at a time, following the core rules. App specifics:
+
+- **Back up first, every time:** database dump using the project's documented method, plus the upload
+  or media folders (or a snapshot of them). Record the image digest for rollback.
+- **Change the compose and `.env` files, then recreate the container.** For a single app that's **C1**;
+  if phones or scanners depend on the change (URL, auth, ports), **C2**.
+- **Updates:** read the release notes for every version between installed and target. Database
+  migrations generally make rollback require the database backup, not just the old image.
+- **Secrets:** changing `PAPERLESS_SECRET_KEY` invalidates sessions; changing a database password means
+  changing it in the database and the app's environment together.
+- **Share links:** agree with each link's owner before expiring or deleting it (C2 for recipients).
+- **Read-only external libraries:** check whether the user relies on deleting originals from Immich.
+- **Folder permissions:** change the specific folder, not a parent tree; never apply recursive ownership
+  changes to an upload or media library without confirming the app's container user and every other
+  consumer of the folder.
+- **Credentials and tokens the user owns** (mail passwords, OAuth grants, admin passwords) are set by the
+  user; the agent guides.
+
+After each change, follow the core "after a change" steps: confirm login, a phone upload or a test scan
+still arrives, share links behave as intended, logs are clean, and record before and after.
+
+### Hard stops (refer to a specialist or do manually; never automate)
+
+- Deleting photos, documents, albums, libraries, or users; emptying trash.
+- Running Paperless `document_importer`, exporter with deletion options, or bulk-edit/retagger commands
+  as remediation; editing either app's database directly.
+- Restoring a database backup over a running instance.
+- Moving or re-pointing `UPLOAD_LOCATION`, `DB_DATA_LOCATION`, or Paperless data/media folders.
+- Downgrading after a database migration.
+- Opening, viewing, or exporting user content to "verify" a finding.
+
+---
+
+## Respond
+
+On any P0 indicator, switch to Respond immediately. Follow the core playbook plus the app-specific steps
+in [incident-response.md](incident-response.md).
+
+---
+
+## Worked example (invented)
+
+### PDA-001: Paperless-ngx trusts a remote-user header and is also reachable directly on its port
+
+**Confidence:** Confirmed
+**Priority:** P1. Anyone on the LAN can send a request with the identity header set to the superuser's
+name and get full access to every scanned document, without a password.
+**State:** Open
+**Component:** Paperless-ngx (version as reported in its UI), Docker Compose on `192.0.2.30`
+**Evidence:** Observed 2026-04-11 in the compose file: `PAPERLESS_ENABLE_HTTP_REMOTE_USER=true` and
+`PAPERLESS_ENABLE_HTTP_REMOTE_USER_API=true`; port mapping `0.0.0.0:8000->8000`. The reverse proxy at
+`docs.example.com` sets the header after forward authentication. With approval, an unauthenticated
+request from `192.0.2.77` to `http://192.0.2.30:8000/api/documents/` *without* the header returned 403,
+showing the port is reachable; the header-injection test itself was not performed. The vendor
+configuration docs say the proxy must ensure the header isn't passed from external requests.
+**Expected secure state:** Paperless reachable only from the reverse proxy; the proxy strips any
+client-supplied identity header.
+**Exposure and prerequisites:** any device on `192.0.2.0/24`; knowledge of a username (the superuser's
+name is the one set at install).
+**Dependencies / blast radius:** a network scanner writes to the consumption folder over SMB (not
+affected); one phone app uses an API token through the proxy (not affected).
+**Recommended remediation:** change the port mapping to `127.0.0.1:8000:8000` (the proxy runs on the same
+host); confirm the proxy removes the header from client requests; enable TOTP for the superuser.
+**Operation class:** C1 (single container recreate; clients already use the proxy).
+**Approval required:** Yes.
+**Verification:** a request from `192.0.2.77` to port 8000 is refused; login through `docs.example.com`
+still works; the phone app still syncs.
+**Rollback:** restore the previous compose file (not recommended).
+
+---
+
+## Version history
+
+- **1.0** (2026-10-31): Initial version.

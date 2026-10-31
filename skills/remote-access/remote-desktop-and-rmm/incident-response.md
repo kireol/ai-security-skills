@@ -1,0 +1,91 @@
+# Remote Desktop and RMM: Respond (Incident Response)
+
+Use with the core playbook, [incident-response.md](../../../core/incident-response.md), which always
+applies. This file adds only remote-desktop- and RMM-specific steps.
+
+Two situations reach this file. In the first, **the owner's own gateway or RMM server is compromised or
+abused**: every endpoint it controls is in scope. In the second, **a remote-access tool nobody authorized
+is on an endpoint**: someone (an intruder, a scammer on a "support" call, a former helper) has a way in
+that bypasses the normal logins. In both, assume the attacker could act on the endpoint as SYSTEM or root
+and could watch the screen.
+
+## Triage and containment
+
+- **Indicators:** admin users, API keys, install links, or device groups nobody created; logins from
+  unfamiliar places; sessions, terminal use, file transfers, or scripts at odd times; new scripts or
+  automation policies; agents reporting to a server the owner doesn't recognize; a RustDesk, AnyDesk,
+  TeamViewer, ScreenConnect, MeshAgent, or similar tool the owner can't explain; a recent phone call or
+  pop-up that asked the user to install "support" software; mouse moving on its own.
+- **If a scammer is or was connected:** disconnect the endpoint from the network (unplug or turn off
+  Wi-Fi), don't power it off, and from a different, clean device contact the bank if any financial
+  account was opened during the session. Change passwords from the clean device, not the affected one.
+- **Own server compromised:** cut the server off from agents and admins without destroying it: remove the
+  public route or port forward, or block the server at the firewall, so no further commands reach
+  endpoints. Stop scheduled tasks and automation policies if you can do so without deleting them. Don't
+  wipe the server yet.
+- **Unauthorized tool on one endpoint:** isolate the endpoint from the network, preserve evidence (below),
+  then remove the tool. Uninstalling first destroys its logs and configuration.
+- **Don't use the suspect tool to investigate.** Reach endpoints in person, through a separate trusted
+  path, or by having the user read information to you.
+
+## Evidence to preserve (RMM-specific)
+
+- **Guacamole:** connection history (who connected to what and when), user list and permissions, the
+  extensions directory, `guacamole.properties` (redact secrets when sharing), a database dump, Tomcat and
+  `guacd` logs, reverse-proxy logs, and any session recordings.
+- **MeshCentral:** the server's event log and user/device-group configuration (exportable from the admin
+  UI), `meshcentral-data` (contains private keys: copy to protected storage, don't share), the database or
+  `meshcentral.db`, and Node.js service logs.
+- **Tactical RMM:** the audit log, users and API keys (names, owners, creation dates), scripts and their
+  edit history, scheduled tasks and automation policies, agent history, and server logs; plus the bundled
+  MeshCentral evidence above.
+- **RustDesk:** client connection logs on the endpoint (the client keeps logs of incoming sessions;
+  location varies by OS), the client's configured ID server and settings, `hbbs`/`hbbr` logs on a
+  self-hosted server, and the Pro console's audit log if used.
+- **On endpoints with an unauthorized tool:** the tool's install path, version, and configuration files
+  (which often name the account or server it reports to), its service or launch item definition, install
+  time, the user account that ran it, browser download history for the installer, and recent outbound
+  connections. Screenshots of any visible ID or session window.
+
+## Scope checks specific to remote access
+
+- **Every endpoint the compromised server could reach:** treat each as potentially compromised and check
+  it with its OS skill ([windows](../../operating-systems/windows/SKILL.md),
+  [macos](../../operating-systems/macos/SKILL.md), [linux](../../operating-systems/linux/SKILL.md)) for new
+  accounts, persistence, and other remote tools.
+- **Every credential stored in or typed through the tool:** Guacamole connection credentials; anything
+  typed during sessions an attacker could watch; passwords saved in browsers on controlled endpoints.
+- **Accounts the user signed in to during a scam session:** email, banking, password manager, cloud
+  storage. Check for new devices, forwarding rules, and recovery changes.
+- **The identity provider and MFA** if the tool used SSO ([mfa](../../identity/mfa/SKILL.md)).
+- **Other endpoints** for the same unauthorized tool or the same installer.
+
+## Eradication and recovery
+
+- **Unauthorized tool:** after evidence is preserved, uninstall it with its own uninstaller or the OS
+  tools, remove leftover services, launch items, scheduled tasks, and files, and confirm it no longer
+  starts after a reboot. If the attacker had admin access for a meaningful time, prefer reinstalling the
+  endpoint's OS from trusted media and restoring data from a backup taken before the compromise.
+- **Own server:** rebuild from current vendor images or packages; restore only reviewed configuration from
+  before the earliest plausible compromise. Remove unknown users, API keys, scripts, policies, and
+  install links.
+- **Rotate:** admin passwords and MFA enrollments; all API keys; Guacamole stored connection credentials at
+  each target; secrets in configuration (SMTP, Duo, SSO client secrets). If the server's private keys may
+  have been copied (RustDesk key pair, MeshCentral certificates), plan a key rotation and agent
+  reinstallation, because an attacker with those keys can impersonate the server.
+- Before reconnecting: MFA for every admin, no internet-exposed admin UI without an auth layer, expiring
+  install links, least-privilege API keys, consent prompts where appropriate, off-host logs, and the
+  initial access path closed.
+
+## Quick checklist tailored for remote access
+
+Start with the core quick checklist, plus:
+
+- [ ] Disconnect affected endpoints from the network (don't power off); block the suspect server or remove
+      its public route.
+- [ ] From a clean device, secure bank, email, and password-manager accounts used during any suspicious
+      session.
+- [ ] Preserve the tool's logs, configuration, and connection history before uninstalling anything.
+- [ ] List every endpoint the tool could control, and check each for persistence and other remote tools.
+- [ ] Rotate stored connection credentials, admin passwords, and API keys; rebuild the server if it was
+      compromised.

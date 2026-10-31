@@ -1,0 +1,80 @@
+# Homebridge: Respond (Incident Response)
+
+Use with the core playbook, [incident-response.md](../../../core/incident-response.md), which always
+applies. This file adds only Homebridge-specific steps.
+
+A compromised Homebridge server usually means one of three things: someone signed in to the **UI**
+(default or weak credentials, or an exposed port) and used it to install code or open a terminal; a
+**malicious or hijacked plugin** ran its code on the host; or someone obtained the **pairing keys or
+setup code** and can control accessories through Apple Home or insecure mode. In every case, assume the
+cloud-account credentials in `config.json` are exposed.
+
+## Triage and containment
+
+- **Indicators:** plugins or UI users nobody added; `config.json` changes nobody made; Homebridge
+  restarting unexpectedly; accessories (locks, garage doors, alarms) changing state with no matching
+  automation; an unknown controller or person in Apple Home; unexpected processes, cron jobs, or
+  outbound connections from the host; a plugin publicly reported as malicious or its npm package
+  suddenly changing owner.
+- **Physical safety first.** If locks, garage doors, or alarm systems are controlled through Homebridge
+  and may be under someone else's control, secure them physically or through the device maker's own app
+  before working on Homebridge.
+- **Isolate the host on the network** (switch port, Wi-Fi block, or firewall rule) rather than powering
+  it off, so evidence survives. If accessories must keep working, at least block the UI port and
+  internet egress except what is needed.
+- **Remove internet exposure** of the UI or HAP ports (port forwards, tunnels, UPnP) from the router.
+- **Don't delete the storage folder or re-pair yet.** Pairing state is evidence and recovery data.
+
+## Evidence to preserve (Homebridge-specific)
+
+- A copy of the storage folder (`config.json`, `auth.json` or the UI's user database, `persist/`,
+  `accessories/`, `backups/`, and the plugin `node_modules` folder), taken read-only to secure storage.
+  It is full of secrets; protect it accordingly.
+- Homebridge and UI logs (`journalctl -u homebridge`, the UI log file, or the container log), exported
+  before rotation.
+- The installed-plugin list with versions, and `npm ls` output for the plugin folder.
+- Host evidence: users, SSH authorized keys, sudoers files, cron and systemd timers, running processes,
+  listening ports, and shell history for the service account (see the
+  [linux](../../operating-systems/linux/SKILL.md) skill's Respond steps).
+- Apple Home: screenshots of people with access to the home and of recent accessory activity, if the
+  user can view them.
+- Router logs showing connections to the UI port and the host's outbound connections.
+
+## Scope checks specific to Homebridge
+
+- **Every cloud account in `config.json`:** camera services, thermostats, garage-door and lock vendors,
+  alarm providers, vacuum and appliance accounts. Treat their passwords and tokens as stolen.
+- **The Apple Home itself:** people and controllers with access; other bridges and hubs in the same home.
+- **Devices the plugins reach on the LAN:** cameras, IoT hubs, and their credentials.
+- **Other services on the host:** Home Assistant, MQTT brokers, or Docker containers on the same machine,
+  and anything that shares the service account's or owner's SSH keys.
+- **Backups:** UI backup archives copied to a NAS or cloud drive contain the same secrets and pairing
+  keys; find every copy.
+
+## Eradication and recovery
+
+- Rebuild the host from a clean OS image (for the Raspberry Pi image, reflash it) rather than cleaning it
+  in place when code execution is suspected.
+- Reinstall Homebridge and only the plugins still needed, from npm, after checking each plugin's
+  repository and recent releases.
+- **Rotate every credential** that was in `config.json` at the cloud provider, and revoke tokens.
+- Decide with the user whether to restore pairing from a pre-incident backup or **re-pair from scratch**
+  with a new bridge username and setup code. Re-pairing breaks automations but is the only way to be
+  sure stolen pairing keys are useless; it is the recommended path if the storage folder may have been
+  copied.
+- Remove unknown people or controllers from Apple Home.
+- Before reconnecting: named admin with a strong password and UI 2FA (where available), UI restricted to
+  the admin network, insecure mode off unless required, no blanket passwordless sudo, Homebridge not
+  running as root, backups stored securely.
+
+## Quick checklist tailored for Homebridge
+
+Start with the core quick checklist, plus:
+
+- [ ] Secure physical-access devices (locks, garage doors, alarms) through their own apps first.
+- [ ] Remove any internet exposure; isolate the host without powering it off.
+- [ ] Copy the storage folder and logs to secure storage before changing anything.
+- [ ] List plugins and versions; check for any recently reported malicious package.
+- [ ] Rotate every cloud credential and token from `config.json`.
+- [ ] Rebuild the host; reinstall only needed plugins; consider re-pairing with a new setup code.
+- [ ] Find and secure every backup archive.

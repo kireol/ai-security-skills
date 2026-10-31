@@ -1,0 +1,61 @@
+# AI Coding Agents: References
+
+Always prefer each tool's current documentation. These tools release often, and settings names,
+defaults, and trust behavior change between versions. Re-verify links and contents when updating this
+skill.
+
+Last verified: 2026-10-31
+
+## Vendor (authoritative)
+
+- Claude Code (Anthropic)
+  - Settings files and precedence (user, project, local, managed; which keys project files can't set):
+    https://code.claude.com/docs/en/settings
+  - Permissions (modes `default`, `acceptEdits`, `plan`, `auto`, `dontAsk`, `bypassPermissions`;
+    `disableBypassPermissionsMode`; Read/Edit deny rules and their limits; workspace trust and what runs
+    before a folder is trusted, including `claude -p`): https://code.claude.com/docs/en/permissions
+  - Sandboxing (`sandbox.enabled`, filesystem and network settings, `allowUnsandboxedCommands`,
+    `failIfUnavailable`, Seatbelt and bubblewrap, Windows via WSL2): https://code.claude.com/docs/en/sandboxing
+  - Settings reference, environment variables (telemetry opt-outs, config directory), and security
+    overview: https://code.claude.com/docs/en/settings-reference,
+    https://code.claude.com/docs/en/env-vars, https://code.claude.com/docs/en/security
+- OpenAI Codex CLI
+  - Agent approvals and security (sandbox modes `read-only`, `workspace-write`, `danger-full-access`;
+    approval policies; network off by default; `--dangerously-bypass-approvals-and-sandbox`; protected
+    paths; per-OS sandboxes; project `trust_level`): https://learn.chatgpt.com/docs/agent-approvals-security
+    (redirected from https://developers.openai.com/codex/sandbox)
+- OpenCode
+  - Permissions (`permission` key; `allow`/`ask`/`deny`; defaults; `external_directory`; per-agent
+    overrides): https://opencode.ai/docs/permissions/
+- Continue
+  - CLI tool permissions (`allow`, `ask`, `exclude`; defaults; `~/.continue/permissions.yaml`;
+    `cn --auto`): https://docs.continue.dev/cli/tool-permissions
+  - Telemetry: https://docs.continue.dev/telemetry
+- Cursor
+  - Agent security (run modes as best-effort guardrails, allowlist bypass caveat, workspace trust setting,
+    MCP approvals, `.cursorignore`, auto-reload warning): https://cursor.com/docs/agent/security
+- Aider
+  - Options reference (`--yes-always`, `--auto-commits`, `--analytics-disable`, `--env-file`,
+    `.aider.conf.yml` search locations, `--suggest-shell-commands`):
+    https://aider.chat/docs/config/options.html
+- Devcontainers specification (mounts, lifecycle commands): https://containers.dev/implementors/json_reference/
+
+Generic vulnerability and incident sources (CISA KEV, NVD, CVE, CISA ransomware guidance, IC3) are listed in
+the core documents.
+
+## Third-party (not authoritative)
+
+- OWASP Top 10 for LLM Applications (2025): https://genai.owasp.org/llm-top-10/
+  Names the risk classes this skill uses (prompt injection, excessive agency, sensitive information
+  disclosure). Doesn't describe specific agents.
+
+## Not verified at time of writing
+
+- Exact current names of Claude Code's telemetry opt-out environment variables and its transcript
+  cleanup-period setting; check the settings reference and environment-variable pages.
+- Where each tool stores credentials on each OS (keychain vs. file); check each tool's authentication
+  docs for the installed version.
+- Cursor's privacy mode behavior, the full list of its run-mode names, and its current default run mode.
+- Whether Continue's `config.yaml` carries a permissions section in the installed version.
+- The Continue telemetry, devcontainer, Claude Code settings-reference, env-vars, and security pages were
+  not re-fetched for this version.

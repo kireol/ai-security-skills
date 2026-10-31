@@ -90,6 +90,40 @@ drive brought in for the purpose, and record hashes of exported files.
 - **Financial exposure** in scam cases: bank, card, and payment accounts accessed during the session;
   advise contacting the bank directly using the number on the card.
 
+## Domain controllers and Active Directory
+
+If a domain admin account, a DC, a DC backup, or the hypervisor hosting a DC may be compromised, treat the
+whole domain as compromised: every account, every domain-joined machine, and every system that trusts AD
+for sign-in. This is specialist territory; bring in someone experienced with AD incident response early,
+and use Microsoft's forest recovery guide.
+
+- **Contain without destroying the domain.** Don't shut down or isolate the only DC unless the user
+  accepts that nobody can sign in afterwards. Prefer cutting the DC's internet access and the attacker's
+  remote paths (VPN, RDP forwards, remote-support tools) first. Disable, don't delete, accounts the
+  attacker created or used, with fresh approval for each.
+- **Evidence (DC-specific):** Security log events 4728/4732/4756 (members added to privileged groups),
+  4720 (account created), 4724 (password reset by another account), 4738 (account changed), 4769
+  (Kerberos service tickets, including RC4 requests that suggest Kerberoasting), 4662 (directory object
+  access, including replication rights used by a non-DC), 5136/5137 (directory object modified or
+  created, when directory service change auditing is on), and 4739 (domain policy changed); Directory
+  Service and DFS Replication logs; `Get-GPO -All` modification times and a `Backup-GPO` copy of each GPO
+  (to external media, with approval); privileged group membership with `whenChanged`; `AdminSDHolder`
+  permissions; and the date of the last good system-state backup.
+- **Scope**: every PC a compromised admin account signed in to, every server running a service as a
+  domain account, the Entra Connect server if present (it can push changes to the cloud tenant), backup
+  servers, and the hypervisor. Group Policy can deploy malware to every PC at once; check recently
+  changed GPOs for scheduled tasks, scripts, or software installation.
+- **Credential reset order** (plan it with the specialist, from a clean admin workstation): attacker
+  access removed first; then all privileged accounts and break-glass accounts; then the **krbtgt
+  password twice** (in a confirmed compromise, the specialist may choose a faster interval than the
+  routine 10 hours and accept the disruption); then service accounts (gMSAs rotate on request), DSRM and
+  LAPS passwords (rotate with `Reset-LapsPassword` on each machine or by expiring them in AD), and finally
+  all user passwords. Resetting krbtgt only once leaves forged tickets usable.
+- **Recovery from backup**: restore AD only from a backup taken before the earliest attacker activity,
+  into an isolated network first, following Microsoft's forest recovery guide. Restoring a backup that
+  already contains the attacker's accounts, GPOs, or persistence brings them back. A domain with one DC
+  and no clean backup may need to be rebuilt; decide that with the user and the specialist, not alone.
+
 ## Eradication and recovery
 
 - **Prefer a clean reinstall over cleanup** when an attacker had interactive or admin access, when
@@ -126,3 +160,5 @@ Start with the core quick checklist, plus:
       key event logs to external media.
 - [ ] Plan a clean reinstall, a new BitLocker recovery password, and rotation of every password saved in
       the PC's browsers.
+- [ ] Domain involved: bring in an AD specialist; preserve DC Security logs and GPO backups; plan the
+      credential reset order, including krbtgt twice; restore AD only from a pre-compromise backup.

@@ -4,11 +4,103 @@
 
 Every product skill in this collection, with hints for recognizing the product on a network. Used by the `full-assessment` skill to match each discovered device to a skill. Load a skill from `dist/<skill>.md` (single file) or the installed `<skill>/` folder.
 
+## ai-app-builders
+
+**Use for:** Security assessment, hardening, remediation, and incident response for self-hosted low-code LLM app builders: Flowise, Dify, Langflow, and similar visual agent and RAG builders. Use when auditing exposure and authentication, first-run admin setup, default secrets in .env files, API keys for published flows and apps, the stored credentials for model providers and tools, code-execution nodes (custom JavaScript or Python, Custom MCP, code sandboxes), plugins, SSRF controls, RAG knowledge bases and uploaded documents, or when a builder instance may have been exposed, abused for code execution, or had its stored keys stolen.
+
+**Applies to:** Flowise 3.x, Dify self-hosted (Community Edition, Docker Compose), Langflow 1.x, and similar builders (verify each live version; defaults have changed between releases) · **Finding prefix:** `AIB` · **Version:** 1.0 · **Bundle:** `dist/ai-app-builders.md`
+
+### Detection
+
+Hints for recognizing these products during a network inventory (used by the `full-assessment` skill).
+Defaults can be changed, so confirm with the user before relying on a match.
+
+- **Flowise:** web UI and API on 3000 by default (`PORT`); page title Flowise (observed); API under
+  `/api/v1/` (for example prediction endpoints `/api/v1/prediction/<flow-id>`, vendor-documented).
+- **Dify:** the Compose stack's nginx on 80 and 443 (`EXPOSE_NGINX_PORT`, `EXPOSE_NGINX_SSL_PORT`);
+  page title Dify (observed); first-run admin setup at `/install`; the plugin daemon's remote debugging
+  port 5003 (`EXPOSE_PLUGIN_DEBUGGING_PORT`, published on all interfaces by default via
+  `PLUGIN_DEBUGGING_HOST`). Internal services that should not be published on the host: the code
+  sandbox on 8194 (`SANDBOX_PORT`), the SSRF proxy on 3128, and the API, web, plugin daemon, database,
+  Redis, and vector DB containers (ports observed in the Compose file; verify for the installed release).
+- **Langflow:** web UI and API on 7860 by default; page title Langflow (observed); API under `/api/v1/`
+  with API keys sent in the `x-api-key` header.
+- **Similar builders:** check the vendor's documented default port and page title; many run on 3000,
+  5000, 7860, or 8080 alongside other apps, so don't rely on the port alone.
+- Containers named after the product in `docker ps`; images from the vendors' official registries.
+- No mDNS or SSDP announcements; MAC vendors don't apply.
+
+## ai-coding-agents
+
+**Use for:** Security assessment, hardening, remediation, and incident response for AI coding agents and IDE assistants that run on the user's own machines: Claude Code, OpenAI Codex CLI, OpenCode, Continue, Cursor, Aider, and similar tools. Use when auditing permission and approval modes, command allowlists, sandboxing, which directories and secrets an agent can read (.env files, SSH keys, cloud credentials), hooks and agent config files committed to repositories, instruction files and prompt injection from untrusted repos, how API keys are stored, telemetry and transcript retention, headless or CI use, or running agents as a dedicated user or in containers and devcontainers, or when an agent may have been misused, hijacked by injected instructions, or exposed secrets.
+
+**Applies to:** Claude Code, Codex CLI, OpenCode, Continue, Cursor, Aider, and similar agentic coding tools (settings names change often; verify each against the tool's current docs) · **Finding prefix:** `AGT` · **Version:** 1.0 · **Bundle:** `dist/ai-coding-agents.md`
+
+### Detection
+
+Hints for recognizing these tools on a machine or in a repository (used by the `full-assessment` skill).
+Most have no listening port; find them by processes, installed packages, and config files. Locations
+change between versions; confirm with the user and the tool's docs.
+
+- **Processes and binaries:** `claude`, `codex`, `opencode`, `aider`, `cn` (Continue CLI), Cursor, and
+  editor extension hosts running agent extensions. Package managers: global npm packages, `pipx`,
+  `uv tool`, Homebrew, or vendor installers.
+- **User-level config:**
+  - Claude Code: `~/.claude/settings.json`, `~/.claude.json` (account state, MCP servers, per-project
+    trust decisions), `~/.claude/` (session history, plugins, skills). `CLAUDE_CONFIG_DIR` relocates it.
+    Managed settings in a system directory (`managed-settings.json`) or MDM.
+  - Codex CLI: `~/.codex/config.toml` and profile files under `~/.codex/`.
+  - OpenCode: `~/.config/opencode/` (config and agent definitions); project `opencode.json`.
+  - Continue: `~/.continue/` (config and `permissions.yaml` for the CLI).
+  - Cursor: `~/.cursor/` (including `permissions.json` for terminal and MCP allowlists).
+  - Aider: `.aider.conf.yml` in the home directory, plus `.aider*` history files in projects.
+- **Repository-level files** (each one is input an agent may load):
+  - Claude Code: `CLAUDE.md`, `.claude/settings.json`, `.claude/settings.local.json`, `.claude/`
+    agents, skills, commands, and hooks; `.mcp.json`.
+  - Codex and others: `AGENTS.md`, `.codex/`, `.agents/`.
+  - OpenCode: `opencode.json`, `.opencode/`.
+  - Continue: `.continue/`.
+  - Cursor: `.cursor/` (rules, MCP config), `.cursorrules`, `.cursorignore`.
+  - Aider: `.aider.conf.yml`, `.env` (Aider loads `.env` from the git root by default).
+  - Editors and containers: `.vscode/settings.json`, `.vscode/tasks.json`, `.devcontainer/`.
+- **Local servers:** some tools can run a local HTTP server or remote-control endpoint (OpenCode has a
+  server mode; several tools expose IDE bridges on loopback). If `ss`/`lsof` shows an agent process
+  listening, record the bind address and whether it requires authentication.
+
+## gpu-hosts
+
+**Use for:** Security assessment, hardening, remediation, and incident response for hosts with NVIDIA (and, more generally, AMD) GPUs used for AI/ML work, notebooks, or media transcoding. Use when auditing a GPU workstation or server, reviewing driver and CUDA support status and NVIDIA security bulletins (driver, Container Toolkit, GPU Operator), which containers get the GPU and how, privileged GPU containers, DCGM/dcgm-exporter exposure, Jupyter and similar notebooks or ML dashboards left open on the network, GPU sharing between untrusted workloads (MIG, time-slicing, MPS, vGPU, passthrough), or remote access to the workstation, or when a GPU host may have been compromised or used for cryptomining.
+
+**Applies to:** NVIDIA GPU drivers (production and long-term-support branches), CUDA, NVIDIA Container Toolkit, GPU Operator and device plugin, DCGM, Jupyter; AMD ROCm generically (verify each live version) · **Finding prefix:** `GPU` · **Version:** 1.0 · **Bundle:** `dist/gpu-hosts.md`
+
+### Detection
+
+Hints for recognizing this product during a network inventory (used by the `full-assessment` skill).
+Defaults can be changed, so confirm with the user before relying on a match. A GPU itself isn't visible
+on the network; the services around it are.
+
+- **Jupyter:** TCP 8888 by default (next free port above it for additional servers), page title "Jupyter
+  Notebook", "JupyterLab", or "Home Page - Select or create a notebook"; `/api` returns a JSON version
+  string. A login page asking for a token or password is the default; a file tree with no login is a
+  finding. JupyterHub defaults to TCP 8000.
+- **NVIDIA DCGM:** `dcgm-exporter` serves Prometheus metrics on TCP 9400 (`/metrics` with `DCGM_FI_`
+  metric names); the standalone `nv-hostengine` uses TCP 5555. Neither has authentication.
+- **ML dashboards often on GPU boxes:** TensorBoard (6006), MLflow (5000), Ray dashboard (8265), Gradio
+  apps (7860), NVIDIA Triton Inference Server (8000 HTTP, 8001 gRPC, 8002 metrics), code-server (8080).
+  Verify each tool's own documentation; ports are configurable.
+- **Model servers** (Ollama, vLLM, ComfyUI, and similar): see the Detection section of
+  [local LLM servers](../local-llm/SKILL.md).
+- **Remote access:** RDP (3389), VNC (5900), SSH (22), NoMachine (4000), and game-streaming hosts such as
+  Sunshine (web UI on 47990 by default; verify) are common on GPU workstations.
+- **MAC address vendors:** no GPU signal. The host's NIC vendor (or a workstation maker such as Dell, HP,
+  Lenovo, or Supermicro) is what shows. NVIDIA (Mellanox) OUIs appear on NVIDIA ConnectX/BlueField
+  network adapters, which suggests a data-center-class GPU server.
+
 ## local-llm
 
-**Use for:** Security assessment, hardening, remediation, and incident response for self-hosted LLM and generative-AI servers: Ollama, llama.cpp server, LM Studio's server, vLLM, Open WebUI, ComfyUI, Stable Diffusion web UIs (AUTOMATIC1111, Forge, and similar Gradio apps), and text-to-speech web apps. Use when auditing a machine that serves models, reviewing its API exposure, bind addresses, tunnels, accounts, model and extension supply chain, stored cloud API keys, GPU abuse, or prompt and chat privacy, or when one of these servers may have been compromised.
+**Use for:** Security assessment, hardening, remediation, and incident response for self-hosted LLM and generative-AI servers and model gateways: Ollama, llama.cpp server, LM Studio's server, vLLM, LocalAI, Open WebUI, ComfyUI, Stable Diffusion web UIs (AUTOMATIC1111, Forge, and similar Gradio apps), text-to-speech web apps, and the LiteLLM proxy (AI gateway). Use when auditing a machine that serves models, reviewing its API exposure, bind addresses, tunnels, accounts, model and extension supply chain, stored cloud API keys, gateway master and virtual keys, budgets, GPU abuse, or prompt and chat privacy, or when one of these servers may have been compromised.
 
-**Applies to:** Ollama, llama.cpp server, LM Studio, vLLM, Open WebUI, ComfyUI, Gradio-based image and speech web UIs (verify each live version; defaults change often) · **Finding prefix:** `LLM` · **Version:** 1.0 · **Bundle:** `dist/local-llm.md`
+**Applies to:** Ollama, llama.cpp server, LM Studio, vLLM, LocalAI, Open WebUI, ComfyUI, Gradio-based image and speech web UIs, LiteLLM proxy (verify each live version; defaults change often) · **Finding prefix:** `LLM` · **Version:** 1.1 · **Bundle:** `dist/local-llm.md`
 
 ### Detection
 
@@ -23,6 +115,14 @@ Defaults can be changed, so confirm with the user before relying on a match.
 - **vLLM:** OpenAI-compatible server; vendor examples commonly use port 8000 (check the live command
   line). `/version`, `/health`, and `/metrics` answer without the API key.
 - **LM Studio:** port 1234 by default; OpenAI-compatible `GET /v1/models`.
+- **LocalAI:** TCP 8080 by default (`LOCALAI_ADDRESS`, default `:8080`, all interfaces). The same port
+  serves the web UI, the OpenAI-compatible API (`GET /v1/models`), and `/metrics` unless disabled. Port
+  8080 is also used by Open WebUI inside its container and older llama.cpp builds, so confirm by page
+  content, not the port alone. Images are `localai/localai` (verify current registry names).
+- **LiteLLM proxy:** TCP 4000 by default. The Admin UI is at `/ui`. Swagger API docs are served by the
+  proxy unless `NO_DOCS`, `NO_REDOC`, and `NO_OPENAPI` are set. `GET /health/liveliness` and
+  `GET /health/readiness` answer without a key (current releases keep the readiness payload low-detail).
+  A Postgres server (5432) is usually alongside.
 - **Open WebUI:** port 8080 inside the container. Vendor Docker examples publish it on host port 3000.
   The page title is "Open WebUI". `GET /api/version` returns its version.
 - **ComfyUI:** TCP 8188. `GET /system_stats` returns ComfyUI, Python, and PyTorch versions and GPU/VRAM
@@ -67,6 +167,140 @@ Defaults can be changed, so confirm with the user before relying on a match.
 - **Embedding and model backends** that RAG stacks use (Ollama on 11434 and similar) are covered by the
   [local-llm](../local-llm/SKILL.md) skill.
 - MCP servers don't announce themselves over mDNS or SSDP. MAC vendors don't help.
+
+## cloud-providers
+
+**Use for:** Security assessment, hardening, remediation, and incident response for small personal, homelab, and small-office accounts on public cloud providers: Amazon Web Services, Microsoft Azure, Google Cloud, DigitalOcean, and Linode/Akamai Cloud. Covers root or owner account MFA and root access keys, IAM users and long-lived access keys, budget and billing alerts (crypto-mining abuse), public storage buckets, security groups and firewalls open to the internet, publicly shared snapshots and images, API tokens, and keys leaked in code repositories. Discovery is read-only, through the providers' consoles and CLIs. Use when auditing a personal or homelab cloud account, after a surprise bill, or when a cloud key may have leaked or an account may have been compromised.
+
+**Applies to:** AWS (standalone accounts and small AWS Organizations), Microsoft Azure subscriptions with Microsoft Entra ID, Google Cloud projects with or without an organization, DigitalOcean teams, Linode/Akamai Cloud accounts (verify the live consoles and CLI versions; features and defaults change often) · **Finding prefix:** `CLD` · **Version:** 1.0 · **Bundle:** `dist/cloud-providers.md`
+
+### Detection
+
+Hints for recognizing use of these providers from a device or network (used by the `full-assessment`
+skill). Confirm with the user before relying on a match. Note only that a file exists and its
+permissions; never read credential files.
+
+- **CLI configuration on a computer:** `~/.aws/config` and `~/.aws/credentials` (AWS CLI); `~/.azure/`
+  (Azure CLI); `~/.config/gcloud/` (gcloud; `%APPDATA%\gcloud` on Windows); `doctl`'s `config.yaml`
+  under the user's config directory (on macOS, `~/Library/Application Support/doctl/`);
+  `~/.config/linode-cli` (Linode CLI).
+- **Installed tools:** `aws`, `az`, `gcloud`, `doctl`, `linode-cli`, `terraform`, `pulumi`; provider
+  SDKs in project folders; Terraform state (`terraform.tfstate`) and `.env` files that may hold keys.
+- **DNS names in resolver logs:** `amazonaws.com` and `signin.aws.amazon.com`; `management.azure.com`
+  and `portal.azure.com`; `googleapis.com` and `console.cloud.google.com`; `api.digitalocean.com` and
+  `digitaloceanspaces.com`; `api.linode.com` and `linodeobjects.com`.
+- **DNS records the user owns** pointing at cloud resources: CNAMEs to `s3.amazonaws.com`,
+  `cloudfront.net`, `azurewebsites.net`, `blob.core.windows.net`, `storage.googleapis.com`,
+  `ondigitalocean.app`, or `linodeobjects.com` (also a subdomain-takeover check; see
+  [domain registrars](../domain-registrars/SKILL.md)).
+- **On cloud VMs:** provider guest agents (for example the SSM agent, Azure VM agent, Google guest
+  agent, DigitalOcean droplet agent, or Linode's Lish and metadata services).
+
+## cloud-storage
+
+**Use for:** Security assessment, hardening, remediation, and incident response for consumer cloud storage and sync services: Dropbox, Microsoft OneDrive, Google Drive, and Apple iCloud (iCloud Drive, iCloud Photos, and Advanced Data Protection). Covers shared links and who has access, sync clients on each device, connected apps, version history and ransomware recovery, family sharing, and account recovery. Use when reviewing what a household or small office has shared from its cloud storage, checking which devices and apps can reach it, planning ransomware recovery, or when a cloud storage account may have been compromised or files were encrypted or deleted.
+
+**Applies to:** Dropbox Basic/Plus/Essentials/Family; OneDrive with personal Microsoft accounts and Microsoft 365 Family/Personal; Google Drive with consumer Google accounts and Google One; Apple iCloud with iCloud+ (verify the live web apps and clients; features and retention vary by plan and change often) · **Finding prefix:** `CLS` · **Version:** 1.0 · **Bundle:** `dist/cloud-storage.md`
+
+### Detection
+
+Hints for recognizing these services on a device or network (used by the `full-assessment` skill).
+Confirm with the user before relying on a match.
+
+- **Installed clients and processes:** Dropbox (`Dropbox` process); OneDrive (`OneDrive.exe` on
+  Windows, OneDrive app on macOS); Google Drive for desktop (`GoogleDriveFS`); iCloud for Windows, or
+  iCloud Drive built into macOS and iOS.
+- **Sync folders:** a `Dropbox` folder in the home folder or under `~/Library/CloudStorage/` on macOS;
+  `%UserProfile%\OneDrive` on Windows; `~/Library/CloudStorage/` entries for OneDrive and Google Drive on
+  macOS (File Provider integration); `~/Library/Mobile Documents/com~apple~CloudDocs` for iCloud Drive.
+- **LAN discovery:** Dropbox LAN sync broadcasts on UDP port 17500 and transfers over TCP ports
+  17599–17609 (vendor-documented), which reveals Dropbox clients on the local network.
+- **DNS names in resolver logs:** `dropbox.com`, `dropboxapi.com`, `dropboxusercontent.com`;
+  `onedrive.live.com`, `storage.live.com`; `drive.google.com`, `drive.usercontent.google.com`;
+  `icloud.com`, `icloud-content.com`.
+- **Phones:** camera upload or photo backup turned on in Dropbox, OneDrive, Google Photos, or iCloud
+  Photos (see [phones](../../mobile/phones/SKILL.md)).
+
+## domain-registrars
+
+**Use for:** Security assessment, hardening, remediation, and incident response for domain registrar accounts and the domains they hold: Namecheap, GoDaddy, and other registrars (Cloudflare DNS has its own skill). Covers registrar account MFA and contact email security, registrar and transfer locks, registry lock, auto-renew and expiry, WHOIS/RDAP privacy, nameserver and DNS record review (dangling records and subdomain takeover), DNSSEC, CAA, API keys, and delegated access. Use when auditing a household's or small office's domains, before a domain expires or moves, or when a domain may have been hijacked, transferred away, or had its DNS changed.
+
+**Applies to:** ICANN-accredited registrars for gTLDs (for example Namecheap, GoDaddy, Porkbun, Squarespace Domains, Cloudflare Registrar) and ccTLD registrars; registrar-hosted DNS (verify the live registrar dashboard and current ICANN and registry policies; menus and policies change) · **Finding prefix:** `REG` · **Version:** 1.0 · **Bundle:** `dist/domain-registrars.md`
+
+### Detection
+
+Hints for recognizing a registrar or DNS host from public data (used by the `full-assessment` skill).
+These are vendor-documented defaults; confirm with the user.
+
+- **RDAP or WHOIS registration data** names the sponsoring registrar, the registration and expiry dates,
+  the EPP status codes (locks), and the nameservers. RDAP is queried over HTTPS; a bootstrap service such
+  as `rdap.org` redirects to the right registry.
+- **Nameserver patterns:** Namecheap BasicDNS uses `dns1.registrar-servers.com` and
+  `dns2.registrar-servers.com`; GoDaddy uses `nsNN.domaincontrol.com`; Cloudflare uses
+  `<name>.ns.cloudflare.com`; Amazon Route 53 uses `ns-NNN.awsdns-NN` names under several TLDs.
+- **Registrar features visible in DNS:** parking pages, URL forwarding (an A record to the registrar's
+  redirect service), and registrar email forwarding (MX records pointing at the registrar's forwarding
+  hosts).
+- **On devices:** a registrar's mobile app, browser bookmarks, renewal or expiry emails, and DDNS or ACME
+  DNS-01 clients configured with a registrar API (configuration files naming the registrar's API host).
+
+## productivity-suites
+
+**Use for:** Security assessment, hardening, remediation, and incident response for Microsoft 365 (Business plans and consumer Family/Personal) and Google Workspace used by a small office or a household with its own domain. Covers admin accounts and MFA enforcement (security defaults, 2-Step Verification), legacy authentication, mail forwarding and inbox rules, third-party OAuth app consents, external sharing defaults, audit logs, SPF/DKIM/DMARC, break-glass admin accounts, and account recovery. Use when auditing a Microsoft 365 tenant or Google Workspace domain, reviewing a family's email accounts, or when a mailbox or admin account may have been compromised (business email compromise).
+
+**Applies to:** Microsoft 365 Business Basic/Standard/Premium and Microsoft Entra ID Free/P1; Microsoft 365 Family/Personal (consumer Microsoft accounts); Google Workspace Business editions and consumer Google accounts (verify the live admin consoles; menus and licensing change often) · **Finding prefix:** `SUITE` · **Version:** 1.0 · **Bundle:** `dist/productivity-suites.md`
+
+### Detection
+
+Hints for recognizing these services from a domain, network, or device (used by the `full-assessment`
+skill). They describe vendor-documented records and endpoints; confirm with the user before relying on a
+match.
+
+- **MX records:** Microsoft 365 uses `<domain-label>.mail.protection.outlook.com`. Google Workspace uses
+  `smtp.google.com` (newer setups) or the `aspmx.l.google.com` family (older setups). An MX pointing
+  elsewhere means a gateway or a different mail provider.
+- **TXT records:** an SPF record including `spf.protection.outlook.com` (Microsoft 365) or
+  `_spf.google.com` (Google); domain-verification values beginning `MS=` (Microsoft) or
+  `google-site-verification=` (Google).
+- **DKIM selectors:** Microsoft 365 publishes CNAMEs at `selector1._domainkey` and `selector2._domainkey`;
+  Google Workspace's default selector is `google._domainkey`. Missing selectors suggest DKIM was never
+  turned on.
+- **Other DNS names:** an `autodiscover` CNAME to `autodiscover.outlook.com` (Microsoft 365); `mail`,
+  `calendar`, or `drive` CNAMEs to `ghs.googlehosted.com` (Google custom URLs).
+- **On devices:** Outlook, Teams, or OneDrive signed in with a work account; Google Drive for desktop or
+  Google Workspace Sync; mobile mail apps with a work profile. On Windows, a work account under Settings >
+  Accounts > Access work or school.
+- **Network traffic:** DNS lookups for `login.microsoftonline.com` and `outlook.office365.com`
+  (Microsoft 365), or `accounts.google.com` and `mail.google.com` (Google).
+
+## game-consoles
+
+**Use for:** Security, privacy, and family-safety assessment, hardening, remediation, and incident response for game consoles and gaming handhelds: PlayStation, Xbox, Nintendo Switch and Switch 2, and Steam Deck or other SteamOS devices. Use when reviewing console and platform-account security (2-step verification, passkeys, stored payment methods, purchase PINs), family and parental controls, voice and text chat privacy, UPnP and NAT-type requests on the router, remote play, update status, SteamOS desktop mode and SSH, or when a gaming account may have been taken over or a household member was targeted by a gaming scam.
+
+**Applies to:** Current console and handheld platforms: PlayStation 4/5, Xbox One and Series X|S, Nintendo Switch and Switch 2, Steam Deck and other SteamOS devices (verify the live system software; menus and account features change often) · **Finding prefix:** `GAME` · **Version:** 1.0 · **Bundle:** `dist/game-consoles.md`
+
+### Detection
+
+Hints for recognizing consoles during a network inventory (used by the `full-assessment` skill). Ports
+listed are vendor-documented or commonly reported; confirm with the user before relying on a match, and
+never interact with these services beyond observing that they exist.
+
+- **MAC address vendors (OUI)** registered to Sony Interactive Entertainment, Microsoft, Nintendo, or
+  Valve are the strongest hint; handhelds from other makers show their Wi-Fi module's vendor. DHCP
+  hostnames often name the console (for example a PS5 or Xbox default name).
+- **UPnP port mappings** on the router that name the console or a game, and SSDP (UDP 1900) M-SEARCH
+  requests from the console looking for the router's UPnP service.
+- **Outbound traffic patterns:** Xbox network uses UDP 88, 500, 3074, 3544, and 4500 and TCP 3074
+  (Microsoft-documented port list; verify on the live page). PlayStation Network commonly uses TCP and
+  UDP around 3478–3480 (commonly reported; Sony's current list may differ). Nintendo recommends wide UDP
+  ranges for some games (verify on Nintendo's network-troubleshooting pages).
+- **Remote play and local discovery:** Steam Remote Play uses UDP 27031–27036 and TCP 27036 on the
+  local network, with UDP 27036 for discovery (Valve-documented); PlayStation Remote Play and Xbox
+  remote features use their own discovery and streaming ports (commonly reported; not vendor-verified
+  here).
+- **Steam Deck in desktop mode** with SSH started shows **TCP 22** open; in Gaming Mode it normally
+  listens on nothing beyond Steam's local discovery and streaming.
+- Consoles sometimes appear as DLNA/UPnP media renderers or Cast targets when media apps are installed.
 
 ## smart-tvs
 
@@ -128,6 +362,68 @@ Defaults can be changed, so confirm with the user before relying on a match.
 - **Podman:** `podman` and `conmon` processes; `gvproxy` for a Podman machine on macOS or Windows.
 - **MAC address vendors:** none specific. Containers on macvlan or ipvlan networks appear on the LAN with
   their own addresses and locally administered or generated MACs, which can look like unknown devices.
+
+## code-hosting-and-ci
+
+**Use for:** Security assessment, hardening, remediation, and incident response for code hosting and CI/CD: GitHub, GitLab (SaaS and self-managed), Gitea, and Forgejo, plus GitHub Actions, GitLab CI and runners, Gitea/Forgejo Actions runners, and Jenkins. Use when auditing account 2FA, personal access tokens and deploy keys, branch protection, secret scanning and push protection, public repositories that leak configs, workflow permissions, pull_request_target, unpinned third-party actions, CI secrets, self-hosted runners on a home or office network, the Jenkins script console, or dependency and image scanning, or when a repository, token, runner, or CI server may have been compromised.
+
+**Applies to:** GitHub.com and GitHub Enterprise; GitLab.com and GitLab self-managed; Gitea; Forgejo; GitHub Actions, GitLab Runner, Gitea/Forgejo runners, Jenkins (verify each live version and plan; features differ by edition) · **Finding prefix:** `GIT` · **Version:** 1.0 · **Bundle:** `dist/code-hosting-and-ci.md`
+
+### Detection
+
+Hints for recognizing this product during a network inventory (used by the `full-assessment` skill).
+Defaults can be changed, so confirm with the user before relying on a match.
+
+- **Gitea / Forgejo:** web UI on 3000 by default (`HTTP_PORT`), often published on 3000 or behind a
+  reverse proxy on 443; built-in SSH server off by default (`START_SSH_SERVER`), container images often
+  publish SSH on 22 or 2222. Page title and footer name Gitea or Forgejo (default app names; observed,
+  can be changed). The API answers at `/api/v1/version`, and Swagger docs at `/api/swagger` when
+  `ENABLE_SWAGGER` is on (vendor default).
+- **GitLab self-managed:** web UI on 80/443 (Omnibus) with a sign-in page titled for GitLab; git over SSH
+  on 22; the container registry often on a separate port such as 5050 (a common documented example, not
+  a fixed default). `/api/v4/version` requires authentication on current versions (observed; verify).
+  `/-/health` and `/-/readiness` may answer from allowed IPs only.
+- **Jenkins:** web UI on 8080 by default; responses carry an `X-Jenkins` version header (observed); the
+  TCP agent listener is disabled in most packages but the official Docker image exposes 50000; WebSocket
+  agents need no extra port. UDP/mDNS discovery was removed in Jenkins 2.220.
+- **GitHub Enterprise Server:** web UI on 443, management console on 8443, git over SSH on 22 and
+  administrative SSH on 122 (vendor-documented for GHES; verify for the installed release).
+- **Runners** (GitHub Actions runner, GitLab Runner, `forgejo-runner`, `act_runner`) have no inbound
+  port; they poll the forge outbound. Find them in the process list and service manager, as containers,
+  or in the forge's runner settings. GitLab Runner's config is `config.toml` (commonly under
+  `/etc/gitlab-runner/`); the GitHub runner keeps a `.runner` and `.credentials` file in its install
+  directory; Forgejo and Gitea runners keep a `.runner` state file.
+- **Local tooling:** `~/.gitconfig`, `~/.git-credentials` (plain-text credential store), `gh` CLI config
+  and `glab` config directories, `~/.ssh/` keys used for git, and `.github/`, `.gitlab-ci.yml`,
+  `.forgejo/` or `.gitea/` workflow directories, and `Jenkinsfile` in repositories.
+- No vendor MAC address applies; these run on general-purpose hosts.
+
+## infrastructure-as-code
+
+**Use for:** Security assessment, hardening, remediation, and incident response for infrastructure-as-code tooling: Ansible (vault, inventories, become, Galaxy collections and roles) and Terraform and OpenTofu (state files, remote backends and locking, state and plan encryption, provider credentials, registry modules and providers, plan output). Use when auditing an IaC repository or control machine, reviewing where secrets live in inventories, variables, state, or plans, checking backend access and locking, or reviewing third-party modules and collections, or when IaC credentials, state, or a control node may have been exposed or compromised.
+
+**Applies to:** ansible-core and Ansible community packages; Terraform 1.x; OpenTofu 1.x (verify each installed version; state encryption, ephemeral values, and backend options vary by version) · **Finding prefix:** `IAC` · **Version:** 1.0 · **Bundle:** `dist/infrastructure-as-code.md`
+
+### Detection
+
+Hints for recognizing this tooling on a machine or in a repository (used by the `full-assessment`
+skill). IaC tools have no listening ports of their own.
+
+- **Ansible:** `ansible`, `ansible-playbook`, `ansible-vault`, `ansible-galaxy` on `PATH`; `ansible.cfg`
+  (in the project, `~/.ansible.cfg`, or `/etc/ansible/ansible.cfg`), the `ANSIBLE_CONFIG` variable;
+  inventories (`hosts`, `inventory/`, `*.ini`, `*.yml` with `all:` and `hosts:`), `group_vars/`,
+  `host_vars/`, `requirements.yml`, `collections/` and `roles/` directories, `~/.ansible/collections`.
+  Vault files begin with `$ANSIBLE_VAULT;` (vendor-documented header).
+- **Terraform / OpenTofu:** `terraform` or `tofu` on `PATH`; `*.tf`, `*.tofu`, `*.tfvars`,
+  `*.auto.tfvars`, `.terraform/` directories, `.terraform.lock.hcl`, `terraform.tfstate` and
+  `terraform.tfstate.backup`, saved plan files (any name; often `*.tfplan` or `plan.out`),
+  `~/.terraformrc` or `terraform.rc` (CLI config, may hold registry tokens), and
+  `~/.terraform.d/credentials.tfrc.json` (stored by `terraform login`).
+- **Self-hosted IaC front ends:** AWX (web UI behind its own ingress), Ansible Semaphore (web UI on 3000
+  by default; observed, verify), Atlantis (web UI on 4141 by default; observed, verify). Confirm with the
+  user.
+- **Processes and schedules:** cron entries or systemd timers that call `ansible-playbook`, `ansible-pull`,
+  `terraform apply`, or `tofu apply`.
 
 ## cloudflare
 
@@ -193,6 +489,73 @@ logs. Defaults can be changed, so confirm with the user before relying on a matc
 - **Public footprint:** certificate transparency entries for `*.ts.net` names (Tailscale HTTPS), the
   user's domains pointed at a frp or Pangolin server, and published URLs found in docs, chat, or webhooks.
 
+## out-of-band-management
+
+**Use for:** Security assessment, hardening, remediation, and incident response for out-of-band management controllers: server BMCs (Dell iDRAC, HPE iLO, Supermicro IPMI/BMC, Lenovo XCC, AMI MegaRAC and OpenBMC boards, generic IPMI and Redfish) and Intel AMT/vPro on PCs. Use when auditing a server's or PC's management controller, reviewing BMC accounts, default credentials, IPMI over LAN (RAKP hash disclosure, cipher 0), Redfish API accounts, virtual console and virtual media, management-network placement, firmware support status on old hardware, or AMT provisioning and MEBx settings, or when a BMC or AMT controller may have been compromised.
+
+**Applies to:** Dell iDRAC 7-10, HPE iLO 4-7, Supermicro BMCs, other IPMI 2.0 and Redfish BMCs, Intel AMT/vPro (verify the live firmware; features and defaults vary by generation) · **Finding prefix:** `OOB` · **Version:** 1.0 · **Bundle:** `dist/out-of-band-management.md`
+
+### Detection
+
+Hints for recognizing this product during a network inventory (used by the `full-assessment` skill).
+Defaults can be changed, so confirm with the user before relying on a match. Detection means recording
+what already answered in an approved inventory; don't send IPMI or AMT requests beyond that.
+
+- **IPMI over LAN:** UDP 623 (RMCP/RMCP+). An answer from a host on a user or guest network is itself a
+  finding to raise with the user.
+- **Web UI and Redfish:** HTTPS 443 (often HTTP 80 redirecting to it) with a page title or self-signed
+  certificate naming iDRAC, iLO, Supermicro, MegaRAC, XClarity Controller, or OpenBMC. Redfish answers at
+  `/redfish/v1` on the same port; the service root (readable without credentials on many BMCs) names the
+  vendor and Redfish version.
+- **Console and media ports** (vendor defaults; verify against the vendor's port table for the
+  generation): iDRAC virtual console and VNC on TCP 5900/5901; iLO remote console and virtual media on
+  TCP 17990 and 17988; Supermicro iKVM on TCP 5900 with virtual media on separate vendor ports. SSH on 22
+  and, on old firmware, Telnet on 23 may also answer. SNMP on UDP 161 may report the BMC model in
+  `sysDescr`.
+- **Intel AMT:** TCP 16992 (HTTP, WS-Management) and 16993 (HTTPS), 16994 and 16995 (redirection for
+  serial-over-LAN, storage redirection, and KVM; 16995 over TLS), and RMCP on UDP 623/664. Intel has
+  deprecated the non-TLS ports, and newer platforms refuse remote connections to them (verify for the
+  platform's CSME version). AMT answers on the PC's own address and MAC, so the host and its AMT look like
+  one device.
+- **Discovery announcements:** some BMCs answer SSDP or Redfish SSDP discovery, and HPE iLO can be found by
+  HPE's discovery tools. Many send nothing unsolicited.
+- **MAC address vendors (OUIs):** Dell, Hewlett Packard Enterprise (older units Hewlett Packard), Super
+  Micro Computer, Lenovo, ASRockRack/ASRock, Gigabyte, Quanta, Inventec, Tyan/MiTAC, or the BMC chip maker
+  (ASPEED). BMCs usually have their own MAC, often one higher or lower than the host's first NIC. Intel AMT
+  uses the host's Intel NIC MAC, so it shows Intel or the PC maker.
+
+## ups
+
+**Use for:** Security assessment, hardening, remediation, and incident response for network-connected UPS devices and their shutdown software: APC/Schneider Electric Network Management Cards and PowerChute (Serial Shutdown, Network Shutdown, legacy Business Edition), CyberPower RMCARD and PowerPanel, Eaton network cards and shutdown software, apcupsd, and Network UPS Tools (NUT: upsd, upsd.users, upsmon). Use when auditing a UPS management card or UPS software, reviewing default credentials, SNMP communities, NUT listening scope and monitor passwords, shutdown signaling, firmware advisories, or cloud connections, or when a UPS may have been tampered with or used to shut systems down.
+
+**Applies to:** APC NMC2/NMC3 and PowerChute, CyberPower RMCARD and PowerPanel, Eaton Network-M2/M3 and shutdown software, apcupsd, Network UPS Tools 2.8.x (verify each live version) · **Finding prefix:** `UPS` · **Version:** 1.0 · **Bundle:** `dist/ups.md`
+
+### Detection
+
+Hints for recognizing this product during a network inventory (used by the `full-assessment` skill).
+Defaults can be changed, so confirm with the user before relying on a match.
+
+- **Management cards:** web UI on HTTP 80 and/or HTTPS 443, with a page title, login page, or self-signed
+  certificate naming APC, Schneider Electric, Network Management Card, CyberPower, RMCARD, Eaton, or
+  Network-M2/M3. Older cards may also answer FTP 21, Telnet 23, and SSH 22. APC cards can offer Modbus TCP
+  on 502 when it is enabled.
+- **SNMP:** UDP 161. `sysDescr` on APC cards typically begins "APC Web/SNMP Management Card" and lists
+  firmware modules; CyberPower and Eaton cards report their own names. A card that answers SNMPv1 or v2c
+  with a default community is itself a finding (don't test communities; record what an approved
+  inventory saw).
+- **APC PowerChute:** the NMC and PowerChute Network Shutdown communicate over UDP 3052; PCNS's web UI is on
+  TCP 6547 (HTTPS), with TCP 3052 redirecting to it (Schneider FAQ; verify on the installed version).
+  PowerChute Serial Shutdown also has a local web UI (verify its port in the user guide).
+- **CyberPower PowerPanel Business/Personal:** a local web UI on the host (vendor-documented port; verify
+  in the user guide for the installed version).
+- **Network UPS Tools:** `upsd` on TCP 3493 (vendor default). It answers plain-text protocol commands such
+  as `VER` and `LIST UPS`.
+- **apcupsd:** its network information server (NIS) on TCP 3551 (default), which hands out status to any
+  client without authentication.
+- **MAC address vendors (OUIs):** American Power Conversion or Schneider Electric, Cyber Power Systems,
+  Eaton, Tripp Lite, Vertiv/Liebert/Emerson. USB-only UPSes show no network presence of their own; look for
+  the host software instead.
+
 ## home-assistant
 
 **Use for:** Security assessment, hardening, remediation, and incident response for Home Assistant (Home Assistant OS, Container, and the unsupported Supervised and Core installs). Use when auditing a Home Assistant instance, reviewing its remote access (Home Assistant Cloud, reverse proxies, tunnels, port forwards), users, MFA, access tokens, auth providers, secrets and backups, apps (add-ons), HACS or Marketplace custom integrations, cloud-connected integrations, security-sensitive automations, or when a Home Assistant instance may have been compromised.
@@ -216,6 +579,28 @@ Defaults can be changed, so confirm with the user before relying on a match.
 - MAC vendor (OUI) of the board maker (for example a single-board-computer vendor) on appliances; a
   hypervisor vendor on VMs. Not a reliable signal on its own.
 - Outbound connections to the vendor's cloud relay when Home Assistant Cloud is enabled.
+
+## homebridge
+
+**Use for:** Security assessment, hardening, remediation, and incident response for Homebridge, the Node.js bridge that exposes non-HomeKit devices to Apple Home, including the Homebridge UI, the Homebridge Raspberry Pi image, the apt/hb-service install, and Docker. Use when auditing a Homebridge server's web UI (default port 8581) and its credentials, the npm plugin supply chain, child bridges, HomeKit pairing and setup codes, insecure (accessory control) mode, the service account and sudo rights, backups that contain pairing keys and plugin secrets, or when a Homebridge server may have been compromised.
+
+**Applies to:** Homebridge 1.x and 2.x with the Homebridge UI (homebridge-config-ui-x) 4.x and 5.x (verify the live versions; Homebridge 2 requires newer Node.js releases) · **Finding prefix:** `HB` · **Version:** 1.0 · **Bundle:** `dist/homebridge.md`
+
+### Detection
+
+Hints for recognizing this product during a network inventory (used by the `full-assessment` skill).
+Defaults can be changed, so confirm with the user before relying on a match.
+
+- **TCP 8581:** the Homebridge UI's documented default port, plain HTTP unless TLS is set up; the page
+  title is Homebridge and shows a login form (or, if `auth` is `none`, the dashboard directly, which is
+  itself a finding).
+- **mDNS/DNS-SD:** the main bridge and each child bridge advertise a HomeKit Accessory Protocol service,
+  `_hap._tcp`, on UDP 5353, each on its own TCP port (the main bridge's port is set in `config.json`;
+  child bridges get their own). The Raspberry Pi image also answers as `homebridge.local`.
+- **Several `_hap._tcp` services from one IP address** are a strong hint of a bridge with child bridges.
+- The host is usually a Raspberry Pi, mini PC, NAS, or Docker host: a MAC vendor (OUI) registered to
+  Raspberry Pi is common but not specific to Homebridge.
+- Often found near Home Assistant (TCP 8123) and an MQTT broker (TCP 1883/8883).
 
 ## mqtt
 
@@ -282,6 +667,98 @@ relying on a match, and **never** interact with these services beyond observing 
 - **Open setup access points:** an unconfigured or factory-reset device often broadcasts its own Wi-Fi
   network (for example a `shelly...`, `tasmota-...`, or vendor-named SSID). Tasmota documents a fallback
   access point when Wi-Fi fails. An unexpected open SSID nearby may be a device waiting to be claimed.
+
+## identity-providers
+
+**Use for:** Security assessment, hardening, remediation, and incident response for self-hosted single sign-on and identity providers in homelabs and small offices: Authentik, Authelia, and Keycloak. Use when reviewing admin console exposure, bootstrap and admin accounts, outposts and forward-auth integration with reverse proxies (Traefik, nginx, Caddy, Nginx Proxy Manager), access-control rules, OIDC and SAML clients (client secrets, redirect URI validation, PKCE), session and 2FA policy, password reset and enrollment flows, LDAP or Active Directory sources, secrets and signing keys, backups, and updates, or when an identity provider or the apps behind it may have been compromised.
+
+**Applies to:** Authentik (supported release lines), Authelia 4.x, and Keycloak (current releases, Quarkus-based distribution), self-hosted in containers, VMs, or Kubernetes; configuration keys, defaults, and admin UI layouts change between releases, so verify on the live system and the version's documentation · **Finding prefix:** `IDP` · **Version:** 1.0 · **Bundle:** `dist/identity-providers.md`
+
+### Detection
+
+Hints for recognizing identity providers during a network inventory (used by the `full-assessment`
+skill). Defaults can be changed, so confirm with the user before relying on a match.
+
+- **Authentik:** vendor-default ports 9000 (HTTP) and 9443 (HTTPS) on the server container; page title
+  "authentik" and paths `/if/flow/`, `/if/admin/`, `/if/user/`, and `/application/o/<slug>/` (OIDC);
+  forward-auth requests to `/outpost.goauthentik.io/` on protected app domains. Separate outposts
+  (proxy, LDAP on 3389/6636 inside the container, RADIUS) may run as their own containers (verify ports
+  on the version's outpost docs).
+- **Authelia:** vendor-default listen address `tcp://:9091/`; portal page title containing "Authelia"
+  (observed); `/api/health` returns 200; forward-auth endpoints under `/api/authz/` (current versions) or
+  `/api/verify` (legacy); OIDC discovery at `/.well-known/openid-configuration` when the OIDC provider is
+  enabled.
+- **Keycloak:** vendor-default HTTP port 8080 and HTTPS port 8443, management interface on 9000 (health
+  and metrics); root page "Welcome to Keycloak" on many versions (observed); `/admin/` console;
+  `/realms/<realm>/.well-known/openid-configuration`; response cookies such as `KEYCLOAK_SESSION` and
+  `AUTH_SESSION_ID` (observed).
+- **Any IdP:** OIDC discovery documents (`/.well-known/openid-configuration`), SAML metadata endpoints,
+  and redirects from protected apps to a central `auth.`/`sso.`/`login.` hostname. Reverse-proxy
+  configuration referencing `forwardAuth`, `forward_auth`, or `auth_request`.
+- MAC address vendors don't apply; these run on general-purpose hosts and containers.
+
+## mfa
+
+**Use for:** Security assessment, hardening, remediation, and incident response for multi-factor authentication in a household or small office: hardware security keys (YubiKey and other FIDO2 keys, backup keys, PINs, discoverable credentials), passkeys (synced and device-bound), TOTP authenticator apps and their backups, Duo Security (Duo Free and paid editions, the Admin Panel, enrollment policy, bypass codes and bypass status), recovery codes, SMS and voice fallback, and push fatigue. Use when choosing or reviewing second factors for important accounts, checking that every person has a working backup factor and stored recovery codes, auditing a Duo deployment, or when an account's second factor may have been bypassed, phished, lost, or approved by mistake.
+
+**Applies to:** FIDO2/WebAuthn security keys (YubiKey 5 and Security Key series, and other certified keys), platform and synced passkeys (Apple, Google, Microsoft, password managers), TOTP authenticator apps, Duo Security (Free, Essentials, Advantage, Premier), and account recovery codes; feature names, firmware capabilities, and edition features change, so verify on the live device, app, or admin panel · **Finding prefix:** `MFA` · **Version:** 1.0 · **Bundle:** `dist/mfa.md`
+
+### Detection
+
+Hints for recognizing MFA components during an inventory (used by the `full-assessment` skill). MFA is
+mostly found by asking people and looking at account settings and installed apps, not by scanning.
+Confirm with the user before relying on a match.
+
+- **Security keys:** USB devices with a Yubico or other FIDO vendor ID on hosts (`ioreg -p IOUSB` on
+  macOS, `lsusb` on Linux, Device Manager on Windows; observed). Yubico Authenticator or YubiKey Manager
+  (`ykman`) installed. NFC keys are seen by phones, not networks.
+- **Authenticator apps:** installed apps on phones and desktops (Google Authenticator, Microsoft
+  Authenticator, Duo Mobile, Aegis, 2FAS, Ente Auth, Yubico Authenticator, and others); TOTP fields in a
+  password manager.
+- **Duo:** the Duo Mobile app; the Duo Universal Prompt during sign-in; Duo Authentication Proxy installed
+  on a server (Windows service or Linux daemon that relays RADIUS or LDAP to Duo; ports are configured by
+  the administrator, commonly RADIUS on UDP 1812); Duo for Windows Logon or Duo Unix (`login_duo`,
+  `pam_duo`) on hosts; outbound HTTPS to the customer's `api-<hostname>.duosecurity.com` API host (the
+  hostname is account-specific; record only that it exists).
+- **Passkeys:** listed in iCloud Keychain or the Passwords app, Google Password Manager, Windows Hello
+  settings, or the password manager.
+- No vendor-default listening ports exist for most of these; MAC address vendors don't apply.
+
+## password-managers
+
+**Use for:** Security assessment, hardening, remediation, and incident response for password managers used by a household, family, or small office: Bitwarden (cloud and self-hosted), Vaultwarden (self-hosted), 1Password, and KeePass or KeePassXC. Use when reviewing master password and account recovery, two-step login on the vault account, family or shared vault sharing, emergency access, exports and backups, a self-hosted Vaultwarden or Bitwarden server (admin token, signups, push and websocket notifications, exposure, backups of the data folder), or a KeePass database file, key file, sync location, and plugins, or when a vault, its server, or a device that unlocks it may have been compromised.
+
+**Applies to:** Bitwarden cloud and self-hosted (standard and Lite), Vaultwarden, 1Password (individual, Families, Teams, Business), KeePass 2.x and KeePassXC, on versions still receiving updates; feature names, plan tiers, and menu paths change, so verify on the live account, server, or app · **Finding prefix:** `PWM` · **Version:** 1.0 · **Bundle:** `dist/password-managers.md`
+
+### Detection
+
+Hints for recognizing password managers during a network inventory (used by the `full-assessment`
+skill). Cloud managers are recognized on devices and in DNS, not by scanning; self-hosted servers answer on
+the network. Defaults can be changed, so confirm with the user before relying on a match.
+
+- **Vaultwarden:** the container image listens on port 80 inside the container (8000 outside Docker;
+  vendor-documented default for `ROCKET_PORT`), usually published on another host port and fronted by a
+  reverse proxy on 443. The web vault is the Bitwarden web client, with Vaultwarden branding on recent
+  versions (observed; verify on the live page). It answers Bitwarden-compatible API paths such as
+  `/api/config` and `/identity/connect/token`, plus `/alive` (observed; not yet verified on every
+  version). Very old deployments used a separate websocket port 3012; current versions serve websocket
+  notifications on the main port (verify against the version's wiki page). A login page reachable at
+  `/admin` means the admin panel is enabled.
+- **Bitwarden self-hosted:** the standard deployment publishes 80 and 443 through its nginx container;
+  Bitwarden Lite listens on 8080 and 8443 inside the container by default (`BW_PORT_HTTP`,
+  `BW_PORT_HTTPS`, vendor-documented). The System Administrator Portal is at `/admin` and sends a
+  passwordless email link to listed administrators.
+- **Bitwarden cloud:** clients and DNS lookups for the vendor's US or EU vault domains; the Bitwarden
+  desktop app, browser extension, or mobile app installed.
+- **1Password:** the 1Password app, browser extension, or CLI (`op`) installed; DNS lookups for the vendor's
+  account domains (US, EU, or Canada region). A 1Password Connect server is a self-hosted container that
+  answers a REST API for automation; look for it among containers, not on the LAN.
+- **KeePass and KeePassXC:** installed applications; `.kdbx` (and possibly key) files in user folders or
+  synced storage. KeePassXC's browser integration talks to its extension through native messaging, not a
+  network port. KeePassXC can act as an SSH agent or a Secret Service provider on Linux.
+- **Browser-saved passwords** (Chrome, Edge, Firefox, Safari) and platform keychains (iCloud Keychain,
+  Google Password Manager) are password managers too; note them so domain K can cover them.
+- MAC address vendors don't help: these run on general-purpose hosts and containers.
 
 ## 3d-printers
 
@@ -401,9 +878,9 @@ Defaults can be changed, so confirm with the user before relying on a match.
 
 ## phones
 
-**Use for:** Security and privacy assessment, hardening, remediation, and incident response for cell phones: iPhone (iOS) and Android (Pixel, Samsung Galaxy, and other makers), personal and work phones, and phones used by family members and children. Use when reviewing a phone's OS version and support window, updates, screen lock, Find My or Find Hub, theft protections (Stolen Device Protection, Android Theft Protection and Identity Check), Lockdown Mode or Android Advanced Protection, Apple Account or Google Account security, SIM PIN and carrier protections against SIM swap and port-out, app permissions, accessibility and device admin apps, configuration profiles and MDM, sideloading, jailbreak or root, VPN and private DNS, Bluetooth, AirDrop, and Quick Share, backups, stalkerware and unwanted trackers, work profiles, or disposal and resale, or when a phone or its accounts may have been compromised, lost, or stolen.
+**Use for:** Security and privacy assessment, hardening, remediation, and incident response for cell phones and tablets: iPhone (iOS), iPad (iPadOS), and Android phones and tablets (Pixel, Samsung Galaxy, and other makers), personal and work devices, and phones and tablets used by family members and children, including shared family tablets. Use when reviewing a phone's or tablet's OS version and support window, updates, screen lock, Find My or Find Hub, theft protections (Stolen Device Protection, Android Theft Protection and Identity Check), Lockdown Mode or Android Advanced Protection, Apple Account or Google Account security, SIM PIN and carrier protections against SIM swap and port-out, app permissions, accessibility and device admin apps, configuration profiles and MDM, sideloading, jailbreak or root, VPN and private DNS, Bluetooth, AirDrop, and Quick Share, backups, stalkerware and unwanted trackers, work profiles, or disposal and resale, shared or family tablets (whose account the iPad is signed in to, Screen Time, Family Link and Kids Space, Android multiple users, guest mode, and restricted profiles, organization Shared iPad), or when a phone, a tablet, or its accounts may have been compromised, lost, or stolen.
 
-**Applies to:** iPhone on iOS and Android phones (Pixel, Samsung Galaxy, and other Google-certified devices) on versions still receiving security updates; feature names and menu paths change between releases and makers, so verify on the live device · **Finding prefix:** `PHN` · **Version:** 1.0 · **Bundle:** `dist/phones.md`
+**Applies to:** iPhone on iOS, iPad on iPadOS, and Android phones and tablets (Pixel, Pixel Tablet, Samsung Galaxy and Galaxy Tab, and other Google-certified devices) on versions still receiving security updates; feature names and menu paths change between releases, makers, and between phones and tablets, so verify on the live device · **Finding prefix:** `PHN` · **Version:** 1.1 · **Bundle:** `dist/phones.md`
 
 ### Detection
 
@@ -416,14 +893,20 @@ and inventory phones by asking the household, not by scanning.
   network by default. These are locally administered addresses with no vendor (OUI) match, so "unknown
   vendor" Wi-Fi clients are often phones. A phone's address can change when the network is forgotten and
   rejoined, when rotation is on, or after a reset, so it may appear as several devices over time.
-- **DHCP hostnames** are the best hint but are user-controlled: iPhones commonly send the device name
-  ("iPhone", or "<person>s-iPhone"-style names); Android phones commonly send the device name, which is
-  often the model ("Galaxy-…", "Pixel-…") or an `android-<hex>` string on older versions. Treat names that
+- **DHCP hostnames** are the best hint but are user-controlled: iPhones and iPads commonly send the
+  device name ("iPhone", "iPad", or "<person>s-iPad"-style names); Android phones and tablets commonly
+  send the device name, which is often the model ("Galaxy-…", "Galaxy-Tab-…", "Pixel-…",
+  "Pixel-Tablet") or an `android-<hex>` string on older versions. Treat names that
   include a person's name as personal data and don't copy them into reports.
 - **mDNS/Bonjour (UDP 5353):** iPhones may answer or announce Apple services such as
   `_companion-link._tcp` and `_apple-mobdev2._tcp` (Wi-Fi sync), especially when unlocked or charging.
   Android phones are usually quiet on mDNS unless an app is casting or sharing. A phone that answers
   nothing is normal.
+- **Tablets are easier to see than phones.** They usually stay at home, and a tablet on a dock or stand
+  (for example a Pixel Tablet in hub mode, or a wall-mounted dashboard tablet) stays on Wi-Fi around the
+  clock. A docked tablet that can receive casts may advertise a Cast service (`_googlecast._tcp`) over
+  mDNS; verify on the device. A tablet that never leaves the network and is never updated is a common
+  forgotten device.
 - **No listening services is normal.** Phones accept almost no inbound connections. An open port on a
   phone is unusual: it may be a debugging interface (Android wireless debugging), a hotspot, or an app's
   local server. Identify it with the user; never connect to it.
@@ -434,11 +917,64 @@ and inventory phones by asking the household, not by scanning.
   device lists (Apple Account devices, Google "Your devices", Find My or Find Hub) are better inventory
   sources than scanning.
 
+## logging-and-siem
+
+**Use for:** Security assessment, hardening, remediation, and incident response for log collection, SIEM, and automated-blocking tools: Wazuh (manager, indexer, dashboard, agents, active response), Graylog, Elasticsearch/ELK and OpenSearch, CrowdSec (Local API, bouncers, console), and Fail2ban. Also checks whether anything is being logged at all, retention, and log integrity. Use when auditing a log or SIEM stack, deciding whether logs would survive and reveal an attack, reviewing default accounts, agent enrollment, exposed search clusters, or automatic ban rules, or when a logging system may have been tampered with.
+
+**Applies to:** Wazuh 4.x and later, Graylog, Elasticsearch/Kibana 8.x and later, OpenSearch 2.x/3.x, CrowdSec Security Engine, Fail2ban (verify the live version of each) · **Finding prefix:** `SIEM` · **Version:** 1.0 · **Bundle:** `dist/logging-and-siem.md`
+
+### Detection
+
+Hints for recognizing this product during a network inventory (used by the `full-assessment` skill).
+Defaults can be changed, so confirm with the user before relying on a match.
+
+- **Wazuh:** agents connect to the manager on 1514/TCP; enrollment service on 1515/TCP; cluster daemon on
+  1516/TCP; server API on 55000/TCP (HTTPS); Wazuh indexer on 9200; Wazuh dashboard on 443 with a login
+  page naming Wazuh.
+- **Elasticsearch / OpenSearch:** HTTP API on 9200 returning a JSON banner with `cluster_name` and a
+  version block (Elasticsearch's tagline is "You Know, for Search"; OpenSearch reports a `distribution`
+  of `opensearch`), or a 401 with a `WWW-Authenticate` header if security is on; transport on 9300.
+  **Kibana** and **OpenSearch Dashboards** on 5601 with matching page titles.
+- **Graylog:** web UI and REST API on 9000 with a page titled "Graylog"; GELF inputs commonly on 12201
+  (TCP/UDP); syslog inputs on 514 or 1514.
+- **Logstash:** Beats input on 5044; monitoring API on 9600 (local by default).
+- **CrowdSec:** Local API on 8080 and Prometheus metrics on 6060, both bound to localhost in the default
+  configuration; a host serving `/v1/decisions` on 8080 is a LAPI.
+- **Syslog collectors:** 514/UDP or TCP, 6514/TCP (syslog over TLS).
+- **Fail2ban** has no network listener; recognize it from the host (process, `fail2ban-client`).
+- MAC address vendors don't help: these run on general-purpose servers, VMs, and containers.
+
+## monitoring
+
+**Use for:** Security assessment, hardening, remediation, and incident response for infrastructure monitoring systems: Prometheus and its exporters, Alertmanager, and Pushgateway; Netdata agents, parents, and Netdata Cloud; Zabbix server, proxies, frontend, and agents; and Checkmk sites and agents. Use when auditing a monitoring server or its agents, deciding what monitoring may expose, reviewing authentication, agent encryption, remote-command features, stored credentials, and alerting, or when a monitoring system may have been compromised or used to run commands.
+
+**Applies to:** Prometheus 2.x/3.x and exporters, Netdata Agent, Zabbix 6.0 LTS and later, Checkmk 2.x (verify the live version of each) · **Finding prefix:** `MON` · **Version:** 1.0 · **Bundle:** `dist/monitoring.md`
+
+### Detection
+
+Hints for recognizing this product during a network inventory (used by the `full-assessment` skill).
+Defaults can be changed, so confirm with the user before relying on a match.
+
+- **Prometheus** on 9090, with a web UI titled "Prometheus" and endpoints `/metrics`, `/api/v1/status/buildinfo`,
+  and `/-/healthy`. **Alertmanager** on 9093 (9094 for cluster gossip), **Pushgateway** on 9091.
+  **node_exporter** on 9100 serving plain-text `node_` metrics at `/metrics`. Other exporters use their
+  own documented ports (the Prometheus project keeps a default port allocation list on its GitHub wiki).
+- **Netdata** on 19999, page title containing "Netdata", with an API under `/api/v1/` or `/api/v2/`
+  (`/api/v1/info` returns agent details).
+- **Zabbix** agent on 10050 and server or proxy trapper on 10051 (TCP); frontend on 80/443 with a login
+  page titled "Zabbix", commonly at `/zabbix/`.
+- **Checkmk** web UI at `/<site>/check_mk/` on 80/443 (the site Apache listens on 5000 and up behind the
+  system Apache); agent on 6556 (plain-text output from a legacy or unregistered agent starts with
+  `<<<check_mk>>>`); agent receiver on 8000 for the first site, counting up for further sites.
+- A host making regular connections to many other hosts on the same exporter or agent port is a
+  monitoring server.
+- MAC address vendors don't help: these run on general-purpose servers, VMs, and containers.
+
 ## dns-filtering
 
-**Use for:** Security assessment, hardening, remediation, and incident response for network-wide DNS filtering servers: AdGuard Home and Pi-hole (v6 and later), on bare metal, in containers, or in LXC containers and VMs. Use when auditing a DNS filtering server's admin UI and API access, listening interfaces and open-resolver exposure, upstream and encrypted DNS, DNSSEC, blocklist sources, local DNS records and rewrites, client bypass and firewall enforcement, redundancy, query logs, or updates, or when a DNS filtering server may have been compromised or is redirecting names.
+**Use for:** Security assessment, hardening, remediation, and incident response for network-wide DNS filtering servers: AdGuard Home, Pi-hole (v6 and later), and Technitium DNS Server, on bare metal, in containers, or in LXC containers and VMs. Use when auditing a DNS filtering server's admin UI and API access (including API tokens and clustering), listening interfaces and open-resolver or recursion exposure, hosted zones and zone transfers, upstream and encrypted DNS, DNSSEC, blocklist sources, local DNS records and rewrites, client bypass and firewall enforcement, redundancy, query logs, or updates, or when a DNS filtering server may have been compromised or is redirecting names.
 
-**Applies to:** AdGuard Home v0.107.x stable (v0.108 is in beta) and Pi-hole v6.x (Core, FTL, Web); verify the live versions · **Finding prefix:** `DNS` · **Version:** 1.0 · **Bundle:** `dist/dns-filtering.md`
+**Applies to:** AdGuard Home v0.107.x stable (v0.108 is in beta), Pi-hole v6.x (Core, FTL, Web), and Technitium DNS Server v15.x; verify the live versions · **Finding prefix:** `DNS` · **Version:** 1.1 · **Bundle:** `dist/dns-filtering.md`
 
 ### Detection
 
@@ -455,10 +991,16 @@ Defaults can be changed, so confirm with the user before relying on a match.
   after setup the web UI is usually on 80 (and 443 with encryption enabled), with an AdGuard Home login
   page and an API under `/control/`. With encryption enabled it may also answer DNS over TLS on 853/TCP,
   DNS over QUIC on 853/UDP, DoH on 443 at `/dns-query`, and DNSCrypt on 5443.
-- Either may answer DHCP on 67/UDP if it is the DHCP server.
-- No vendor mDNS or SSDP announcement is documented for either product; don't rely on discovery
+- **Technitium DNS Server:** web console on HTTP 5380 by default (title "Technitium DNS Server", API
+  under `/api/`); the HTTPS console, when enabled, is commonly on 53443 (the vendor's sample settings and
+  compose file use it; verify the configured port). When the optional encrypted services are enabled it
+  answers DoT on 853/TCP, DoQ on 853/UDP, DoH on 443/TCP at `/dns-query` (HTTP/3 over 443/UDP possible),
+  and optional plain DNS-over-HTTP on 80 for use behind a reverse proxy (the vendor compose file also
+  lists 8053; verify which is in use). A cluster node always has its HTTPS web service on.
+- Any of them may answer DHCP on 67/UDP if it is the DHCP server.
+- No vendor mDNS or SSDP announcement is documented for these products; don't rely on discovery
   protocols.
-- MAC vendor (OUI): often a single-board-computer maker (both products are popular on Raspberry Pi
+- MAC vendor (OUI): often a single-board-computer maker (all three are popular on Raspberry Pi
   boards), but just as often a hypervisor or container bridge vendor, or the host's NIC. The MAC rarely
   identifies these products.
 
@@ -493,6 +1035,33 @@ Defaults can be changed, so confirm with the user before relying on a match.
 - **MAC address vendors (OUIs):** retail routers usually carry the vendor's own OUI; ISP gateways often
   carry the OEM manufacturer's OUI rather than the ISP's name. Per-SSID BSSIDs and WAN MACs may differ from
   the LAN MAC.
+
+## mikrotik-routeros
+
+**Use for:** Security assessment, hardening, remediation, and incident response for MikroTik devices running RouterOS v7 (and v6 where still found), including RouterBOARD and CCR hardware, CRS switches, wireless devices, and Cloud Hosted Router (CHR) virtual machines. Use when auditing a MikroTik router or switch, reviewing its RouterOS version and update channel, users, IP services (Winbox, WebFig, SSH, API, API-SSL, REST), MAC server and neighbor discovery, RoMON, firewall, device-mode, scripts and scheduler, or when a MikroTik device may have been compromised or recruited into a botnet.
+
+**Applies to:** MikroTik RouterOS 7.x (long-term and stable channels) and 6.49 long-term; RouterBOARD, CCR, CRS, wireless, and CHR (verify the live version and channel) · **Finding prefix:** `MTK` · **Version:** 1.0 · **Bundle:** `dist/mikrotik-routeros.md`
+
+### Detection
+
+Hints for recognizing this product during a network inventory (used by the `full-assessment` skill).
+Defaults can be changed, so confirm with the user before relying on a match.
+
+- **Vendor-default IP service ports:** Winbox TCP **8291**, WebFig and REST over HTTP **80** and HTTPS
+  **443** (`www-ssl`, needs a certificate), SSH **22**, Telnet **23**, FTP **21**, API **8728**, API-SSL
+  **8729**. Which are enabled by default varies by version and model; read `/ip service print`.
+- **Other vendor-documented ports:** MNDP neighbor discovery on UDP **5678**, MAC-Winbox on UDP **20561**,
+  bandwidth-test server on TCP **2000**, web proxy on 8080 and SOCKS on 1080 when enabled, UPnP on UDP 1900
+  and TCP 2828, NAT-PMP on UDP 5350-5351.
+- **Banners and pages:** the WebFig login page names RouterOS and often shows the version; the FTP banner
+  typically names MikroTik and the version; the SSH server identifies itself as a RouterOS SSH
+  implementation (observed in public scan data; not vendor-documented).
+- **Discovery announcements:** MNDP broadcasts on UDP 5678 that name the identity, platform ("MikroTik"),
+  board, and RouterOS version. RouterOS can also send CDP and LLDP. Winbox's Neighbors tab and MAC-Winbox
+  list devices at layer 2.
+- **RoMON** uses its own EtherType (`0x88BF`, vendor-documented) at layer 2.
+- **MAC address vendors:** OUIs registered to MikroTik (some appear in the IEEE registry under the name
+  Routerboard.com). A CHR shows the hypervisor's or cloud's MAC vendor instead.
 
 ## opnsense
 
@@ -597,11 +1166,38 @@ user before relying on a match.
   ISP hardware carries the OEM's OUI, and per-SSID or per-band BSSIDs on Wi-Fi are often locally
   administered addresses that don't map to a vendor at all.
 
+## chromeos
+
+**Use for:** Security and privacy assessment, hardening, remediation, and incident response for ChromeOS devices (Chromebooks, Chromeboxes, Chromebook Plus, and ChromeOS Flex on repurposed PCs and Macs), whether personal, child-supervised, or enterprise- or school-managed. Use when reviewing a ChromeOS device's Auto Update Expiration date and update state, verified boot and developer mode, the Google account that protects it, Linux (Crostini) and Android apps, browser extensions, Family Link supervision, device management, or powerwash and disposal, or when a Chromebook or its Google account may have been compromised.
+
+**Applies to:** ChromeOS and ChromeOS Flex on current and recent hardware (verify the live version and the device's Auto Update Expiration date; settings menus change between releases) · **Finding prefix:** `CROS` · **Version:** 1.0 · **Bundle:** `dist/chromeos.md`
+
+### Detection
+
+Hints for recognizing ChromeOS devices during a network inventory (used by the `full-assessment` skill).
+Chromebooks expose almost no listening services by default, so network detection is weak; confirm with
+the user.
+
+- **No open ports by default.** A Chromebook in normal mode normally shows no listening TCP services to
+  the LAN. An open TCP 22 suggests developer mode with SSH enabled, or a port forwarded from the Linux
+  container (both are findings to confirm with the user).
+- **DHCP and hostnames:** Chromebooks commonly send a DHCP hostname beginning with `chromebook` or
+  similar (varies by version; not vendor-verified here). The DHCP vendor class may identify the platform.
+- **Outbound traffic** to Google update and sign-in services (for example `*.google.com`,
+  `*.googleapis.com`, `*.gvt1.com`), visible in router or DNS-filter logs.
+- **Google Cast and mDNS:** ChromeOS browses for `_googlecast._tcp` services (it casts to TVs and
+  speakers) rather than announcing its own; Nearby Share / Quick Share and Phone Hub use Bluetooth and
+  local Wi-Fi.
+- **MAC address vendors (OUI)** are those of the Wi-Fi module maker (for example Intel, MediaTek,
+  Realtek, Qualcomm) rather than the Chromebook brand. ChromeOS can use randomized MAC addresses on
+  Wi-Fi networks (verify the current setting on the device), in which case the OUI tells you nothing.
+- On ChromeOS Flex, the hardware maker's NIC vendor appears, exactly as for the original operating system.
+
 ## linux
 
-**Use for:** Security assessment, hardening, remediation, and incident response for Linux hosts: servers, VMs, LXC containers, and Raspberry Pi-class devices, with distribution-aware guidance for Debian, Ubuntu, RHEL-family (RHEL, Rocky, AlmaLinux, Fedora), and others. Use when auditing a Linux host's support status, automatic updates, users and sudo, SSH, listening services, host firewall, AppArmor/SELinux, secrets on disk, cron and systemd persistence, third-party repositories, logging, NFS/SMB, containers, or backups, or when a Linux host may have been compromised.
+**Use for:** Security assessment, hardening, remediation, and incident response for Linux hosts: servers, VMs, LXC containers, Raspberry Pi-class devices, and Linux desktops and laptops, with distribution-aware guidance for Debian, Ubuntu, RHEL-family (RHEL, Rocky, AlmaLinux, Fedora), Linux Mint, Arch and other rolling distributions. Use when auditing a Linux host's support status, automatic updates, users and sudo, SSH, listening services, host firewall, AppArmor/SELinux, secrets on disk, cron and systemd persistence, third-party repositories, logging, NFS/SMB, containers, or backups; a desktop's or laptop's full-disk encryption (LUKS), screen lock, Secure Boot and MOK, Flatpak/Snap/AUR software sources, desktop sharing (RDP/VNC), or rolling-release updates; or when a Linux host may have been compromised.
 
-**Applies to:** systemd-based Linux distributions: Debian 12-13, Ubuntu LTS 22.04-26.04, RHEL-family 8-10, Raspberry Pi OS, and similar (verify the live release and its support status) · **Finding prefix:** `LNX` · **Version:** 1.0 · **Bundle:** `dist/linux.md`
+**Applies to:** systemd-based Linux distributions: Debian 12-13, Ubuntu LTS 22.04-26.04 (server and desktop), RHEL-family 8-10, Fedora Workstation and Atomic desktops, Linux Mint 21-22 and LMDE, Arch and other rolling distributions, Raspberry Pi OS, and similar (verify the live release and its support status) · **Finding prefix:** `LNX` · **Version:** 1.1 · **Bundle:** `dist/linux.md`
 
 ### Detection
 
@@ -614,7 +1210,13 @@ Defaults can be changed, so confirm with the user before relying on a match.
   `OpenSSH_<version>`. Banners can be changed and say nothing about patch level beyond the package
   revision; never treat them as proof of a vulnerability.
 - Other typical ports, depending on role: 80/443 (web), 9090 (Cockpit on RHEL-family and some others),
-  111 and 2049 (NFS), 139/445 (Samba), 5353/UDP (mDNS), 3389 (xrdp) or 5900+ (VNC) on desktops.
+  111 and 2049 (NFS), 139/445 (Samba), 5353/UDP (mDNS).
+- Desktops and laptops: TCP 3389 (RDP: GNOME Remote Desktop's desktop sharing or remote login, KDE
+  Plasma's KRdp, or xrdp), TCP 5900 and up (VNC: x11vnc, TigerVNC, older GNOME "Screen Sharing", or the
+  VNC backend of GNOME Remote Desktop), TCP and UDP 1714-1764 (KDE Connect and GSConnect), and 631 (CUPS)
+  if printer sharing is on. VNC servers may announce `_rfb._tcp` over mDNS. A desktop with a working
+  firewall often answers nothing at all, and laptops move between networks, so a scan can miss them; ask
+  the user for a list of computers instead.
 - mDNS/DNS-SD via Avahi: Linux desktops and Raspberry Pi OS often announce `<hostname>.local` and
   services such as `_ssh._tcp`, `_sftp-ssh._tcp`, `_smb._tcp`, or `_workstation._tcp`. A fresh Raspberry
   Pi OS install answers to `raspberrypi.local` until renamed.
@@ -663,9 +1265,9 @@ Defaults can be changed, so confirm with the user before relying on a match.
 
 ## windows
 
-**Use for:** Security assessment, hardening, remediation, and incident response for Windows 10 and 11 desktops and laptops, and small Windows Server installs in homes and small offices. Use when auditing a Windows PC or small server, reviewing its support status, updates, Microsoft Defender, BitLocker, accounts and UAC, firewall, RDP and remote-support tools, file sharing, logging, persistence, or backups, or when a Windows machine may have been compromised (including tech-support scams and ransomware).
+**Use for:** Security assessment, hardening, remediation, and incident response for Windows 10 and 11 desktops and laptops, and small Windows Server installs in homes and small offices, including a small office's or homelab's Active Directory domain controllers. Use when auditing a Windows PC or small server, reviewing its support status, updates, Microsoft Defender, BitLocker, accounts and UAC, firewall, RDP and remote-support tools, file sharing, logging, persistence, or backups; when reviewing a small Active Directory domain (privileged groups, Windows LAPS, krbtgt and service accounts, LDAP and SMB signing, NTLM, Group Policy, AD backups); or when a Windows machine or domain may have been compromised (including tech-support scams and ransomware).
 
-**Applies to:** Windows 11, Windows 10 22H2 with ESU, small Windows Server 2016-2025 installs (verify the live build and edition) · **Finding prefix:** `WIN` · **Version:** 1.0 · **Bundle:** `dist/windows.md`
+**Applies to:** Windows 11, Windows 10 22H2 with ESU, small Windows Server 2016-2025 installs, and small Active Directory domains (one forest, one domain, a few domain controllers); verify the live build and edition · **Finding prefix:** `WIN` · **Version:** 1.1 · **Bundle:** `dist/windows.md`
 
 ### Detection
 
@@ -682,8 +1284,18 @@ Defaults can be changed, so confirm with the user before relying on a match.
 - **RDP on TCP 3389** (and UDP 3389 for newer clients) only on Pro, Enterprise, and Server editions, and
   only when Remote Desktop is enabled. The RDP certificate's subject is usually the computer name.
 - **WinRM** on TCP 5985 (HTTP) and 5986 (HTTPS): enabled by default on Windows Server, not on clients.
-- **RPC endpoint mapper** on TCP 135, commonly open on servers and domain controllers. Domain controllers
-  also expose Kerberos (88), LDAP (389/636), and DNS (53).
+- **RPC endpoint mapper** on TCP 135, commonly open on servers and domain controllers.
+- **Domain controllers** expose a characteristic set together: DNS (TCP/UDP 53, when the DC runs DNS, as
+  it usually does), Kerberos (TCP/UDP 88), RPC endpoint mapper (TCP 135), LDAP (TCP/UDP 389), SMB (TCP 445,
+  for SYSVOL and NETLOGON), Kerberos password change (TCP/UDP 464), LDAPS (TCP 636, only with a suitable
+  certificate), Global Catalog (TCP 3268) and Global Catalog over TLS (TCP 3269), Active Directory Web
+  Services (TCP 9389), and the dynamic RPC range (TCP 49152–65535). Seeing 88, 389, and 3268 together is a
+  strong DC signal.
+- **AD discovery announcements**: DNS SRV records such as `_ldap._tcp.dc._msdcs.<domain>` and
+  `_kerberos._tcp.<domain>` list the DCs; DHCP options often hand out the DC as the DNS server. An LDAP
+  RootDSE query (allowed without credentials by design) returns the domain's naming contexts, the DC's
+  DNS name, and its functional levels. The LDAPS and RDP certificates usually carry the DC's
+  fully qualified name.
 - **Name resolution chatter**: LLMNR on UDP 5355 and mDNS on UDP 5353 announce or answer for the
   computer name; WS-Discovery (UDP 3702) and SSDP (UDP 1900) appear when network discovery is on. Microsoft
   has been moving away from LLMNR and NetBIOS name resolution, so verify which are active on the version.
@@ -698,9 +1310,9 @@ Defaults can be changed, so confirm with the user before relying on a match.
 
 ## printers
 
-**Use for:** Security assessment, hardening, remediation, and incident response for network printers and multifunction printers (MFPs): home inkjets and lasers and small-office MFPs from HP, Brother, Canon, Epson, Xerox, Lexmark, and similar vendors. Use when auditing a printer's firmware and vendor support, embedded web server (EWS) admin password, exposed print and management services (raw 9100, IPP/IPPS, LPD, SNMP, FTP/Telnet, Wi-Fi Direct), cloud printing accounts, scan-to-email/SMB/FTP and LDAP stored credentials, stored jobs and internal storage at disposal, internet exposure, network placement, or logging, or when a printer may have been compromised or used as a pivot.
+**Use for:** Security assessment, hardening, remediation, and incident response for network printers and multifunction printers (MFPs): home inkjets and lasers and small-office MFPs from HP, Brother, Canon, Epson, Xerox, Lexmark, and similar vendors. Use when auditing a printer's firmware and vendor support, embedded web server (EWS) admin password, exposed print and management services (raw 9100, IPP/IPPS, LPD, SNMP, FTP/Telnet, Wi-Fi Direct), cloud printing accounts, scan-to-email/SMB/FTP and LDAP stored credentials, stored jobs and internal storage at disposal, internet exposure, network placement, or logging; standalone network document scanners (Brother ADS, Epson WorkForce DS and ES-W, PFU/Ricoh ScanSnap iX, and similar) and their scan-to-folder (SMB), scan-to-email (SMTP), scan-to-FTP/SFTP, and scan-to-cloud destinations; or when a printer or scanner may have been compromised or used as a pivot.
 
-**Applies to:** Networked single-function printers and MFPs from any vendor, home through small office (verify each model's current firmware, support status, and menu names) · **Finding prefix:** `PRN` · **Version:** 1.0 · **Bundle:** `dist/printers.md`
+**Applies to:** Networked single-function printers, MFPs, and standalone network document scanners from any vendor, home through small office (verify each model's current firmware, support status, and menu names) · **Finding prefix:** `PRN` · **Version:** 1.1 · **Bundle:** `dist/printers.md`
 
 ### Detection
 
@@ -721,10 +1333,141 @@ Defaults can be changed, so confirm with the user before relying on a match.
 - EWS page titles and headers usually name the vendor and model (for example "HP Embedded Web Server",
   "Brother" Web Based Management, Epson "Web Config", Canon "Remote UI", Xerox "CentreWare"/"Embedded Web
   Server", Lexmark EWS). A self-signed certificate naming the model or vendor is common.
-- Wi-Fi: a second SSID beginning with `DIRECT-` (Wi-Fi Direct) near the printer's location.
+- Scanners: WSD scan uses UDP 3702 discovery and the WSD HTTP/HTTPS ports (TCP 5357/5358 are the
+  commonly documented defaults; verify per model). A device that advertises `_uscan._tcp` or
+  `_uscans._tcp` and answers on 80/443 but has no 9100, 515, or 631 is probably a standalone network
+  scanner rather than a printer.
+- Standalone scanner admin pages reuse the vendor's printer web admin names: Brother "Web Based
+  Management" on ADS models, Epson "Web Config" on WorkForce DS/ES-W network models. App-tethered
+  scanners (such as ScanSnap iX) may expose no web admin at all; identify them from DHCP names, the
+  vendor app's scanner list, or the OUI.
+- Wi-Fi: a second SSID beginning with `DIRECT-` (Wi-Fi Direct) near the printer's location. Some
+  scanners offer their own "direct connect" access point mode; its SSID and key are shown on the
+  scanner's panel (naming varies by model; verify on the device).
 - MAC vendors (OUI) usually name the printer maker (HP, Brother, Canon, Seiko Epson, Xerox, Lexmark,
-  Kyocera, Ricoh, Konica Minolta), but Wi-Fi models may show the Wi-Fi module's maker and rebranded
-  devices show the OEM.
+  Kyocera, Ricoh, Konica Minolta, and PFU or Fujitsu for ScanSnap scanners), but Wi-Fi models may show
+  the Wi-Fi module's maker and rebranded devices show the OEM.
+
+## remote-desktop-and-rmm
+
+**Use for:** Security assessment, hardening, remediation, and incident response for self-hosted remote desktop gateways and remote monitoring and management (RMM) tools: Apache Guacamole, RustDesk (clients and self-hosted hbbs/hbbr servers), MeshCentral, and Tactical RMM. Also covers finding remote-access tools that nobody authorized. Use when auditing one of these tools, deciding whether it is safe to expose, reviewing its admin accounts, MFA, agents, stored connection credentials, script features, and API keys, or when a remote-access tool may have been abused or installed by an attacker.
+
+**Applies to:** Apache Guacamole 1.5 and later, RustDesk client and server (OSS and Pro), MeshCentral, Tactical RMM (verify the live version of each) · **Finding prefix:** `RMM` · **Version:** 1.0 · **Bundle:** `dist/remote-desktop-and-rmm.md`
+
+### Detection
+
+Hints for recognizing this product during a network inventory (used by the `full-assessment` skill).
+Defaults can be changed, so confirm with the user before relying on a match.
+
+- **Apache Guacamole:** HTTP on 8080 (Tomcat) with a login page titled "Guacamole" at `/guacamole/`;
+  `guacd` on 4822/TCP (should be reachable only from the web app).
+- **RustDesk server:** `hbbs` on 21115/TCP (NAT test), 21116/TCP and UDP (ID registration and hole
+  punching), 21118/TCP (web client WebSocket); `hbbr` on 21117/TCP (relay) and 21119/TCP (WebSocket);
+  Pro API and web console on 21114/TCP. **RustDesk client** with direct IP access enabled listens on
+  21118/TCP on the endpoint (verify for the installed version).
+- **MeshCentral:** HTTPS on 443 with a page titled "MeshCentral" (or a custom title), HTTP on 80, Intel
+  AMT MPS on 4433; the TLS certificate is self-signed with a MeshCentral name unless replaced.
+- **Tactical RMM:** HTTPS on 443 serving a Vue frontend titled "Tactical RMM" on the frontend hostname, a
+  Django API on the API hostname, and MeshCentral on the mesh hostname; MeshCentral listens internally on
+  4430.
+- **On endpoints:** services or processes named for the agent (MeshAgent, Tactical RMM Agent, RustDesk,
+  and other vendors' agents), and outbound connections to the server or vendor relays.
+- MAC address vendors don't help: these run on general-purpose servers, VMs, and containers.
+
+## backup-tools
+
+**Use for:** Security assessment, hardening, remediation, and incident response for backup software and offsite backup targets: Restic (and rest-server), BorgBackup and Borgmatic, Veeam Agent and Veeam Backup & Replication Community Edition, Duplicati, and the Backblaze B2 and Wasabi cloud targets. Use when reviewing repository passwords and keys, append-only or immutable copies, 3-2-1 coverage, restore testing, backup server exposure, and scoped cloud keys, or when ransomware or an intruder may have deleted or encrypted backups.
+
+**Applies to:** Restic and rest-server, BorgBackup 1.4.x (2.x is beta at review; verify), Borgmatic, Veeam Agent and Backup & Replication Community Edition (v12/v13; verify), Duplicati 2.x, Backblaze B2, Wasabi (verify the live versions) · **Finding prefix:** `BAK` · **Version:** 1.0 · **Bundle:** `dist/backup-tools.md`
+
+### Detection
+
+Hints for recognizing this product during a network inventory (used by the `full-assessment` skill).
+Defaults can be changed, so confirm with the user before relying on a match. Most backup tools are
+clients with no listener; find them on the hosts, not the network.
+
+- **Restic rest-server:** HTTP or HTTPS on TCP 8000 by default; S3-like REST paths per repository; a
+  `/metrics` endpoint when Prometheus is enabled.
+- **Borg:** no listener of its own; runs over SSH (22) with `borg serve` as a forced command on the
+  repository server.
+- **Duplicati:** web UI on TCP 8200 (later instances try further ports); listens on loopback only by
+  default; page title mentions Duplicati.
+- **Veeam Backup & Replication:** the console connects to the backup server on TCP 9392 (vendor-documented
+  in the ports reference; verify the live version's port list, which also covers the REST API, web UI,
+  proxies, and hardened repositories). Windows hosts show Veeam services; certificates may name Veeam.
+- **Backblaze B2 / Wasabi:** outbound HTTPS from clients to the providers' API and S3 endpoints; no
+  inbound listener.
+- No backup-specific MAC address vendors (software on general-purpose hosts).
+
+## object-storage
+
+**Use for:** Security assessment, hardening, remediation, and incident response for self-hosted S3-compatible object storage: MinIO (community edition, its forks, and AIStor), with notes for Garage, SeaweedFS, and Ceph RGW. Use when auditing an object store's root credentials, access keys and policies, public or anonymous buckets, console and API exposure, TLS, versioning and object lock, or when a self-hosted bucket may have been exposed, emptied, or encrypted.
+
+**Applies to:** MinIO community edition (archived upstream; verify the build and its source), MinIO forks and AIStor, Garage, SeaweedFS, and other self-hosted S3-compatible servers (verify the live version) · **Finding prefix:** `S3` · **Version:** 1.0 · **Bundle:** `dist/object-storage.md`
+
+### Detection
+
+Hints for recognizing this product during a network inventory (used by the `full-assessment` skill).
+Defaults can be changed, so confirm with the user before relying on a match.
+
+- **MinIO:** S3 API on TCP 9000 by default; `Server: MinIO` response header; S3-style XML error bodies
+  (`<Error><Code>AccessDenied</Code>`); health endpoints under `/minio/health/live` and
+  `/minio/health/ready`. The console has no fixed default port unless set with `--console-address`;
+  deployments very commonly use 9001. Page title mentioning MinIO Console.
+- **Garage:** example/default configuration uses 3900 (S3 API), 3901 (RPC between nodes), 3902 (S3 website
+  endpoint), and 3903 (admin API, including `/metrics`).
+- **SeaweedFS:** master 9333 (gRPC 19333), volume server 8080 (gRPC 18080), filer 8888 (gRPC 18888), S3
+  gateway 8333; the all-in-one `weed mini` mode uses different ports for some services. Master and filer
+  serve HTML status pages naming SeaweedFS.
+- **Ceph RGW:** S3 on whatever port the deployment configured (commonly 80/443 behind cephadm or a proxy,
+  7480 on older defaults); response headers or error bodies may mention RGW.
+- Any HTTP service answering S3 XML (`ListAllMyBucketsResult`, `AccessDenied`) is an S3-compatible
+  server worth identifying.
+- No vendor MAC address: these run on general-purpose hosts, VMs, containers, or NAS units.
+
+## openmediavault
+
+**Use for:** Security assessment, hardening, remediation, and incident response for openmediavault (OMV) NAS systems on Debian, including installs on single-board computers and virtual machines. Use when auditing an OMV server, reviewing its Workbench web UI and admin account, users and groups, shared folders and SMB/NFS exports, SSH, firewall, updates, omv-extras plugins, the compose (Docker) plugin, or the underlying Debian host, or when an OMV server may have been compromised or hit by ransomware.
+
+**Applies to:** openmediavault 8.x (Synchrony, Debian 13); 7.x (Sandworm, Debian 12) is end of life since 2026-06 (verify the live version) · **Finding prefix:** `OMV` · **Version:** 1.0 · **Bundle:** `dist/openmediavault.md`
+
+### Detection
+
+Hints for recognizing this product during a network inventory (used by the `full-assessment` skill).
+Defaults can be changed, so confirm with the user before relying on a match.
+
+- Workbench web UI served by nginx on HTTP port 80 by default, and HTTPS port 443 when SSL is enabled
+  (changeable under System → Workbench). The login page and page title show openmediavault branding.
+- SSH on TCP 22 with a Debian OpenSSH banner (root login allowed by default on new installs,
+  vendor-documented). SMB on TCP 445, NFS on TCP/UDP 2049 and 111, FTP on TCP 21, and rsync on TCP 873 when
+  those services are enabled.
+- mDNS/DNS-SD (Avahi): OMV announces enabled services automatically, including the Workbench, SSH, SMB, NFS,
+  FTP, and rsync, usually under the host name. Plugins may add announcements. This can't be disabled
+  globally (vendor-documented).
+- WS-Discovery or NetBIOS names from Samba matching the host name.
+- **MAC vendors:** OMV runs on generic hardware, so the MAC shows the NIC or board maker (for example a
+  single-board-computer vendor) or the hypervisor's prefix. No OMV-specific OUI exists.
+
+## qnap-qts
+
+**Use for:** Security assessment, hardening, remediation, and incident response for QNAP NAS devices running QTS or QuTS hero. Use when auditing a QNAP NAS, reviewing its admin access, App Center apps, myQNAPcloud and remote access, Container Station, file sharing, snapshots, or backups, or when a QNAP NAS may have been compromised or hit by ransomware (QNAP devices have been targeted by repeated mass campaigns).
+
+**Applies to:** QNAP QTS 5.x and QuTS hero h5.x/h6.x (verify the live build; menus and features vary by version and model) · **Finding prefix:** `QNAP` · **Version:** 1.0 · **Bundle:** `dist/qnap-qts.md`
+
+### Detection
+
+Hints for recognizing this product during a network inventory (used by the `full-assessment` skill).
+Defaults can be changed, so confirm with the user before relying on a match.
+
+- QTS/QuTS hero web administration on QNAP's documented default ports, 8080 (HTTP) and 443 (HTTPS), with a
+  login page served under `/cgi-bin/` and a page title or TLS certificate mentioning QNAP, QTS, or QuTS
+  hero. QNAP's Web Server app, if enabled, uses 80 and 8081, which can confuse the match.
+- Qfinder Pro discovery traffic on UDP 8097 (QNAP-documented), and NAS answers to Qfinder Pro scans.
+- mDNS/DNS-SD, SMB/NetBIOS, or SSDP/UPnP announcements naming QNAP or a model number (for example a
+  `TS-` or `TVS-` prefix). UPnP/DLNA answers appear only if a media server or UPnP feature is enabled.
+- A MAC address vendor (OUI) registered to QNAP Systems. QuTScloud VMs show the hypervisor's vendor
+  instead, and add-in NICs show their maker.
+- Telnet on QNAP's documented port 13131 if it was ever enabled (it should be off).
 
 ## synology-dsm
 
@@ -743,6 +1486,79 @@ Defaults can be changed, so confirm with the user before relying on a match.
 - A MAC address vendor (OUI) registered to Synology. Only genuine hardware shows this; DSM on virtual or
   non-Synology hardware shows the hypervisor's or NIC maker's vendor instead.
 - Found by Synology's own discovery tools (Synology Assistant, or Web Assistant on the local network).
+
+## truenas
+
+**Use for:** Security assessment, hardening, remediation, and incident response for TrueNAS (Community Edition, formerly SCALE, and Enterprise), with notes for legacy TrueNAS CORE. Use when auditing a TrueNAS system, reviewing its admin accounts and API keys, web UI and SSH exposure, SMB/NFS/iSCSI shares, apps and VMs, ZFS dataset encryption, snapshots, replication, or backups, or when a TrueNAS system may have been compromised or its data encrypted or destroyed.
+
+**Applies to:** TrueNAS Community Edition and Enterprise 24.10 and later (25.x current; verify the live release and train); legacy TrueNAS CORE 13.x noted · **Finding prefix:** `TNAS` · **Version:** 1.0 · **Bundle:** `dist/truenas.md`
+
+### Detection
+
+Hints for recognizing this product during a network inventory (used by the `full-assessment` skill).
+Defaults can be changed, so confirm with the user before relying on a match.
+
+- Web UI and API on the vendor-documented default ports, 80 (HTTP) and 443 (HTTPS), with a page title or
+  login page naming TrueNAS and a self-signed default certificate naming TrueNAS or iXsystems.
+- The default hostname `truenas`, advertised over mDNS (`truenas.local`), and the same name over
+  WS-Discovery or NetBIOS when SMB is enabled.
+- SMB (445), NFS (111/2049), iSCSI (3260), or SSH (22) alongside the TrueNAS web UI; these are off by
+  default and enabled per service.
+- A MAC address vendor (OUI) registered to iXsystems only on iXsystems appliances. User-built systems show
+  the NIC maker's vendor, and virtualized systems show the hypervisor's.
+- IPMI/BMC web interfaces on the same hardware (separate address) on servers and appliances.
+
+## unraid
+
+**Use for:** Security assessment, hardening, remediation, and incident response for Unraid OS servers, including Unraid running as a virtual machine. Use when auditing an Unraid server, reviewing its WebGUI and root account, management access (SSH, Telnet, SSL/TLS), Unraid Connect and remote access, user shares and their SMB/NFS export security, Community Applications plugins, Docker and VM templates, the boot device (flash drive) and its backups, or when an Unraid server may have been compromised or hit by ransomware.
+
+**Applies to:** Unraid OS 7.x (7.3.x is the current stable line; 7.2.x still receives some security releases; verify the live version and release notes) · **Finding prefix:** `UNR` · **Version:** 1.0 · **Bundle:** `dist/unraid.md`
+
+### Detection
+
+Hints for recognizing this product during a network inventory (used by the `full-assessment` skill).
+Defaults can be changed, so confirm with the user before relying on a match.
+
+- WebGUI on HTTP port 80 and HTTPS port 443 (vendor defaults, set under Settings → Management Access),
+  showing an Unraid-branded login page with the server name. The default server name is `Tower` and the
+  default local TLD is `local`, so `tower.local` is common on fresh installs.
+- With **Use SSL/TLS = Strict**, HTTP requests redirect to a hostname of the form
+  `<lan-ip>.<hash>.myunraid.net` (the vendor's documented format; the address may be written with
+  dashes), and the certificate is a publicly trusted `myunraid.net`
+  certificate. With **Yes**, a self-signed certificate naming the server.
+- SSH on TCP 22 when enabled, Telnet on TCP 23 when enabled, SMB on TCP 445, NFS on TCP/UDP 111 and 2049
+  when enabled, and VM consoles (VNC, listed by the vendor as `57xx` ports) when VMs run. The built-in
+  WireGuard VPN, if configured, listens on a UDP port (commonly 51820; verify in the tunnel settings).
+- mDNS/DNS-SD announcements (Avahi) for the server name, SMB, and similar services; SMB NetBIOS or WS-Discovery
+  names matching the server name. Verify which services the live version announces.
+- **MAC vendors:** Lime Technology doesn't make hardware, so the host shows its NIC maker's OUI (or a
+  hypervisor's for virtualized Unraid). VMs created by Unraid's libvirt default to the `52:54:00` prefix
+  (QEMU/KVM locally administered range), and containers on a custom macvlan/ipvlan network may show Docker-
+  generated or randomized MACs. Several such addresses near one host suggest an Unraid or other KVM host.
+
+## zfs-and-ceph
+
+**Use for:** Security assessment, hardening, remediation, and incident response for the security side of OpenZFS (Linux, FreeBSD, TrueNAS, Proxmox VE) and small Ceph clusters. Covers ZFS native encryption and key handling, snapshots and holds as ransomware protection, zfs allow delegation, send/receive replication trust, sharenfs/sharesmb properties, Ceph cephx authentication and capabilities, and Ceph dashboard and network exposure. Use when auditing ZFS datasets or a Ceph cluster for security, or when snapshots, replicas, or keys may have been tampered with. Not for pool or cluster repair.
+
+**Applies to:** OpenZFS 2.x on Linux and FreeBSD, including TrueNAS and Proxmox VE; Ceph active releases, small clusters including Proxmox-managed Ceph (verify the live versions) · **Finding prefix:** `ZFS` · **Version:** 1.0 · **Bundle:** `dist/zfs-and-ceph.md`
+
+### Detection
+
+Hints for recognizing this product during a network inventory (used by the `full-assessment` skill).
+Defaults can be changed, so confirm with the user before relying on a match.
+
+- **ZFS** has no network listener of its own. It shows up through what's built on it: NFS (2049),
+  SMB (445), iSCSI (3260), replication over SSH (22), or an appliance UI (TrueNAS, Proxmox VE). Identify
+  it from the host, not the network.
+- **Ceph monitors:** TCP 3300 (msgr2) and 6789 (legacy msgr1).
+- **Ceph OSDs, MGRs, and MDSs:** a range of TCP ports, by default from 6800 upward (verify the configured
+  range on the live cluster).
+- **Ceph dashboard (MGR module):** HTTPS on 8443 by default (8080 if SSL is disabled); binds to all
+  addresses unless configured. Page title mentions Ceph.
+- **Ceph monitoring stack** (often deployed by cephadm): Prometheus 9090, the MGR Prometheus exporter
+  9283, node exporter 9100, Alertmanager 9093, Grafana (commonly 3000; verify).
+- **Ceph RGW (S3):** see the [object-storage](../object-storage/SKILL.md) skill.
+- No vendor MAC address: Ceph and ZFS run on general-purpose hardware or VMs.
 
 ## frigate-nvr
 
@@ -795,6 +1611,34 @@ Defaults can be changed, so confirm with the user before relying on a match.
 - Behavior: steady outbound connections to vendor cloud or P2P servers (often UDP to many destinations),
   and long-lived RTSP sessions from an NVR.
 
+## nvr-software
+
+**Use for:** Security assessment, hardening, remediation, and incident response for NVR and video management software other than Frigate: Blue Iris on Windows and Synology Surveillance Station, with generic guidance for other VMS products such as Agent DVR, Shinobi, and Milestone XProtect Essential+. Use when auditing an NVR server's web server and remote access (Blue Iris UI3, DS cam, QuickConnect, cloud relays), its users, privileges, and anonymous access, stored camera credentials, update and support status, recordings storage and retention, or when an NVR or its recordings may have been compromised.
+
+**Applies to:** Blue Iris 5 and 6 on Windows; Synology Surveillance Station 9.x on DSM 7.x; other VMS products by analogy (verify the live version; settings, ports, and licensing change between releases) · **Finding prefix:** `NVS` · **Version:** 1.0 · **Bundle:** `dist/nvr-software.md`
+
+### Detection
+
+Hints for recognizing these products during a network inventory (used by the `full-assessment` skill).
+Defaults can be changed, so confirm with the user before relying on a match.
+
+- **Blue Iris:** HTTP on **TCP 81** (Blue Iris's default web server port, as commonly documented),
+  serving the UI3 web client or a Blue Iris login page; a `Server` header naming Blue Iris is commonly
+  reported (not vendor-verified here). Runs on a Windows host (look for SMB and RDP alongside).
+- **Synology Surveillance Station:** DSM's ports **5000/5001**, with Surveillance Station at its own
+  application path; Synology also lists **TCP 1935** (RTMP) for Surveillance Station. A dedicated
+  Surveillance Station portal is commonly configured on **9900/9901** (commonly reported; configurable in
+  DSM's application portal). DS cam uses 5000/5001. The NAS answers Synology discovery and has a Synology
+  MAC vendor (OUI) on genuine hardware.
+- **Agent DVR:** **TCP 8090** web UI and TCP/UDP **3478** (STUN/TURN for WebRTC), per iSpyConnect's
+  documentation.
+- **Shinobi:** HTTP on **TCP 8080** (commonly reported default), page title naming Shinobi.
+- **Milestone XProtect:** Mobile Server on **TCP 8081/8082** (Milestone-documented defaults); Management
+  Server and other components on further ports listed in Milestone's port documentation.
+- Any NVR host makes many long-lived RTSP (TCP 554) or vendor-protocol connections to cameras; it is
+  usually the only host on the camera network that does so.
+- No NVR-specific MAC vendor for software NVRs; the host's NIC vendor appears.
+
 ## video-doorbells
 
 **Use for:** Security and privacy assessment, hardening, remediation, and incident response for cloud-first consumer video doorbells, cameras, and alarm-and-camera kits (Ring, Google Nest, Arlo, Eufy, Wyze, SimpliSafe and similar). Use when reviewing who can see a household's cameras, the vendor account's sign-in security, shared users and logged-in devices, end-to-end encryption and local-storage options, police and neighborhood sharing settings, third-party integrations and local stream bridges, network placement, or physical tamper and theft, or when a doorbell or camera account may have been taken over.
@@ -845,6 +1689,60 @@ Defaults can be changed, so confirm with the user before relying on a match.
 - **BMCs** show the server maker's or BMC chip's OUI and usually a web UI on 443 and IPMI on UDP 623.
   Don't probe IPMI beyond recording that the port answers.
 
+## vmware-esxi
+
+**Use for:** Security assessment, hardening, remediation, and incident response for VMware ESXi hosts (standalone or managed by a small vCenter Server), including the free vSphere Hypervisor edition and the server hardware's BMC. Use when auditing an ESXi host, reviewing its patch level and Broadcom entitlement, Host Client, SSH and ESXi Shell, lockdown mode, local and Active Directory accounts, OpenSLP and other services, firewall, management network, VIB acceptance level, datastores, or backups, or when an ESXi host may have been hit by ransomware or otherwise compromised.
+
+**Applies to:** VMware ESXi 8.x and ESX 9.x, standalone or with vCenter Server; 7.x and older are past end of general support (verify the live build and Broadcom lifecycle page) · **Finding prefix:** `ESX` · **Version:** 1.0 · **Bundle:** `dist/vmware-esxi.md`
+
+### Detection
+
+Hints for recognizing this product during a network inventory (used by the `full-assessment` skill).
+Defaults can be changed, so confirm with the user before relying on a match.
+
+- **HTTPS 443** (vendor default): Host Client at `/ui/`, page title mentioning VMware ESXi, the vSphere API
+  at `/sdk`, and a self-signed certificate naming VMware on a fresh install. **HTTP 80** redirects to 443.
+- **TCP 902** answers with a banner beginning `VMware Authentication Daemon` (remote console, MKS, and
+  NFC traffic). This banner is a strong ESXi or VMware Workstation indicator.
+- **TCP and UDP 427** (OpenSLP / CIM SLP): on current builds the service is normally stopped by default;
+  if it answers, record it as a finding to check. **TCP 5989** (CIM over HTTPS) may also answer.
+- **TCP 22** (SSH) answers only if SSH has been enabled; disabled by default.
+- vCenter Server Appliance: HTTPS 443 with a vSphere Client landing page, plus the appliance management
+  interface on HTTPS **5480**.
+- No mDNS or SSDP announcement by default.
+- **Guests:** VMware-generated VM MAC addresses use OUIs registered to VMware, Inc. (for example the
+  `00:50:56` and `00:0C:29` prefixes; confirm in the IEEE registry). Many VMs with those prefixes suggest
+  an ESXi host nearby. Additional VMkernel interfaces (`vmk1` and later) usually also use a VMware OUI.
+- **The host itself:** the first management interface (`vmk0`) usually uses its physical NIC's MAC, so
+  it shows the NIC or server maker, not VMware.
+- **BMCs** show the server maker's or BMC chip's OUI and usually a web UI on 443 and IPMI on UDP 623.
+  Don't probe IPMI beyond recording that the port answers.
+
+## xcp-ng
+
+**Use for:** Security assessment, hardening, remediation, and incident response for XCP-ng hosts and pools managed with Xen Orchestra (the XOA appliance or XO built from sources) or XO Lite, including the server hardware's BMC. Use when auditing an XCP-ng host or pool, reviewing its release and updates, XAPI and management network exposure, SSH, the pool's shared root password and secrets, Xen Orchestra users, ACLs, tokens, and plugins, storage repositories, or Xen Orchestra backups, or when an XCP-ng host, its Xen Orchestra, or a guest may have been compromised.
+
+**Applies to:** XCP-ng 8.3 LTS with Xen Orchestra (XOA or from sources); 8.2 is end of life since 2025-09 (verify the live version and the XCP-ng release page) · **Finding prefix:** `XCP` · **Version:** 1.0 · **Bundle:** `dist/xcp-ng.md`
+
+### Detection
+
+Hints for recognizing this product during a network inventory (used by the `full-assessment` skill).
+Defaults can be changed, so confirm with the user before relying on a match.
+
+- **XCP-ng host:** XAPI on **HTTPS 443** and **HTTP 80** (vendor-documented; pool members also talk to
+  each other on these). On 8.3, the XO Lite web client is served on 443 at `/`, with a self-signed
+  certificate. SSH on TCP 22 with an OpenSSH banner (enabled by default).
+- Clustered pools (for example with GFS2 shared storage) also use TCP 8892, 8896, 21064 and UDP 5404-5405
+  between hosts (vendor-documented connectivity requirements).
+- **Xen Orchestra:** a web UI (page title "Xen Orchestra") on HTTP 80 and/or HTTPS 443 of its own VM. XOA
+  and XO from sources look similar from the network; the about page or the updater tells them apart.
+- No mDNS or SSDP announcement by default.
+- **Guests:** XAPI generates VIF MAC addresses itself (typically random, not a fixed vendor OUI; verify
+  on the installed version). The XenSource OUI `00:16:3E` may appear on guests of Xen-based platforms.
+- **The host itself** shows the vendor of its physical NIC.
+- **BMCs** show the server maker's or BMC chip's OUI and usually a web UI on 443 and IPMI on UDP 623.
+  Don't probe IPMI beyond recording that the port answers.
+
 ## web-servers
 
 **Use for:** Security assessment, hardening, remediation, and incident response for web servers and reverse proxies: Apache httpd, nginx, Caddy, Traefik, HAProxy, and Nginx Proxy Manager. Use when auditing a web server or reverse proxy, reviewing its TLS and certificates, security headers, status pages and admin dashboards, forwarded-header trust, virtual-host routing to internal apps, authentication in front of those apps, logging, or file permissions, or when a web server or proxy may have been compromised.
@@ -873,11 +1771,81 @@ Defaults can be changed, so confirm with the user before relying on a match.
   transparency logs reveal those names to anyone.
 - MAC address vendors don't help: these run on general-purpose hosts, VMs, and containers.
 
+## automation-platforms
+
+**Use for:** Security assessment, hardening, remediation, and incident response for self-hosted workflow and automation platforms: n8n and Node-RED (standalone, in containers, or as the Home Assistant add-on). Use when auditing either platform, reviewing its owner and admin accounts, editor authentication, stored credentials and encryption keys, webhook and HTTP endpoints, code and command-execution nodes, community nodes and palette modules, or exposure, or when one may have been compromised. These tools usually hold tokens to everything else, so treat them as high-value.
+
+**Applies to:** n8n (self-hosted community and licensed editions) and Node-RED (supported release streams; verify the live version of each) · **Finding prefix:** `AUT` · **Version:** 1.0 · **Bundle:** `dist/automation-platforms.md`
+
+### Detection
+
+Hints for recognizing this product during a network inventory (used by the `full-assessment` skill).
+Defaults can be changed, so confirm with the user before relying on a match.
+
+- **n8n:** web UI on port 5678 (vendor default), page title "n8n" or "n8n.io - Workflow Automation";
+  a sign-in or owner-setup page; webhook paths under `/webhook/` and `/webhook-test/`; a health endpoint
+  at `/healthz`.
+- **Node-RED:** editor on port 1880 (vendor default `uiPort`), page title "Node-RED"; Dashboard under
+  `/ui` or `/dashboard` when installed. `GET /auth/login` on the admin API returns `{}` when no editor
+  authentication is configured and `{"type":"credentials",...}` when it is: a reliable, read-only check.
+- Node-RED binds to all IPv4 interfaces by default (`uiHost`), so it commonly shows up on every address
+  of a Raspberry Pi or server.
+- Container images `n8nio/n8n` (or `docker.n8n.io/n8nio/n8n`) and `nodered/node-red`; the Home
+  Assistant add-on list.
+- MAC address vendors don't help, except that a Raspberry Pi vendor on port 1880 suggests a standalone
+  Node-RED install.
+
+## nextcloud
+
+**Use for:** Security assessment, hardening, remediation, and incident response for Nextcloud Server and Nextcloud All-in-One (AIO). Use when auditing a Nextcloud instance, reviewing its security and setup warnings, trusted domains and proxies, brute-force protection, two-factor enforcement, installed apps, public share links, federated sharing, server-side encryption, background jobs, updates, or the AIO mastercontainer and its admin interface, or when a Nextcloud instance may have been compromised.
+
+**Applies to:** Nextcloud Server (supported major versions; verify on the vendor's maintenance schedule) and Nextcloud All-in-One; also the community Docker image, snap, and NAS/appliance packages · **Finding prefix:** `NXC` · **Version:** 1.0 · **Bundle:** `dist/nextcloud.md`
+
+### Detection
+
+Hints for recognizing this product during a network inventory (used by the `full-assessment` skill).
+Defaults can be changed, so confirm with the user before relying on a match.
+
+- An HTTP/HTTPS service whose login page title is the instance name or "Nextcloud", with Nextcloud
+  assets under `/core/` and `/apps/`.
+- `GET /status.php` returns JSON with `installed`, `version`, `versionstring`, and `productname`. It
+  answers without login and is the fastest way to read the version.
+- CalDAV/CardDAV discovery redirects at `/.well-known/caldav` and `/.well-known/carddav` to
+  `/remote.php/dav/`.
+- **AIO:** the AIO interface on port 8080 with a self-signed certificate, or 8443 with a valid
+  certificate; Nextcloud itself on 443 (TCP, and UDP for HTTP/3); the Talk TURN server on 3478 TCP/UDP
+  (changeable with `TALK_PORT`); port 80 for the ACME HTTP challenge. Behind a proxy, the Apache
+  container on whatever `APACHE_PORT` is set to.
+- Container names starting with `nextcloud-aio-` or images named `nextcloud`.
+- MAC address vendors don't help: Nextcloud runs on general-purpose hosts, VMs, containers, and NAS
+  devices.
+
+## photo-and-document-apps
+
+**Use for:** Security assessment, hardening, remediation, and incident response for self-hosted photo and document archives: Immich (photo and video library) and Paperless-ngx (scanned-document management), which hold some of the most sensitive data a household or small office has. Use when auditing either app, reviewing its admin accounts, public sharing links, OAuth/SSO, API keys, machine-learning or parser containers, storage locations, consumption folders, mail fetching, mobile access, or backups, or when one may have been compromised.
+
+**Applies to:** Immich and Paperless-ngx, usually run with Docker Compose (verify the live version of each; both release often) · **Finding prefix:** `PDA` · **Version:** 1.0 · **Bundle:** `dist/photo-and-document-apps.md`
+
+### Detection
+
+Hints for recognizing this product during a network inventory (used by the `full-assessment` skill).
+Defaults can be changed, so confirm with the user before relying on a match.
+
+- **Immich:** web UI on port 2283 (the vendor default `IMMICH_PORT`), page title "Immich"; an API under
+  `/api/` (for example `/api/server/ping`). The machine-learning service on 3003 and optional metrics
+  ports 8081 and 8082 should not be reachable from other hosts; if they answer from the LAN, note it.
+- **Paperless-ngx:** web UI on port 8000 (vendor default `PAPERLESS_PORT`), page title "Paperless-ngx";
+  a REST API under `/api/` that returns 401/403 without credentials and a Django admin at `/admin/`.
+  Gotenberg (commonly 3000 inside the Compose network) and Tika (commonly 9998) should not be published.
+- Container images named `ghcr.io/immich-app/immich-server`, `immich-machine-learning`, or
+  `ghcr.io/paperless-ngx/paperless-ngx`, and the reverse proxy's route list.
+- MAC address vendors don't help: both run on general-purpose hosts, VMs, and NAS devices.
+
 ## self-hosted-web-apps
 
-**Use for:** Security assessment, hardening, remediation, and incident response for small self-hosted web apps and dashboards that have no dedicated skill: start pages and dashboards (Homepage, Heimdall, Homarr), network scanners (WatchYourLAN, NetAlertX), monitoring tools (Glances, Uptime Kuma, Grafana), file and 3D-print libraries, wikis, and similar. Use when auditing one of these apps, deciding whether it is safe to expose, reviewing its authentication, secrets, container privileges, maintenance status, updates, and backups, or when one may have been compromised.
+**Use for:** Security assessment, hardening, remediation, and incident response for small self-hosted web apps and dashboards that have no dedicated skill: start pages and dashboards (Homepage, Heimdall, Homarr), network scanners (WatchYourLAN, NetAlertX), monitoring tools (Glances, Uptime Kuma, Grafana), push-notification servers (ntfy, Gotify), homelab app platforms (CasaOS), file and 3D-print libraries, wikis, and similar. Use when auditing one of these apps, deciding whether it is safe to expose, reviewing its authentication, topic and token access, secrets, container privileges, maintenance status, updates, and backups, or when one may have been compromised.
 
-**Applies to:** Small self-hosted web apps without a dedicated skill, usually run as containers (verify the live version of each app) · **Finding prefix:** `APP` · **Version:** 1.0 · **Bundle:** `dist/self-hosted-web-apps.md`
+**Applies to:** Small self-hosted web apps without a dedicated skill, usually run as containers, including ntfy, Gotify, and CasaOS (verify the live version of each app) · **Finding prefix:** `APP` · **Version:** 1.1 · **Bundle:** `dist/self-hosted-web-apps.md`
 
 ### Detection
 
@@ -892,7 +1860,15 @@ Defaults can be changed, so confirm with the user before relying on a match.
 - Vendor-default ports seen in project documentation (always confirm, since they're easily changed):
   Homepage on port 3000 in its examples; Grafana on 3000 (login page titled "Grafana"); Uptime Kuma on
   3001; WatchYourLAN on 8840; NetAlertX on 20211; Glances web mode on 61208; Heimdall and Homarr on
-  whatever the image maps (commonly 80/443 inside the container).
+  whatever the image maps (commonly 80/443 inside the container). ntfy listens on port 80 by default
+  (`listen-http`), and its official image is usually mapped to another host port; Gotify defaults to
+  port 80 (`GOTIFY_SERVER_PORT`) and 443 when its own TLS is on; the CasaOS gateway serves its
+  dashboard on port 80, or the first free port in 81–89 and then 8080–8089 if 80 is taken (recorded in
+  `/etc/casaos/gateway.ini`; verify on the installed version).
+- Product hints: ntfy answers `/v1/health` with a small JSON health object and serves a web app titled
+  "ntfy"; Gotify serves a web UI titled "Gotify" and a `/version` endpoint that returns its version as
+  JSON without login; CasaOS shows a "CasaOS" page title and, before setup, a create-account page
+  (verify each on the installed version).
 - Page titles and assets: the project name in `<title>`, a project favicon, or a JavaScript bundle path
   that names the framework. A JSON API under `/api/` that answers without credentials is a strong hint
   the app has no authentication enabled.

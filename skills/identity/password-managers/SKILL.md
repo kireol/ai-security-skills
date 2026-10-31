@@ -1,0 +1,562 @@
+---
+name: password-managers
+description: >-
+  Security assessment, hardening, remediation, and incident response for password managers used by a
+  household, family, or small office: Bitwarden (cloud and self-hosted), Vaultwarden (self-hosted),
+  1Password, and KeePass or KeePassXC. Use when reviewing master password and account recovery, two-step
+  login on the vault account, family or shared vault sharing, emergency access, exports and backups, a
+  self-hosted Vaultwarden or Bitwarden server (admin token, signups, push and websocket notifications,
+  exposure, backups of the data folder), or a KeePass database file, key file, sync location, and plugins,
+  or when a vault, its server, or a device that unlocks it may have been compromised.
+license: CC-BY-4.0
+metadata:
+  version: "1.0"
+  last_reviewed: "2026-10-31"
+  applies_to: "Bitwarden cloud and self-hosted (standard and Lite), Vaultwarden, 1Password (individual, Families, Teams, Business), KeePass 2.x and KeePassXC, on versions still receiving updates; feature names, plan tiers, and menu paths change, so verify on the live account, server, or app"
+  audience: "home, work, homelab"
+  finding_prefix: "PWM"
+  modes: "discover, recommend, remediate, respond"
+---
+
+# Password Manager Security
+
+Act as a careful password-manager security advisor. A password manager holds the keys to almost every
+other account a person or household has, and often their passkeys, TOTP seeds, recovery codes, and
+documents too, so one weakness here undoes the protection of everything else. The main risks are a weak or
+reused master password, a vault account without its own second factor, a recovery path that is easier to
+abuse than the front door, over-broad sharing, unprotected exports and backups lying around, a self-hosted
+server that is exposed, unpatched, or open to signups, a KeePass database synced somewhere careless, and a
+compromised device that unlocks the vault. Identify, explain, prioritize, remediate (only when
+authorized), and verify those weaknesses without ever handling the vault's contents and without locking
+anyone out of their own vault.
+
+## How to use this skill
+
+This skill holds only password-manager-specific guidance. It builds on the shared core, which always
+applies:
+
+| Core document | Covers |
+|---|---|
+| [modes-and-authorization.md](../../../core/modes-and-authorization.md) | The four modes, transitions, operation classes (R/C1/C2/C3), standing authorization |
+| [operating-principles.md](../../../core/operating-principles.md) | Principles, capability discovery, scope, communication, untrusted data |
+| [vulnerability-triage.md](../../../core/vulnerability-triage.md) | Lifecycle, CVE/KEV validation, P0–P4 priority scale |
+| [evidence-and-reporting.md](../../../core/evidence-and-reporting.md) | Evidence labels, statuses, finding template, report format, cadence |
+| [tool-use-contract.md](../../../core/tool-use-contract.md) | Rules for commands, APIs, MCP tools, and third-party integrations |
+| [reporting-protocol.md](../../../core/reporting-protocol.md) | Optional live progress reporting to a dashboard |
+| [incident-response.md](../../../core/incident-response.md) | The generic Respond playbook |
+
+Password-manager-specific Respond steps are in [incident-response.md](incident-response.md). Vendor
+documentation and advisories are in [references.md](references.md).
+
+Related skills: second factors and recovery codes in [mfa](../mfa/SKILL.md); single sign-on into a
+self-hosted vault in [identity-providers](../identity-providers/SKILL.md); the reverse proxy in front of a
+self-hosted server in [web-servers](../../web/web-servers/SKILL.md); the container itself in
+[docker](../../containers/docker/SKILL.md); the devices that unlock the vault in
+[phones](../../mobile/phones/SKILL.md), [macos](../../operating-systems/macos/SKILL.md), and
+[windows](../../operating-systems/windows/SKILL.md); the email account that recovers the vault account in
+[productivity-suites](../../cloud/productivity-suites/SKILL.md).
+
+## Password-manager-specific principles
+
+- **The agent never sees a secret.** Never ask for, accept, or record a master password, account password,
+  1Password Secret Key, Emergency Kit, recovery code, key file, TOTP seed, admin token, vault export, or any
+  vault item, and never sign in to the user's vault. If the user pastes one, tell them it is now exposed in
+  the conversation (and possibly in logs), don't repeat it, and add "rotate the exposed secret" to the
+  plan. Ask for settings screens and yes/no answers instead ("Is two-step login on? Which methods are
+  listed?"), and ask the user to crop or redact email addresses, item names, and server hostnames in
+  screenshots.
+- **Zero-knowledge has a cost: lost secrets are often unrecoverable.** Bitwarden, Vaultwarden, 1Password,
+  and KeePass all encrypt the vault with keys derived from secrets the provider doesn't hold. If the user
+  loses the master password (and, for 1Password, the Secret Key) and has no recovery path set up, the data
+  may be gone. Every change that touches the master password, KDF settings, two-step login, recovery, or
+  the only unlocking device is a lockout risk; plan the recovery path first.
+- **The vault account is separate from the vault encryption.** For Bitwarden and 1Password, the account
+  (sign-in, two-step login, devices, sessions, recovery) and the encryption of the vault (master password,
+  KDF, Secret Key) are both in scope. A strong master password doesn't stop someone who can reset a weak
+  account recovery path, and vice versa.
+- **The email account is usually the root of trust.** Vault account recovery, new-device verification,
+  emergency access notices, and self-hosted server invitations go to email. Assess, or ask the user to
+  assess, the email account's security as part of this skill (see the productivity-suites and mfa skills).
+- **Self-hosting moves the provider's job to the user.** A self-hosted Vaultwarden or Bitwarden server is
+  only as safe as its patching, exposure, admin token, signup policy, TLS, host, and backups. Treat it as a
+  high-value web application (core triage: exposed services and authentication bypasses on it are P1).
+- **Vaultwarden is not Bitwarden.** Vaultwarden is an unofficial, community-written, Bitwarden-compatible
+  server. It uses official Bitwarden clients but is not supported or audited by Bitwarden, and its
+  feature set and settings differ. Don't apply Bitwarden server documentation to it (or the reverse)
+  without checking.
+- **The device that unlocks the vault is part of the vault.** Malware on an unlocked desktop can read
+  everything the app can show. Unlock methods (biometrics, PIN, "never lock"), timeout settings, browser
+  extensions, and the host OS's own security all matter.
+- **Sharing is a trust decision, not a technical one.** Family and shared vaults, collections, emergency
+  access, and Send links decide who else can read what. Ask the user who should see each shared space;
+  don't decide for them, and never review the contents of another person's private vault.
+
+## Deployment variants
+
+Identify the variant in Discover. It changes which domains apply and who controls the server side.
+
+| Variant | How to recognize it | What changes |
+|---|---|---|
+| **Bitwarden cloud** (individual, Premium, Families, Teams, Enterprise) | Clients point at the default US or EU cloud server; web vault at the vendor's domain. | Bitwarden runs the server. Assess the account: master password, KDF, two-step login, new-device protection, sessions, emergency access (Premium), organization sharing and policies. Domains G–I don't apply. |
+| **Bitwarden self-hosted** (standard multi-container deployment or Bitwarden Lite) | Clients set to a custom server URL; `bitwarden.sh` installation directory or the `ghcr.io/bitwarden/lite` image; a System Administrator Portal at `/admin`. | All account domains plus the server: patching, exposure, SMTP, admin portal email list, installation ID and key, database and backups. Bitwarden describes Lite as for personal use and home labs, not business use. Some features need a license file. |
+| **Vaultwarden** | Custom server URL in Bitwarden clients; a `vaultwarden/server` container (or a distribution package); a single `/data` folder holding `db.sqlite3`, `rsa_key*` files, `attachments/`, `sends/`, and possibly `config.json`. | The user is the provider. All domains apply, especially G (admin token, signups, invitations, password hints, push and websocket, SSO), H (exposure, reverse proxy, fail2ban), and I (data-folder backups). Not supported by Bitwarden. |
+| **1Password** (individual, Families, Teams, Business) | 1Password apps and browser extension; account at the vendor's US, EU, or Canada domain; an Emergency Kit PDF. | 1Password runs the service. The **Secret Key** plus account password protect the account; recovery is by family organizer, team admin, or recovery code. Optional self-hosted pieces (Connect server, SCIM bridge) bring their own server domain (G). |
+| **KeePass 2.x or KeePassXC** (local database file) | `.kdbx` files; KeePass or KeePassXC installed; mobile apps that open KDBX files; a synced folder holding the database. | No account or server: the **file** is the vault. Assess the database's encryption settings, master key composition (password, key file, hardware key), where the file and its key file are stored and synced, plugins (KeePass 2.x), triggers, browser integration, and backups of the file (domain J). |
+| **Mixed or transitional** | More than one manager in use, or an old manager still installed after a migration. | Old vaults, exports created for the migration, and old browser-saved passwords are often left behind. Inventory all of them (domain K). |
+
+## Detection
+
+Hints for recognizing password managers during a network inventory (used by the `full-assessment`
+skill). Cloud managers are recognized on devices and in DNS, not by scanning; self-hosted servers answer on
+the network. Defaults can be changed, so confirm with the user before relying on a match.
+
+- **Vaultwarden:** the container image listens on port 80 inside the container (8000 outside Docker;
+  vendor-documented default for `ROCKET_PORT`), usually published on another host port and fronted by a
+  reverse proxy on 443. The web vault is the Bitwarden web client, with Vaultwarden branding on recent
+  versions (observed; verify on the live page). It answers Bitwarden-compatible API paths such as
+  `/api/config` and `/identity/connect/token`, plus `/alive` (observed; not yet verified on every
+  version). Very old deployments used a separate websocket port 3012; current versions serve websocket
+  notifications on the main port (verify against the version's wiki page). A login page reachable at
+  `/admin` means the admin panel is enabled.
+- **Bitwarden self-hosted:** the standard deployment publishes 80 and 443 through its nginx container;
+  Bitwarden Lite listens on 8080 and 8443 inside the container by default (`BW_PORT_HTTP`,
+  `BW_PORT_HTTPS`, vendor-documented). The System Administrator Portal is at `/admin` and sends a
+  passwordless email link to listed administrators.
+- **Bitwarden cloud:** clients and DNS lookups for the vendor's US or EU vault domains; the Bitwarden
+  desktop app, browser extension, or mobile app installed.
+- **1Password:** the 1Password app, browser extension, or CLI (`op`) installed; DNS lookups for the vendor's
+  account domains (US, EU, or Canada region). A 1Password Connect server is a self-hosted container that
+  answers a REST API for automation; look for it among containers, not on the LAN.
+- **KeePass and KeePassXC:** installed applications; `.kdbx` (and possibly key) files in user folders or
+  synced storage. KeePassXC's browser integration talks to its extension through native messaging, not a
+  network port. KeePassXC can act as an SSH agent or a Secret Service provider on Linux.
+- **Browser-saved passwords** (Chrome, Edge, Firefox, Safari) and platform keychains (iCloud Keychain,
+  Google Password Manager) are password managers too; note them so domain K can cover them.
+- MAC address vendors don't help: these run on general-purpose hosts and containers.
+
+---
+
+## Discover
+
+All operations in this mode are class **R** (read-only). Confirm scope and access first (core: operating
+principles). Mark anything you can't inspect **Not assessed**.
+
+### Access and baseline
+
+- **Cloud and app checks are done by the user.** The agent has no access to the vault and must not sign
+  in. The user opens the account's security settings (web vault or app) and reports what is listed, with
+  screenshots redacted as described above. Describe each setting by what it does and ask the user to
+  confirm the current menu path; vendors move them often.
+- **Self-hosted servers:** prefer read-only access to the host or container (inspect configuration,
+  environment variable *names*, image version, logs) and the admin panel's read-only views, signed in by
+  the user. Never print the values of `ADMIN_TOKEN`, SMTP passwords, installation keys, database
+  passwords, or `rsa_key*` contents; record only whether each exists and how it is stored.
+- **KeePass files:** check file metadata (location, permissions, sync folder, modification times, backup
+  copies) without opening the database. Database settings are read by the user in the app's Database
+  Settings while the database is unlocked on their machine.
+
+### Baseline commands (self-hosted, if available)
+
+Candidate read-only commands. Container and file names are placeholders; check each command exists
+first and don't run anything that prints secret values.
+
+```sh
+docker ps --format '{{.Names}}\t{{.Image}}\t{{.Ports}}'          # observed: finds the server container and its published ports
+docker inspect <vw-container> --format '{{.Config.Image}} {{.Image}}'   # image tag and digest
+docker inspect <vw-container> --format '{{range .Config.Env}}{{println .}}{{end}}' | cut -d= -f1   # env var NAMES only
+docker logs --tail 200 <vw-container>                            # version banner, warnings (review for tokens before sharing)
+ls -la <data-folder>                                              # db.sqlite3, rsa_key*, attachments/, sends/, config.json presence and permissions
+curl -sS https://<vault-host>/api/config                          # observed: server name and version (no auth needed); not yet verified on every version
+curl -sS -o /dev/null -w '%{http_code}\n' https://<vault-host>/admin   # is the admin panel enabled and reachable?
+```
+
+- `config.json` in the Vaultwarden data folder holds settings saved from the admin panel, including the
+  admin token and SMTP credentials in plain text, and its values override environment variables
+  (vendor-documented). Check its existence and permissions; don't print it. Use
+  `grep -c '"admin_token"' <data-folder>/config.json` style checks (count only) if you must confirm a key
+  is present, and never echo the value.
+- Vaultwarden logs a warning when `ADMIN_TOKEN` is a plain-text value rather than an Argon2 PHC string
+  (vendor-documented). Searching the log for that warning is a safe way to check token hashing.
+
+### Assessment domains
+
+Every domain must end with a status in the report (Pass / Finding / Not assessed / Not applicable /
+Accepted risk).
+
+#### A. Inventory and lifecycle
+
+- Which managers are in use, by whom, on which devices, and which plan or edition (individual, Premium,
+  Families, Teams, Business, Enterprise; self-hosted standard or Lite; Vaultwarden; KeePass or KeePassXC).
+- Client app, browser extension, and server versions vs. the vendor's current releases and security
+  advisories (core: triage). For Vaultwarden, check the project's GitHub releases and security advisories;
+  releases often fix several advisories at once and may require recent clients.
+- Unofficial forks, abandoned mobile KDBX apps, and browser extensions from unknown publishers.
+- Who administers each organization, family, or server, and whether there are at least two people who can
+  recover or administer it.
+
+#### B. Master password and vault encryption
+
+- The user confirms (yes/no only) that the master password or account password is unique (used nowhere
+  else), long (a passphrase of several random words is a good target), not written on or near the device,
+  and not known to anyone else unless that is a deliberate recovery arrangement. Never ask for it or for a
+  hint of it.
+- Bitwarden and Vaultwarden: KDF algorithm and settings (PBKDF2 iterations or Argon2id memory, iterations,
+  parallelism) vs. the vendor's current defaults. Old accounts may still have low PBKDF2 iteration counts
+  from before the defaults were raised. Password hint: present? A hint that reveals the password is a
+  finding.
+- 1Password: the account password plus the 128-bit Secret Key; where the Emergency Kit (which contains the
+  Secret Key) is stored, and whether it has been filled in with the password (it shouldn't be stored
+  together with the password in the same place as the vault's only copy).
+- KeePass and KeePassXC: database format (KDBX 4 preferred over KDBX 3.1), key derivation function
+  (Argon2d or Argon2id preferred over AES-KDF) and its parameters, and the master key composition
+  (password, key file, hardware challenge-response). A database protected only by a key file, with the
+  key file next to it, is effectively unprotected.
+
+#### C. Vault account sign-in and two-step login (cloud, self-hosted, 1Password)
+
+- Two-step login on the vault account: which methods (FIDO2/passkey or security key, authenticator app,
+  Duo, email) are enrolled. Prefer phishing-resistant methods (see the [mfa](../mfa/SKILL.md) skill).
+  Email as the only second step makes the email account a single point of failure.
+- Where the authenticator for the vault lives. A TOTP code for the vault stored **inside the same vault**
+  is circular; ask where it is kept.
+- Two-step login recovery codes: generated, and stored offline outside the vault (domain F).
+- Bitwarden new-device login protection (email verification on new devices) state, for accounts without
+  two-step login.
+- Signed-in devices and sessions: unknown, old, or sold devices still listed; "deauthorize sessions" last
+  used.
+- Passkey or SSO unlock where used: what the fallback is, and that it is understood.
+- API keys (Bitwarden personal API key, 1Password service accounts and Connect tokens): existence, scope,
+  and age only.
+
+#### D. Client and device settings
+
+- Vault timeout and timeout action (lock vs. log out) on each client; "never" timeouts on laptops and
+  shared computers.
+- Unlock methods: biometrics or PIN unlock, and whether a PIN unlock survives an app restart without the
+  master password.
+- Browser extension: autofill on page load (riskier than manual autofill on sites with injected content),
+  URI match detection settings, and extensions installed in browsers or profiles shared with other people.
+- Clipboard clearing, screen-capture settings where offered, and whether the app is installed on shared,
+  work-managed, or untrusted computers.
+- The underlying OS: screen lock, disk encryption, supported version, and malware protection (see the
+  [macos](../../operating-systems/macos/SKILL.md), [windows](../../operating-systems/windows/SKILL.md),
+  and [phones](../../mobile/phones/SKILL.md) skills).
+- Browser-built-in password saving still on alongside the manager (duplicate, often weaker store).
+
+#### E. Sharing: families, organizations, collections, shared vaults, Send
+
+- Bitwarden and Vaultwarden organizations: members, roles (owner, admin, manager, custom), collection
+  access, pending or stale invitations, and members who left the household or office. Organization
+  policies in use (require two-step login, master password requirements, single organization, disable
+  personal vault export) where the plan offers them.
+- 1Password: family organizers and administrators, who has access to each shared vault, guests, and the
+  **Recover Accounts** permission (who can reset whom).
+- What is shared: important accounts (email, bank, router admin, NAS admin) in a shared vault should be a
+  deliberate choice, not an accident of the default shared vault.
+- Bitwarden Send and 1Password item sharing links: active links, expiry, access counts, passwords on the
+  links. Vaultwarden can disable Sends (`SENDS_ALLOWED`).
+- Former partners, ex-employees, and children who have grown up: access still present?
+
+#### F. Recovery: emergency access, account recovery, recovery codes, and the Emergency Kit
+
+- **Bitwarden and Vaultwarden emergency access:** trusted contacts, their access level (**view** or
+  **takeover**), and wait time. Takeover lets the contact set a new master password and removes the
+  grantor's two-step login methods (vendor-documented for Bitwarden); a short wait time with takeover is
+  a powerful backdoor if the contact's own account is weak. The grantor gets an email when a request is
+  made; that email account must be monitored.
+- **Bitwarden organization account recovery** (admin password reset, Enterprise policy) where used: who
+  can reset whose master password.
+- **1Password recovery:** at least two family organizers or admins who can recover accounts, and recovery
+  codes for individual and family accounts where the user has chosen them. Recovery issues a new Secret
+  Key and resets two-factor authentication (vendor-documented); know who could trigger it.
+- **Two-step login recovery codes** (Bitwarden) and 1Password's recovery code: generated, stored offline
+  (printed, in a safe, or in a separate trusted person's care), not only inside the vault they recover.
+- **KeePass:** no recovery at all. Where is a backup of the master password, key file, and hardware key
+  for an emergency, and who knows how to use it?
+- Is there a written, tested plan for "the main user is unavailable" (illness, death), and does it avoid
+  making any one person able to take over silently?
+
+#### G. Self-hosted server configuration (Vaultwarden, Bitwarden self-hosted, 1Password Connect)
+
+Vaultwarden (settings by environment variable or admin panel; verify names on the live version's
+`.env.template`):
+
+- **Admin panel:** disabled (no `ADMIN_TOKEN`, no `admin_token` in `config.json`) unless needed. If
+  enabled, the token is an Argon2 PHC string generated with `vaultwarden hash`, not plain text
+  (vendor-documented; a startup warning flags plain text). `DISABLE_ADMIN_TOKEN` is unset, unless another
+  authentication layer is enforced in front of `/admin`. Admin session lifetime not lengthened. `/admin`
+  reachable only from the LAN or VPN.
+- **Signups:** `SIGNUPS_ALLOWED` defaults to true (vendor-documented). A server reachable from the
+  internet with open signups lets anyone create an account. Check `SIGNUPS_ALLOWED`,
+  `SIGNUPS_DOMAINS_WHITELIST`, `SIGNUPS_VERIFY`, and `INVITATIONS_ALLOWED` (organization admins can invite
+  even when signups are off) and `ORG_CREATION_USERS`.
+- **Password hints:** `SHOW_PASSWORD_HINT` false (current default; shows hints on the page when SMTP isn't
+  configured).
+- **`DOMAIN`** set to the real HTTPS URL (needed for correct links and WebAuthn); TLS terminated by a
+  reverse proxy rather than Rocket's built-in TLS (vendor hardening guide).
+- **Notifications:** websocket notifications on the main port through the proxy; mobile push via the
+  Bitwarden push relay (`PUSH_ENABLED` with an installation ID and key from Bitwarden, and the region's
+  relay URI) only if wanted. Push sends notification metadata through Bitwarden's relay; record that as a
+  privacy choice. The websocket connection carries an access token in the URL, so check that reverse-proxy
+  access logs redact it (vendor hardening guide).
+- **Rate limiting and brute force:** `LOGIN_RATELIMIT_*` and `ADMIN_RATELIMIT_*` at or near defaults; if
+  fail2ban or similar is used, that `IP_HEADER` matches the proxy so the real client address is logged
+  (a wrong header lets attackers spoof it or blocks the proxy).
+- **SSO** (`SSO_ENABLED`, if the version supports it): provider, `SSO_ONLY`, `SSO_SIGNUPS_MATCH_EMAIL`, and
+  `SSO_ALLOW_UNKNOWN_EMAIL_VERIFICATION` (risky together); the identity provider's own security (see the
+  [identity-providers](../identity-providers/SKILL.md) skill). SSO authenticates the user; the master
+  password still decrypts the vault.
+- **Emergency access, Sends, org creation** allowed only as the household wants.
+- **SMTP:** configured with TLS, so invitations, new-device notices, and emergency access emails work.
+  Without SMTP, email-based protections silently don't work.
+- **Container:** runs as a non-root user where possible; only the data folder mounted; image pinned and
+  updated deliberately (see the [docker](../../containers/docker/SKILL.md) skill).
+
+Bitwarden self-hosted:
+
+- `adminSettings__admins` (the System Administrator Portal email list) limited to current administrators;
+  SMTP working (the portal login is an emailed link).
+- Installation ID and key, database password, and certificates stored with restrictive permissions;
+  `global.override.env` not world-readable; installation directory not on a share others can write.
+- Update process: `./bitwarden.sh update` (standard) or image updates (Lite) applied, with release notes
+  read and a backup taken first.
+
+1Password Connect server and SCIM bridge (if present):
+
+- Where the credentials file and access tokens live, which vaults each token can read, whether the
+  Connect API is reachable only by the services that need it, and image versions.
+
+#### H. Self-hosted exposure and remote access
+
+- Every path in: port forwards, UPnP mappings, reverse-proxy routes, tunnels, VPNs, and IPv6 (core and the
+  [web-servers](../../web/web-servers/SKILL.md) skill).
+- Is the server internet-reachable? Many households only need it on the LAN and VPN, with clients syncing
+  when at home or connected. If it is public, it needs current patches, HTTPS, closed signups, a disabled
+  or LAN-only admin panel, and rate limiting at minimum.
+- Strict SNI / hostname-only access, so scanning the IP doesn't reveal the vault (vendor hardening guide).
+- An access layer in front (VPN, Cloudflare Access, or forward-auth) can break Bitwarden mobile and
+  desktop clients, which don't speak those flows. Check what was done and whether all clients still work
+  (see the [cloudflare](../../edge/cloudflare/SKILL.md) skill).
+- Certificate validity and renewal. An expired certificate trains users to click through warnings.
+
+#### I. Self-hosted data protection and backups
+
+- Vaultwarden data folder: `db.sqlite3` backed up with SQLite's online backup method (`.backup`, `VACUUM
+  INTO`, or the built-in backup command on versions that have it), not by copying a live file;
+  `attachments/` included (attachments aren't in the database); `rsa_key*` and `config.json` included
+  and **encrypted** (they contain signing keys and plain-text secrets); `sends/` optional; MySQL or
+  PostgreSQL dumped separately if used (vendor-documented).
+- Bitwarden self-hosted: database backups and the installation directory, per vendor documentation.
+- Backup destination outside the server's admin boundary, encrypted, with at least one off-site or
+  offline copy. A restore tested to a separate instance. Filesystem or VM snapshots alone are discouraged
+  by the Vaultwarden project as a recovery method.
+- A plan for "the server died": clients keep a cached vault for a while, but a dead server with no backup
+  means lost data for anyone without an export.
+
+#### J. KeePass and KeePassXC databases
+
+- **Database file location:** where the `.kdbx` lives and syncs (cloud drive, NAS share, Syncthing,
+  USB). Who else can read that location (shared family folder, a NAS share writable by the LAN)? A
+  readable database invites offline guessing; the master key strength is the only defense.
+- **Key file:** where it is. A key file in the same synced folder as the database, or in the same backup
+  set, adds nothing. Prefer a key file kept on each device locally (or on a hardware key) and backed up
+  separately offline.
+- **Hardware key challenge-response** (KeePassXC and some plugins): a backup hardware key programmed with
+  the same secret exists and is tested, or the database becomes unopenable when the key is lost.
+- **Sync conflicts and integrity:** concurrent edits from several devices can create conflicting copies;
+  check for stray `*conflicted copy*` files, which are full copies of the vault.
+- **Backups:** KeePassXC's "backup database file before saving" and KeePass's backup triggers or plugins;
+  where those backup copies are written (often next to the database, in the synced folder).
+- **KeePass 2.x plugins:** list installed plugins (`.plgx` and `.dll` in the Plugins folder), their source,
+  and maintenance. Plugins run with full access to the open database. Unneeded plugins are a finding.
+- **KeePass 2.x triggers and configuration file:** KeePass's own security page says it can't protect
+  against an attacker or malware with write access to its configuration or program folder. Check who can
+  write the KeePass configuration file and program folder, and review triggers for anything that exports
+  data or runs commands. An enforced configuration file can lock settings on managed machines.
+- **KeePassXC features:** browser integration (which browsers, connected databases, "allow returning
+  expired credentials", per-site permissions), SSH agent integration, Secret Service integration on Linux
+  (exposes entries to other desktop apps), auto-type, and the passkey store; each only if used. Lock on
+  idle, lock on screen lock, clear clipboard, and minimize-on-lock settings.
+- **Mobile apps** that open the database: publisher, maintenance, cloud-provider permissions, and whether
+  they cache a decrypted copy or keep the database in a shared location.
+
+#### K. Exports, leftovers, and other password stores
+
+- Plain-text exports (`.csv`, `.json`, unencrypted `.1pux`, `.xml`) left in Downloads, Desktop, cloud
+  drives, email attachments, or migration folders. These contain every password in clear text. Ask the
+  user to search for them; record the count and location class, not the file names or content.
+- Encrypted exports: where they are and what protects them (account-restricted vs. password-protected
+  Bitwarden exports differ in who can open them).
+- Old managers and browser-saved passwords still holding credentials after a migration.
+- Printed password lists or notebooks: a physical-security choice to record with the user, not to judge.
+- Organization policy to disable personal vault export, where the plan offers it and the household or
+  office wants it.
+
+#### L. Vault hygiene and monitoring
+
+- Built-in health reports (Bitwarden vault health reports, Vaultwarden equivalents in clients, 1Password
+  Watchtower, KeePassXC database health check and optional breach checks): reused, weak, exposed, and
+  unsecured-website passwords, and inactive two-step login. The user runs these and reports counts only.
+- Important accounts (email, banking, the vault's own recovery email, router, NAS, identity provider) have
+  unique passwords and second factors.
+- Passkeys and TOTP seeds stored in the vault: deliberate, with the trade-off understood (see the
+  [mfa](../mfa/SKILL.md) skill).
+- Security alerts reach someone: new-device emails, emergency access requests, organization invitations,
+  server error notifications.
+- Self-hosted logs: kept, rotated, include failed logins and admin panel access, and forwarded off the host
+  where the household has a log destination.
+
+---
+
+## Recommend
+
+No changes are made in this mode. For each finding, produce a recommendation using the core finding
+template, including **Dependencies / blast radius** and the **operation class**.
+
+### Dependency and blast-radius check (required)
+
+Before recommending a change, list what depends on the current state. Common hidden dependencies:
+
+- **Every logged-in client.** Changing the master password, KDF settings, or encryption key, or rotating
+  the account key, logs out or re-prompts every device. Offline devices may hold a stale cache.
+- **Mobile autofill and passkey providers** on phones, which may need to be re-enabled after a sign-out.
+- **Emergency contacts and recoverers**, who must have working accounts before any other recovery path is
+  removed.
+- **Organization members and shared collections**, which break or disappear if a member is removed, an
+  organization policy is applied, or a shared vault is deleted.
+- **Automation:** scripts, CI jobs, and containers using the Bitwarden CLI, API keys, 1Password service
+  accounts, or Connect tokens.
+- **Self-hosted clients:** every Bitwarden client pointing at the server. Changing the server URL,
+  certificate, reverse-proxy rules, or putting an access layer in front can stop sync for all of them.
+- **SMTP:** emailed invitations, new-device verification, admin portal links, and emergency access
+  notices stop when SMTP changes.
+- **KeePass:** every device and app that opens the database, and the sync path. Changing the master key
+  or KDF updates the file; devices that open an old cached copy will fail or create conflicts. Hardware
+  key changes need every device updated.
+
+### Recommendation guidance
+
+| Area | Typical recommendation | Consequences to explain |
+|---|---|---|
+| Weak or reused master password | Change to a unique long passphrase, in the app, on a trusted device. | All devices re-prompt; the user must remember it; update any written emergency copy. |
+| No two-step login on the vault account | Add a security key or passkey plus an authenticator app; save the recovery code offline. | Losing every factor and the recovery code can lock the account; test before relying on it. |
+| Low KDF settings | Raise to the vendor's current defaults (or Argon2id), testing on the slowest device. | Slower unlock on old phones; every client re-authenticates. |
+| Vault TOTP stored in the same vault | Move the vault's own second factor to a separate authenticator or security key. | One more thing to carry; keep its recovery codes offline too. |
+| Emergency access with short takeover wait | Use view access, or a longer wait time, for the right people only. | Slower help in a real emergency; explain the trade-off. |
+| Single family organizer or admin | Add a second trusted organizer or admin; generate recovery codes where offered. | That person can reset accounts; choose deliberately. |
+| Plain-text exports lying around | Securely delete them after confirming the vault is complete; empty trash and cloud-drive version history. | Deletion is **C3**; confirm nothing else holds the only copy. |
+| Vaultwarden admin token in plain text | Replace with an Argon2 PHC string from `vaultwarden hash`, set where the instance actually reads it (`config.json` overrides env). | Wrong escaping in Compose files breaks login to `/admin`; existing admin sessions stay valid until they expire. |
+| Admin panel reachable publicly | Disable the admin panel, or block `/admin` at the proxy to LAN/VPN only. | Admin tasks must be done from the LAN. |
+| Open signups on a public server | Set `SIGNUPS_ALLOWED=false`; use invitations or a domain allow-list. | New household members must be invited. |
+| Vault server internet-exposed | Restrict to LAN and VPN, or keep it public with full hardening; don't put browser-only auth in front without testing clients. | Clients sync only on VPN or at home. |
+| No or untested data-folder backup | Schedule SQLite online backups plus attachments, keys, and config, encrypted, off-host; test a restore. | Storage and a restore test take time; keys in backups must be protected. |
+| KeePass key file beside the database | Keep the key file local to each device (or use a hardware key) and back it up offline separately. | Each new device needs the key file copied safely. |
+| Unneeded KeePass plugins | Remove them; keep the program and config folders admin-writable only. | Features the user relied on may disappear. |
+| Browser-saved passwords alongside the manager | Import into the manager, then turn off and clear the browser store. | Clearing is **C3** for that store; confirm the import first. |
+
+Group the plan into: immediate containment (if any) → urgent security fixes → high-priority hardening →
+routine maintenance → optional defense in depth. Then ask for approval (core: modes and authorization).
+
+---
+
+## Remediate
+
+Apply only approved changes, one at a time, following the core rules. Password-manager specifics:
+
+- **The user makes account changes; the agent guides.** Master password, two-step login, KDF, emergency
+  access, recovery, and sharing changes are done by the user in the vendor's app or web vault. The agent
+  explains each step and confirms the result from a redacted screenshot. Never type secrets for the user.
+- **Recovery path first.** Before changing the master password, KDF, encryption key, or two-step login:
+  confirm a current backup or export plan exists (an encrypted export kept offline, if the user chooses
+  one), the recovery code is saved, and at least one other trusted device is signed in. These changes are
+  **C2** (they log out clients and can lock the user out).
+- **Two-step login:** enroll a second factor (or a backup key) before relying on the first; save the
+  recovery code offline before leaving the settings page; sign out and back in on one device to prove it
+  works before considering the change done.
+- **Exports during remediation:** avoid them. If one is genuinely needed (migration, backup), prefer an
+  encrypted export, create it on a trusted device, never in a synced or shared folder, and delete it
+  (and empty trash) as soon as it has served its purpose. Deleting exports or old vaults is **C3**.
+- **Vaultwarden configuration:** capture the current settings first (environment variable names and the
+  existence of `config.json`), change one setting at a time, and remember that values saved in the admin
+  panel live in `config.json` and override environment variables. Restart or recreate the container
+  (**C2**, short outage for clients) and confirm in the logs and the web vault that the change took
+  effect.
+- **Vaultwarden and Bitwarden server updates:** take and verify a backup first, read the release notes
+  (database migrations may prevent downgrade; new versions may require newer clients), pin the new image,
+  and test sign-in, sync, and notifications from web, desktop, and mobile clients.
+- **Exposure changes:** follow the web-servers skill; keep LAN access working before removing public
+  routes, and tell users how to sync remotely afterward.
+- **KeePass:** before changing the master key, KDF, or database format, make a copy of the database file
+  (and key file) to an offline location, change it on one device, let sync finish, and open it on every
+  other device before deleting the copy.
+
+### Hard stops (refer to a specialist; never automate)
+
+- Never attempt to recover, crack, or brute-force a master password, key file, or database, even the
+  user's own. Point to the vendor's legitimate recovery options only.
+- Never decrypt, read, or transmit vault contents, exports, or database files, and never upload them to
+  any service (including an AI service) for analysis.
+- Never edit a Bitwarden or Vaultwarden database directly (SQL changes to users, ciphers, organizations,
+  or keys) as a security fix. Use the admin panel or vendor-documented procedures; database surgery can
+  make vaults undecryptable.
+- Never delete `rsa_key*` files, databases, or attachments as an experiment. Deleting the RSA keys signs
+  everyone out (sometimes useful in Respond, deliberately); deleting data is **C3**.
+- Never take over another person's vault through emergency access or account recovery without that
+  person's knowledge, except in the real emergency the arrangement was made for.
+
+---
+
+## Respond
+
+On any P0 indicator (unknown device or session on the vault account, emergency access request the user
+didn't expect, a recovery started by someone else, unknown accounts or organizations on a self-hosted
+server, admin panel access from unknown addresses, a stolen unlocked device, or malware on a device that
+unlocks the vault), switch to Respond immediately. Follow the core playbook plus the
+password-manager-specific steps in [incident-response.md](incident-response.md).
+
+---
+
+## Worked example (invented)
+
+### PWM-001: Vaultwarden reachable from the internet with open signups and a plain-text admin token
+
+**Confidence:** Confirmed
+**Priority:** P2. Anyone on the internet can create an account on the household's vault server, which
+widens the attack surface of a high-value service, and the admin panel is protected by a plain-text token
+stored in a file that is included in unencrypted backups. No sign of misuse in the user list, so not P0.
+**State:** Open
+**Component:** Vaultwarden container (current release at the time of review), behind a reverse proxy on
+`vault.example.com`
+**Evidence:** Observed 2026-04-02: `docker inspect` shows no `SIGNUPS_ALLOWED` variable (default true);
+the web vault at `https://vault.example.com` offers "Create account"; the container log shows the
+plain-text `ADMIN_TOKEN` warning; `config.json` exists in the data folder, mode `644`; `/admin` returns
+the admin login page from `203.0.113.50` (an external test address in the authorized scope). The user
+listed four expected accounts and the admin panel's user list (read by the user) shows exactly those
+four.
+**Expected secure state:** signups disabled or limited to invitations; admin panel disabled or reachable
+only from the LAN/VPN, with an Argon2 PHC admin token; `config.json` readable only by the service; backups
+of the data folder encrypted (Vaultwarden wiki: hardening guide, enabling admin page, backing up your
+vault).
+**Exposure and prerequisites:** any internet user can register; brute-forcing `/admin` is rate-limited
+but possible; anyone who obtains a backup copy reads the admin token.
+**Dependencies / blast radius:** four household members use desktop, browser, and mobile clients; a
+family organization holds shared logins. Disabling signups doesn't affect existing accounts; restricting
+`/admin` affects only the administrator.
+**Recommended remediation:** set `SIGNUPS_ALLOWED=false` in the admin panel (it writes `config.json`);
+generate an Argon2 PHC string with `vaultwarden hash` on the host and save it as the admin token; block
+`/admin` at the reverse proxy except from `192.0.2.0/24` and the VPN range; set `config.json` to `600`;
+encrypt the backup job's output. Alternative: remove the admin token entirely and manage settings by
+environment variables.
+**Operation class:** C2 (container restart briefly interrupts sync; admin access path changes).
+**Approval required:** Yes.
+**Verification:** "Create account" no longer works from an external address; `/admin` returns 403 from
+`203.0.113.50` and the login page from the LAN; the plain-text token warning is gone from the startup log;
+all four users can still sign in and sync on each client.
+**Rollback:** restore the captured `config.json` copy (stored encrypted and offline) and the previous
+proxy rule, then restart the container.
+
+---
+
+## Version history
+
+- **1.0** (2026-10-31): Initial version.

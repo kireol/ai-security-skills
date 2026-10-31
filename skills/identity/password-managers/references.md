@@ -1,0 +1,64 @@
+# Password Managers: References
+
+Always prefer current vendor documentation. Plan names, features, defaults, and menu paths change often.
+Re-verify links and contents when updating this skill.
+
+Last verified: 2026-10-31
+
+## Vendor (authoritative)
+
+### Bitwarden
+
+- Help center: https://bitwarden.com/help/
+- Emergency access (plans, view vs. takeover, wait time): https://bitwarden.com/help/emergency-access/
+- KDF algorithms and defaults: https://bitwarden.com/help/kdf-algorithms/
+- Bitwarden Lite (self-hosted single image, default ports): https://bitwarden.com/help/install-and-deploy-lite/
+- System Administrator Portal (self-hosted `/admin`): https://bitwarden.com/help/system-administrator-portal/
+- Self-hosting overview: https://bitwarden.com/help/self-host-an-organization/
+- Security and compliance, audits, and disclosure: https://bitwarden.com/help/is-bitwarden-audited/
+- Server releases: https://github.com/bitwarden/server/releases
+- Clients releases: https://github.com/bitwarden/clients/releases
+
+### Vaultwarden (community project; not supported by Bitwarden)
+
+- Project and releases (security fixes are listed in release notes): https://github.com/dani-garcia/vaultwarden/releases
+- Security advisories: https://github.com/dani-garcia/vaultwarden/security/advisories
+- Configuration template (every setting and its default for that version): https://github.com/dani-garcia/vaultwarden/blob/main/.env.template
+- Hardening guide: https://github.com/dani-garcia/vaultwarden/wiki/Hardening-Guide
+- Enabling the admin page (Argon2 PHC tokens, `config.json` precedence): https://github.com/dani-garcia/vaultwarden/wiki/Enabling-admin-page
+- Backing up your vault (data-folder contents and method): https://github.com/dani-garcia/vaultwarden/wiki/Backing-up-your-vault
+- Enabling WebSocket notifications: https://github.com/dani-garcia/vaultwarden/wiki/Enabling-WebSocket-notifications
+- Enabling mobile client push notifications: https://github.com/dani-garcia/vaultwarden/wiki/Enabling-Mobile-Client-push-notification
+
+### 1Password
+
+- Account recovery by organizers and admins: https://support.1password.com/recovery/
+- Recovery codes: https://support.1password.com/recovery-codes/
+- Recovery code security: https://support.1password.com/recovery-code-security/
+- Secret Key security: https://support.1password.com/secret-key-security/
+- Forgot account password: https://support.1password.com/forgot-account-password/
+- Security white paper and design: https://1password.com/security
+- Connect server (self-hosted automation API): https://www.1password.dev/connect/
+- Release notes: https://releases.1password.com/
+
+### KeePass and KeePassXC
+
+- KeePass security information: https://keepass.info/help/base/security.html
+- KeePass plugins and plugin security: https://keepass.info/help/v2/plugins.html
+- KeePass enforced configuration: https://keepass.info/help/kb/config_enf.html
+- KeePassXC user guide: https://keepassxc.org/docs/KeePassXC_UserGuide
+- KeePassXC releases: https://github.com/keepassxreboot/keepassxc/releases
+- KeePassXC security advisories: https://github.com/keepassxreboot/keepassxc/security/advisories
+
+Generic vulnerability and incident sources (CISA KEV, NVD, CVE, CISA ransomware guidance, IC3) are listed in
+the core documents.
+
+## Government and standards
+
+- NIST SP 800-63B (authenticators and passwords): https://pages.nist.gov/800-63-4/sp800-63b.html
+- CISA, "Use strong passwords" and password manager guidance: https://www.cisa.gov/secure-our-world/use-strong-passwords
+
+## Third-party (not authoritative)
+
+- Release trackers and blog summaries of Vaultwarden advisories exist, but the project's GitHub release
+  notes and advisories are the source of record; use summaries only to find what to verify.

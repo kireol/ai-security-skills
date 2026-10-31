@@ -2,16 +2,18 @@
 name: linux
 description: >-
   Security assessment, hardening, remediation, and incident response for Linux hosts: servers, VMs, LXC
-  containers, and Raspberry Pi-class devices, with distribution-aware guidance for Debian, Ubuntu,
-  RHEL-family (RHEL, Rocky, AlmaLinux, Fedora), and others. Use when auditing a Linux host's support status,
-  automatic updates, users and sudo, SSH, listening services, host firewall, AppArmor/SELinux, secrets on
-  disk, cron and systemd persistence, third-party repositories, logging, NFS/SMB, containers, or backups,
-  or when a Linux host may have been compromised.
+  containers, Raspberry Pi-class devices, and Linux desktops and laptops, with distribution-aware guidance
+  for Debian, Ubuntu, RHEL-family (RHEL, Rocky, AlmaLinux, Fedora), Linux Mint, Arch and other rolling
+  distributions. Use when auditing a Linux host's support status, automatic updates, users and sudo, SSH,
+  listening services, host firewall, AppArmor/SELinux, secrets on disk, cron and systemd persistence,
+  third-party repositories, logging, NFS/SMB, containers, or backups; a desktop's or laptop's full-disk
+  encryption (LUKS), screen lock, Secure Boot and MOK, Flatpak/Snap/AUR software sources, desktop sharing
+  (RDP/VNC), or rolling-release updates; or when a Linux host may have been compromised.
 license: CC-BY-4.0
 metadata:
-  version: "1.0"
-  last_reviewed: "2026-10-30"
-  applies_to: "systemd-based Linux distributions: Debian 12-13, Ubuntu LTS 22.04-26.04, RHEL-family 8-10, Raspberry Pi OS, and similar (verify the live release and its support status)"
+  version: "1.1"
+  last_reviewed: "2026-10-31"
+  applies_to: "systemd-based Linux distributions: Debian 12-13, Ubuntu LTS 22.04-26.04 (server and desktop), RHEL-family 8-10, Fedora Workstation and Atomic desktops, Linux Mint 21-22 and LMDE, Arch and other rolling distributions, Raspberry Pi OS, and similar (verify the live release and its support status)"
   audience: "home, work, homelab, web"
   finding_prefix: "LNX"
   modes: "discover, recommend, remediate, respond"
@@ -23,7 +25,8 @@ metadata:
 
 Act as a careful, evidence-driven Linux systems security engineer. A Linux host is often the place where
 everything else runs: containers, web apps, databases, home automation, backup jobs, and the agent's own
-SSH session. A weakness here exposes every service and secret on the host, and a bad change here (SSH,
+SSH session. A Linux desktop or laptop also holds a person's browser sessions, saved passwords, SSH keys,
+and documents, and it travels. A weakness here exposes every service and secret on the host, and a bad change here (SSH,
 firewall, sudo, a reboot) can lock out the user and the agent together. Identify, explain, prioritize,
 remediate (only when authorized), and verify weaknesses in the operating system and its configuration.
 Application-level hardening of the services the host runs belongs to those services' own skills.
@@ -69,6 +72,10 @@ documentation and advisories are in references.md (included in this file).
   print its value.
 - **A container is not a host.** Inside an LXC container, the kernel, the firewall that matters, the
   hardware, and often the backups belong to the host. Some checks move to the host; say which.
+- **A desktop or laptop has a different threat model.** Theft, an unlocked screen, a malicious app or
+  browser extension, and a forgotten desktop-sharing toggle matter more than a hardened `sshd`. The user
+  is usually sitting at it, so prefer giving them commands and settings to check over remote changes, and
+  never change disk encryption, boot, or Secure Boot settings for them (hard stops).
 
 ## Deployment variants
 
@@ -76,7 +83,10 @@ documentation and advisories are in references.md (included in this file).
 |---|---|---|
 | **Debian / Ubuntu family** (incl. Raspberry Pi OS, Linux Mint server installs) | `ID`/`ID_LIKE` in `/etc/os-release` is `debian` or `ubuntu`; `apt`, `dpkg`. | `unattended-upgrades` for automatic updates; AppArmor by default; `ufw` common on Ubuntu. Ubuntu LTS releases may be on ESM through Ubuntu Pro. |
 | **RHEL family** (RHEL, Rocky, AlmaLinux, CentOS Stream, Oracle Linux, Fedora) | `ID_LIKE` contains `rhel` or `fedora`; `dnf`/`rpm`. | `dnf-automatic` for automatic updates; SELinux enforcing by default; `firewalld` by default. Fedora and CentOS Stream have much shorter lifecycles than RHEL and its rebuilds. |
-| **Other distributions** (Arch, openSUSE, Alpine, Gentoo, NixOS) | `/etc/os-release`. | Rolling or differently packaged; lifecycle and update tooling differ. Use this skill's domains, but verify every command and default against that distribution's documentation and mark gaps **Not assessed**. |
+| **Other distributions** (openSUSE, Alpine, Gentoo, NixOS) | `/etc/os-release`. | Rolling or differently packaged; lifecycle and update tooling differ. Use this skill's domains, but verify every command and default against that distribution's documentation and mark gaps **Not assessed**. |
+| **Arch and other rolling distributions** (Arch, EndeavourOS, Manjaro, openSUSE Tumbleweed) | `ID`/`ID_LIKE` is `arch` or `opensuse-tumbleweed`; `pacman` or `zypper`; no release number in `VERSION_ID`. | No release end-of-life to check; "supported" means "updated recently and fully". No automatic updates by default; updates can need manual steps announced in the distribution's news. The AUR is unofficial (domain R). See domain T. |
+| **Linux desktop or laptop** (Ubuntu Desktop, Fedora Workstation, Linux Mint, Debian with a desktop, KDE/GNOME spins) | A display manager is enabled (`systemctl status display-manager`); `XDG_CURRENT_DESKTOP` set in the user's session; a battery in `/sys/class/power_supply/`. | Domains P to S apply. Updates often come through a graphical tool (GNOME Software, KDE Discover, Mint Update Manager) and may wait for the user to click. SSH is often not installed or off; the user runs commands locally. Theft and an unlocked session are the main physical risks. |
+| **Atomic (image-based) desktops** (Fedora Silverblue, Kinoite, and similar) | `rpm-ostree status` works; `/usr` is read-only. | Updates are whole images (`rpm-ostree upgrade`, or automatic staging), with the previous image kept for rollback. Most apps come from Flatpak. Layered packages (`rpm-ostree status` lists them) are still a trust decision. |
 | **Bare metal server or desktop** | Physical hardware in `lscpu`/`dmidecode` (read-only); no hypervisor flag in `systemd-detect-virt`. | Physical access, firmware/BMC, and disk encryption are part of the trust boundary. |
 | **Virtual machine** | `systemd-detect-virt` reports `kvm`, `vmware`, `microsoft`, `oracle`, `xen`, etc. | The **hypervisor is part of the trust boundary**: its admins control the VM's disks and console. Snapshots are a useful rollback and evidence tool. |
 | **LXC / system container** (e.g. on Proxmox VE, Incus/LXD) | `systemd-detect-virt -c` reports `lxc`; no own kernel (`uname -r` matches the host's). | Kernel, kernel updates, and reboots are the host's. Privileged vs. unprivileged matters greatly (domain M). The host can read and change everything inside. |
@@ -94,7 +104,13 @@ Defaults can be changed, so confirm with the user before relying on a match.
   `OpenSSH_<version>`. Banners can be changed and say nothing about patch level beyond the package
   revision; never treat them as proof of a vulnerability.
 - Other typical ports, depending on role: 80/443 (web), 9090 (Cockpit on RHEL-family and some others),
-  111 and 2049 (NFS), 139/445 (Samba), 5353/UDP (mDNS), 3389 (xrdp) or 5900+ (VNC) on desktops.
+  111 and 2049 (NFS), 139/445 (Samba), 5353/UDP (mDNS).
+- Desktops and laptops: TCP 3389 (RDP: GNOME Remote Desktop's desktop sharing or remote login, KDE
+  Plasma's KRdp, or xrdp), TCP 5900 and up (VNC: x11vnc, TigerVNC, older GNOME "Screen Sharing", or the
+  VNC backend of GNOME Remote Desktop), TCP and UDP 1714-1764 (KDE Connect and GSConnect), and 631 (CUPS)
+  if printer sharing is on. VNC servers may announce `_rfb._tcp` over mDNS. A desktop with a working
+  firewall often answers nothing at all, and laptops move between networks, so a scan can miss them; ask
+  the user for a list of computers instead.
 - mDNS/DNS-SD via Avahi: Linux desktops and Raspberry Pi OS often announce `<hostname>.local` and
   services such as `_ssh._tcp`, `_sftp-ssh._tcp`, `_smb._tcp`, or `_workstation._tcp`. A fresh Raspberry
   Pi OS install answers to `raspberrypi.local` until renamed.
@@ -152,6 +168,39 @@ findmnt -t nfs,nfs4,cifs; cat /etc/exports; exportfs -v   # network mounts and N
 testparm -s                                    # effective Samba configuration, if installed
 ```
 
+Additional candidate read-only commands for desktops, laptops, and rolling distributions (same caveat:
+check each exists and read its `--help` first; run `gsettings` and `grdctl` as the desktop user, in their
+session):
+
+```sh
+lsblk -o NAME,TYPE,FSTYPE,MOUNTPOINTS          # crypto_LUKS partitions and what is mounted from them
+cat /etc/crypttab                              # encrypted volumes unlocked at boot, and how
+cryptsetup luksDump <device>                   # LUKS version and key slots/tokens (needs root; header only, no keys)
+systemd-cryptenroll <device>                   # with no enroll/wipe option, lists enrolled slots (verify on the installed version)
+swapon --show; findmnt /tmp                    # swap (and hibernation image) on an encrypted volume?
+mokutil --sb-state; mokutil --list-enrolled    # Secure Boot state; enrolled Machine Owner Keys
+bootctl status 2>/dev/null                     # firmware, Secure Boot, and boot loader summary (systemd-boot/UEFI hosts)
+fwupdmgr get-devices; fwupdmgr get-updates     # firmware inventory and available updates (LVFS); read-only
+systemctl status display-manager               # which display manager (gdm, sddm, lightdm)
+grep -ri 'autologin\|AutomaticLogin' /etc/gdm*/custom.conf /etc/sddm.conf /etc/sddm.conf.d/ /etc/lightdm/ 2>/dev/null
+gsettings get org.gnome.desktop.screensaver lock-enabled     # GNOME: automatic lock on?
+gsettings get org.gnome.desktop.screensaver lock-delay       # GNOME: seconds after blanking before lock
+gsettings get org.gnome.desktop.session idle-delay           # GNOME: seconds idle before blanking (0 = never)
+kreadconfig6 --file kscreenlockerrc --group Daemon --key Autolock   # KDE Plasma 6 (also Timeout, LockOnResume)
+grdctl status; grdctl --system status          # GNOME Remote Desktop: desktop sharing (user) and remote login (system)
+flatpak remotes --show-details; flatpak list --app --columns=application,origin,version
+flatpak info --show-permissions <app-id>       # sandbox holes for one app; flatpak override --show for overrides
+snap list; snap connections <snap>             # installed snaps, publisher, confinement; granted interfaces
+pacman -Qm                                     # (Arch) foreign packages: AUR or manually built
+checkupdates                                   # (Arch, pacman-contrib) pending updates without touching the sync database
+ls ~/.config/autostart/ /etc/xdg/autostart/    # desktop autostart entries (persistence)
+```
+
+- `pacman -Sy` alone is **not** a safe read-only step on Arch: it refreshes the sync database, and any
+  later `pacman -S <pkg>` then makes a partial upgrade, which Arch does not support. Use `checkupdates`.
+- On Mint, the Update Manager (`mintupdate`) and Timeshift settings are mainly graphical; ask the user to
+  read them out.
+
 - `apt list --upgradable` uses the cached package lists; `apt update` refreshes them (it changes only the
   package cache, not installed software, but ask first on metered or fragile systems).
 - `unattended-upgrade --dry-run` simulates a run without installing (check `--help` on the installed
@@ -176,6 +225,11 @@ testparm -s                                    # effective Samba configuration, 
   `usermod`, `passwd`, `userdel`, `setenforce 0`, `aa-disable`, `reboot`, `shutdown`.
 - `exportfs -ra`/`-ua`, `umount`, `mount -o remount`, or any filesystem, LVM, RAID, or partition tool.
 - `oscap ... --remediate`, `usg fix`, or any hardening script run in apply mode.
+- Desktop and boot changes: `cryptsetup luksAddKey/luksKillSlot/luksChangeKey/reencrypt`,
+  `systemd-cryptenroll` with `--tpm2-device`, `--wipe-slot`, or any enroll option, `mokutil --import`,
+  `--delete`, or `--disable-validation`, `fwupdmgr update`, `pacman -Syu` or `-Sy`, `flatpak update` or
+  `override`, `snap refresh` or `connect`, `gsettings set`, and `grdctl` commands that enable, disable, or
+  set credentials.
 - Anything piped from the internet (`curl ... | sh`), and any exploit, brute-force, or password-guessing
   tool, against this host or any other.
 
@@ -217,8 +271,13 @@ Accepted risk).
   - **RHEL-family:** `dnf-automatic` installed, which timer is enabled (`dnf-automatic-install.timer`
     installs; `-download` and `-notifyonly` don't; plain `dnf-automatic.timer` follows
     `/etc/dnf/automatic.conf`), and whether `upgrade_type` is `security` or `default`.
+  - **Desktops:** graphical updaters (GNOME Software and KDE Discover via PackageKit, Mint's Update
+    Manager, Ubuntu's Software Updater) may download and install automatically, notify only, or do
+    nothing. Read their settings with the user, and check the package manager's own history
+    (`/var/log/apt/history.log`, `dnf history`) for the last real install, not the last notification.
+    Flatpaks and snaps update separately (domain R).
   - Other distributions: whatever the distribution documents; rolling releases need regular manual
-    updates.
+    updates (domain T).
 - Pending updates now, and especially pending security updates. A long list means updates aren't running.
 - **Running vs. installed kernel:** compare `uname -r` with the newest installed kernel. Note uptime; a
   host up for months is almost certainly running an old kernel and old libraries.
@@ -300,7 +359,14 @@ Accepted risk).
 
 - Which firewall layer is in use: nftables directly, `iptables` (on modern releases often the
   `iptables-nft` compatibility layer, so `nft list ruleset` shows everything), `ufw`, or `firewalld`.
-  More than one active front end is a finding; they overwrite each other.
+  More than one active front end is a finding; they overwrite each other. Graphical front ends (`gufw`
+  for ufw, `firewall-config` for firewalld, Plasma's firewall settings module) write the same
+  configuration; read it with the command-line tool.
+- Desktop defaults differ and should be checked, not assumed: on Ubuntu Desktop `ufw` is installed but
+  usually inactive; on Linux Mint check `ufw status` (Mint's welcome screen offers to turn it on); on
+  Fedora Workstation `firewalld` is active, but the default `FedoraWorkstation` zone deliberately allows
+  inbound TCP and UDP 1025-65535 so desktop apps work, so any app that listens on a high port is reachable
+  from the local network. For a laptop on public Wi-Fi this is a finding to discuss (P3 by default).
 - Default inbound policy: drop/deny with explicit allows, or accept everything.
 - Rules for IPv4 and IPv6 both.
 - Allowed services and their source restrictions; rules left over from old services.
@@ -323,8 +389,9 @@ Accepted risk).
   off unless the host routes or runs containers), and source-route/redirect acceptance. Compare with the
   distribution's or CIS guidance; don't treat every deviation as a finding.
 - Secure Boot state (`mokutil --sb-state`, where available) and kernel lockdown, on hardware that
-  supports them.
+  supports them. Desktops and laptops: see domain P.
 - Disk encryption (LUKS) for laptops and devices that could be stolen: `lsblk -f` shows `crypto_LUKS`.
+  Details in domain P.
 
 #### H. Secrets and file permissions
 
@@ -360,6 +427,8 @@ recognize every entry:
   file and its drop-ins.
 - Shell startup files (`/etc/profile.d/`, `~/.bashrc`, `~/.profile`) with network commands, and
   `/etc/rc.local` if present.
+- Desktop sessions: autostart entries (`~/.config/autostart/*.desktop`, `/etc/xdg/autostart/`), KDE
+  autostart scripts (`~/.config/plasma-workspace/env/` and `shutdown/`), and browser extensions (domain R).
 - Dynamic linker preload: `/etc/ld.so.preload` should normally be absent or empty. Any entry there is a
   P0 candidate.
 - PAM modules and NSS changes not from packages (`/etc/pam.d/`, `/lib/security/` or
@@ -379,7 +448,8 @@ recognize every entry:
   decision.
 - Software installed by `curl ... | sh` or downloaded binaries: look in `/usr/local/bin`, `/opt`, and
   home directories, and ask the user. Each needs a known source and an update path.
-- Snap and Flatpak: which packages, and which publisher.
+- Snap, Flatpak, and the AUR: which packages, and which publisher. On desktops these are often the main
+  software source; see domain R.
 - Container images: where they come from, whether they are pinned to versions, and how they're updated
   (assess with the container runtime's own skill where one exists).
 - Packages no longer available from any configured repository (orphaned, not receiving updates):
@@ -470,6 +540,164 @@ recognize every entry:
   the SD card), the SD card's health and backup, and whether the GPIO/serial console is reachable.
 - Power protection and what stops working if the host fails (DNS, home automation, backups).
 
+#### P. Desktops and laptops: disk encryption, Secure Boot, and firmware
+
+- **Full-disk encryption (LUKS):** on any laptop, and on desktops holding personal or work data, the root
+  filesystem and `/home` should be on a LUKS volume (`lsblk` shows `crypto_LUKS` under the partition, with
+  the root and home filesystems on top). Unencrypted `/home` on a laptop is a finding (P2 by default: a
+  lost or stolen laptop exposes browser sessions, saved passwords, SSH keys, and documents). Encrypted
+  root with an unencrypted separate data partition, or a removable drive with personal data, is a partial
+  finding.
+- Swap and hibernation: swap on an unencrypted partition can hold memory contents, including secrets;
+  `swapon --show` should show swap on the encrypted volume, a zram device, or an encrypted swap file.
+- **How the volume unlocks** (`/etc/crypttab`, `cryptsetup luksDump`, `systemd-cryptenroll <device>`):
+  - **Passphrase only:** the user types it at boot. Ask whether it is unique and long; never ask for it.
+  - **TPM-bound unlock** (`systemd-cryptenroll --tpm2-device`, Ubuntu's TPM-backed FDE, Clevis): the disk
+    unlocks without a prompt on that machine as long as the measured boot state matches. Without a PIN,
+    the laptop's protection rests on the login screen and screen lock; note whether a TPM PIN is
+    enrolled (`--tpm2-with-pin`) and which PCRs it binds to. Ubuntu 26.04 LTS made TPM-backed FDE
+    generally available in the desktop installer; check its current limitations in the release notes.
+  - **Keyfile on an unencrypted partition** (`crypttab` key file on `/boot` or the EFI partition) defeats
+    the encryption; P2.
+  - **Recovery key:** a recovery key or second passphrase should exist and be stored off the device (a
+    password manager, printed and locked away). Ask; never print it. No recovery path is a data-loss risk
+    to record, not a reason to change anything.
+  - LUKS1 versus LUKS2 and the key-derivation function (`luksDump` shows `PBKDF: argon2id` or `pbkdf2`):
+    older installs may use weaker settings. Record it; any change is a hard stop (user does it, with a
+    backup).
+- **Secure Boot** (`mokutil --sb-state`, `bootctl status`): enabled on hardware that supports it, and the
+  distribution's signed shim and kernel in use. Disabled Secure Boot is a P3 by default on a laptop.
+- **Machine Owner Keys (MOK)** (`mokutil --list-enrolled`): extra keys trusted to sign kernel modules,
+  usually created by DKMS or the distribution installer for third-party drivers (NVIDIA, VirtualBox,
+  Wi-Fi). Ask the user to recognize each one. A MOK is a signing key stored as a root-owned file on the
+  disk, so root on the machine can sign a malicious module with it; Ubuntu's documentation says to use
+  it with care. `mokutil --disable-validation` (shim not validating) is a finding. An unknown MOK, or a
+  key the user never enrolled, is a P0 candidate.
+- **Firmware:** UEFI and device firmware current where the vendor publishes to LVFS (`fwupdmgr
+  get-updates`), a firmware (setup) password on laptops where available, and boot from USB restricted
+  if the user wants that. Thunderbolt/USB4 device authorization (`boltctl list`) on laptops that have it.
+- **Boot loader:** a GRUB without a password lets someone at the keyboard edit the kernel command line
+  (`init=/bin/sh`); with full-disk encryption that gives little without the passphrase, which is why
+  disk encryption is the main control, not a boot loader password.
+
+#### Q. Desktops and laptops: session, screen lock, and accounts
+
+- **Screen lock:** automatic lock on idle and on suspend/lid close.
+  - GNOME (Ubuntu, Fedora Workstation, Debian GNOME): `org.gnome.desktop.screensaver lock-enabled` is
+    `true`, `org.gnome.desktop.session idle-delay` is not `0` and is short enough for the setting (for
+    example 300 seconds or less on a laptop), and `lock-delay` is small. Administrators can enforce these
+    with dconf system databases and locks (GNOME System Administration Guide).
+  - KDE Plasma: `kscreenlockerrc` `[Daemon]` `Autolock`, `Timeout` (minutes), and `LockOnResume` (verify
+    key names on the installed Plasma version).
+  - Cinnamon (Mint), Xfce, and others: read the screensaver and power settings with the user.
+- **Automatic login:** GDM (`AutomaticLoginEnable` in `/etc/gdm3/custom.conf` on Debian/Ubuntu or
+  `/etc/gdm/custom.conf` on Fedora), SDDM (`[Autologin] User=` in `/etc/sddm.conf` or
+  `/etc/sddm.conf.d/`), or LightDM (`autologin-user` in `/etc/lightdm/`). On a laptop, auto-login plus
+  TPM-only disk unlock means a stolen laptop boots straight to the user's desktop: P2. On a shared family
+  desktop, auto-login into an admin account is a finding.
+- **Accounts on shared computers:** each person has their own account; children and guests are not in
+  `sudo`/`wheel` (the GNOME and Mint "Administrator" account type means exactly that); a guest session or
+  guest account, if used, has no access to others' home directories (home directories mode `700` or
+  `750`, domain H).
+- **Keyring and saved secrets:** GNOME Keyring or KWallet unlocks with the login password; with
+  auto-login it may be left unencrypted or unlocked. Browser password stores and SSH agent keys are in
+  the same trust zone as the session.
+- **Lock-screen exposure:** notifications on the lock screen, and remote unlock tools (KDE Connect,
+  GSConnect) that can run commands or send input from a paired phone. List paired devices with the
+  user.
+- **Removable media and devices:** automount of USB drives is normal; note it, especially on shared
+  machines. USBGuard is optional defense in depth, not a default recommendation.
+
+#### R. Desktops: software sources, sandboxing, and browsers
+
+Distribution repositories are still the most trusted source (domain J). Desktop users add more:
+
+- **Flatpak:** remotes configured (`flatpak remotes --show-details`; Flathub is the common one, and
+  `flathub` versus `flathub-beta` or unknown remotes matter). For each app, the origin and whether it
+  shows Flathub's **verified** badge, which confirms the developer or someone they authorized controls
+  the app ID; it is not a security review. Unverified apps are often community repackages: trust the
+  packager, not the upstream name. Check sandbox permissions (`flatpak info --show-permissions`) and
+  user or system overrides (`flatpak override --show`): `filesystem=host` or `home`, `--device=all`,
+  `--socket=session-bus` or `system-bus`, or `talk` access to `org.freedesktop.Flatpak` (can run commands
+  outside the sandbox) weaken the sandbox. Many apps legitimately need some of these; explain, don't
+  alarm. Updates: GNOME Software and Discover can update Flatpaks automatically; otherwise `flatpak
+  update` must be run. End-of-life runtimes (`flatpak list --runtime`, and warnings on update) are a
+  finding.
+- **Snap:** `snap list` shows each snap's publisher (a check mark or star marks verified publishers and
+  starred developers on the Snap Store; verify the current marks) and its confinement. `classic`
+  confinement means no sandbox at all (the Snap Store reviews such snaps by hand before publishing),
+  and `devmode` snaps run unconfined; both are findings to explain. Snaps
+  refresh automatically by default; `snap refresh --time` and `snap refresh --hold` show the schedule and
+  any held refreshes. On Ubuntu Desktop, Firefox and other browsers usually come as snaps.
+- **AUR (Arch User Repository):** packages are user-submitted build scripts (PKGBUILDs), not vetted by
+  Arch, and the Arch wiki states using them is at the user's own risk. AUR helpers (`yay`, `paru`) are
+  not supported by Arch and make it easy to install and update without reading the PKGBUILD. List
+  foreign packages (`pacman -Qm`) and ask, for each, whether the user reads PKGBUILDs and diffs on
+  updates, whether the package is still maintained, and whether an official package or Flatpak would do.
+  An AUR package that is orphaned, recently changed owner, or pulls binaries from an unexpected host is a
+  finding.
+- **Other desktop sources:** PPAs and COPR (domain J), AppImages in `~/Applications` or `~/Downloads`
+  (no update path unless the app has one), `.deb`/`.rpm` files downloaded from vendor sites that add
+  their own repositories (browsers, chat apps, editors; check the repo and key they added), and
+  language-package installs in the home directory.
+- **Browsers:** the browser is the most exposed program on a desktop. Check it is from a source that
+  updates promptly (distribution repository, vendor repository, Flatpak, or snap), how far behind the
+  current upstream stable version it is (verify against the vendor's release page), and that the user
+  restarts it. Distribution-packaged browsers on old or LTS releases can lag; Debian and Ubuntu track
+  Firefox ESR or upstream builds depending on the release. Review installed extensions with the user:
+  each one can read every page it has permission for. Unknown extensions are a P0 candidate.
+
+#### S. Desktops: remote desktop and desktop sharing
+
+- **Which server is on:** `ss -tlnp` for 3389 and 5900+, then identify it:
+  - **GNOME Remote Desktop** (GNOME 42 and later): *Desktop Sharing* shares the logged-in user's screen
+    over RDP (`grdctl status` as that user); *Remote Login* (recent GNOME releases, `grdctl --system
+    status`) offers a fresh login over RDP even with nobody logged in. RDP credentials are separate from
+    the system password. Check whether "remote control" (input) is allowed, not only viewing, and whether
+    a VNC backend is enabled where the build has one.
+  - **KDE Plasma KRdp** (Plasma 6): listens on TCP 3389 on all interfaces by default when enabled, with
+    its own username and password in System Settings.
+  - **xrdp**, **x11vnc**, **TigerVNC**, **RealVNC**, and third-party remote-support agents (AnyDesk,
+    TeamViewer, RustDesk; each with its own relay service). Ask who installed each and why.
+- Findings: sharing enabled but not used; VNC without a password or with only a short VNC password (the
+  classic VNC password scheme is weak and unencrypted unless tunneled); RDP or VNC reachable from the
+  internet, a guest network, or public Wi-Fi (on Fedora Workstation the default zone's 1025-65535
+  range already admits VNC on 5900 and up; check whether 3389 was opened as well); RDP credentials shared with the login password;
+  remote-support agents with unattended access. Exposure to the internet is P1 or P2 depending on
+  authentication; on the LAN only, P3.
+- Recommend reaching a desktop over a VPN or an SSH tunnel rather than exposing RDP or VNC, and turning
+  sharing off when not in use.
+
+#### T. Rolling-release and fast-moving distributions: update discipline
+
+Rolling distributions (Arch, EndeavourOS, Manjaro, openSUSE Tumbleweed) and short-lifecycle releases
+(Fedora, Ubuntu interim releases) are secure only when updated regularly and completely.
+
+- **Support status:** for Fedora, check the release against Fedora's published schedule (each release is
+  maintained for about thirteen months, until about four weeks after the release two versions later;
+  verify on the lifecycle page). For Linux Mint, check Mint's download page for the release's end date
+  (Mint 21.x and 22.x follow the Ubuntu LTS bases they are built on; LMDE follows Debian). Ubuntu interim
+  releases get nine months (domain A).
+- **Arch:** how long since the last full upgrade (`grep -i 'starting full system upgrade'
+  /var/log/pacman.log | tail -1`, or the pacman log's last `upgraded` entries). Weeks behind is a finding
+  on an internet-facing desktop; months behind means many known vulnerabilities and a riskier catch-up
+  upgrade. Partial upgrades (`pacman -Sy <pkg>`, ignored packages in `IgnorePkg` in `/etc/pacman.conf`,
+  or held-back packages) are unsupported and leave the system in an untested state.
+- **Read the news before upgrading:** Arch (and Manjaro, EndeavourOS, Tumbleweed) publish news items when
+  an upgrade needs manual intervention (Arch's news page and the `arch-announce` list). Ask whether the
+  user reads them; tools such as `informant` or the pacman hooks some AUR helpers offer can show news
+  before an upgrade (optional).
+- **After upgrades:** unmerged configuration files (`.pacnew` and `.pacsave` on Arch, found with
+  `pacdiff` from `pacman-contrib` or `find /etc -name '*.pacnew'`; `.rpmnew` on Fedora) can leave old,
+  less secure settings in place; failed units (`systemctl --failed`); and a reboot after kernel or core
+  library updates (domain B).
+- **Rollback:** a snapshot before upgrading (Timeshift on Mint and others, Snapper with Btrfs on openSUSE
+  and some Arch setups, the kept previous image on Fedora Atomic desktops). Confirm snapshots exist,
+  that they are not the only backup (they live on the same disk), and that `/home` is in or out as the
+  user expects.
+- **Mirrors and keys:** pacman `SigLevel` not set to `Never` (`grep SigLevel /etc/pacman.conf`), and the
+  `archlinux-keyring` package current; Fedora repositories with `gpgcheck=1`.
+
 ---
 
 ## Recommend
@@ -521,6 +749,17 @@ List what depends on the setting before recommending a change:
 | Privileged LXC container | Migrate the workload to an unprivileged container (or a VM) where possible. | Migration needs ownership shifting of data and may break device or mount access; plan it. |
 | Backups writable from host / untested | Move to pull-based or append-only/immutable backups off the host; test a restore. | Needs a separate backup system or service. |
 | Raspberry Pi `pi` account of unknown history | Set a new password, or lock the account if unused (after confirming another admin account works). | Scripts or tutorials assuming `pi` may break. |
+| Laptop without full-disk encryption | Back up, then reinstall with the installer's encryption option (the usual, supported path); in-place encryption only by the user following the distribution's documentation, with a verified backup. | Reinstall effort; the user must keep the passphrase and a recovery key, or lose the data. Hard stop for the agent. |
+| TPM-only unlock with auto-login | Turn off auto-login; add a TPM PIN or a passphrase prompt (the user does it, following the distribution's documentation); keep a recovery key off the device. | One more prompt at boot; a forgotten PIN means using the recovery key. |
+| Screen does not lock | Enable automatic lock (5 minutes or less on laptops), lock on suspend and lid close; enforce with dconf locks on managed GNOME machines. | Small convenience cost. |
+| Secure Boot disabled or unknown MOKs | Re-enable Secure Boot in firmware after confirming third-party modules are signed; remove MOKs the user doesn't recognize (Respond first if unexplained). | Unsigned drivers (NVIDIA, VirtualBox) stop loading until signed; the user does this at the console. |
+| Fedora Workstation wide-open high ports on a laptop | Use a stricter zone (`public` or `FedoraServer`) on untrusted networks, or remove the 1025-65535 range and open only what apps need. | Apps that listen for local peers (casting, file sharing, KDE Connect) stop working until their ports are opened. |
+| Remote desktop sharing exposed or unused | Turn it off when unused; reach it over a VPN or SSH tunnel; use distinct, strong RDP credentials; remove unknown remote-support agents. | Remote help sessions need the VPN or a manual enable. |
+| Broad Flatpak permissions or unverified apps | Prefer verified or distribution-packaged apps; narrow permissions with `flatpak override` where the app still works; remove unused apps and end-of-life runtimes. | An app may lose access to files or devices it needs. |
+| Classic or devmode snaps | Replace with a strictly confined snap, a Flatpak, or a distribution package where available. | Features that need host access may differ. |
+| AUR packages installed without review | Review PKGBUILDs before each install and update; replace with official packages or Flatpaks where possible; remove orphaned ones. | More effort per update; some software has no official alternative. |
+| Rolling-release system weeks behind / partial upgrades | Read the news, take a snapshot, then do a full upgrade (`pacman -Syu`) and merge `.pacnew` files; then upgrade regularly (weekly is a common choice). | Long-delayed upgrades can need manual steps; schedule time and have a live USB for recovery. |
+| Desktop on an end-of-life Fedora, Mint, or interim Ubuntu release | Upgrade with the distribution's supported upgrade tool (Fedora's `dnf system-upgrade`, Mint's upgrade tool and instructions, `do-release-upgrade`). | Release-note review, backup, and time; third-party repositories may need updating. |
 
 Changing the SSH port, disabling ping, and hiding banners are supplementary only. Never recommend them as
 the main fix.
@@ -562,6 +801,20 @@ Apply only approved changes, one at a time, following the core rules. Linux spec
 - **Permissions:** change one file or directory at a time; confirm the service still starts and reads it.
 - **Accounts and keys:** lock accounts (`usermod -L`, `chage -E 0`, or set the shell to `nologin`) before
   deleting them, so the change is reversible.
+- **Desktop settings** (screen lock, auto-login, disabling desktop sharing): usually C1, but auto-login
+  and display-manager changes take effect at the next login and can leave the user at a login screen they
+  can't pass if no password is known; confirm the user knows their password first. Record the prior
+  value (`gsettings get`, a copy of the config file) for rollback.
+- **Flatpak and snap changes:** `flatpak override` and `snap disconnect` are C1 (reversible with
+  `flatpak override --reset` or `snap connect`); removing an app is C2 if its data is kept, C3 with
+  `--delete-data` or `snap remove --purge`.
+- **Rolling-release upgrades:** a full upgrade is C2. Before it: read the distribution news for manual
+  steps, take a snapshot, have a live USB or other console recovery path, and have the user present.
+  Never run `pacman -Sy` followed by a single package install; never use `--overwrite` or
+  `-Sdd`/`--nodeps` to force through an error. After it: merge `.pacnew` files one at a time, check
+  `systemctl --failed`, and reboot when the kernel or core libraries changed.
+- **Firewall on a desktop:** switching a firewalld zone or enabling ufw is C2 (it can break printing,
+  casting, file sharing, or the agent's SSH session); list what listens first and allow it explicitly.
 
 After each change, follow the core "after a change" steps: re-read the effective configuration, check the
 access path, the affected services, and logs, and record before and after.
@@ -574,6 +827,10 @@ access path, the affected services, and logs, and record before and after.
 - Disk, partition, LVM, RAID, filesystem repair, or encryption (LUKS) operations as security remediation.
 - Release upgrades or kernel changes on a host without a tested backup or snapshot and console access.
 - Changing the bootloader, kernel command line, or Secure Boot keys remotely.
+- Adding, removing, or changing LUKS key slots, TPM enrollments, or MOKs, or re-encrypting a disk. The
+  user does these at the console, following the distribution's documentation, after confirming a
+  verified backup and a working recovery key. A mistake can make all data on the disk unrecoverable.
+- Firmware (UEFI/BIOS) updates or firmware setting changes, other than advising the user.
 - Deleting logs, journal files, shell history, or backups, even to "clean up" after an incident.
 - Running hardening scripts or compliance tools in apply mode (`oscap --remediate`, `usg fix`, CIS
   scripts) across a whole host in one step.
@@ -625,6 +882,12 @@ the console.
 
 ## Version history
 
+- **1.1** (2026-10-31): Extended to Linux desktops and laptops (Ubuntu Desktop, Fedora Workstation and
+  Atomic desktops, Linux Mint, Arch and other rolling distributions): new domains P (full-disk
+  encryption, TPM unlock, Secure Boot and MOK, firmware), Q (screen lock, auto-login, shared-computer
+  accounts), R (Flatpak, Snap, AUR, and browser trust), S (RDP/VNC desktop sharing), and T
+  (rolling-release update discipline); desktop firewall defaults; desktop detection hints; desktop
+  baseline commands, recommendations, remediation notes, hard stops, and incident-response steps.
 - **1.0** (2026-10-30): Initial version.
 
 ---
@@ -659,6 +922,35 @@ important observations from outside it (hypervisor, network, backup system, log 
   attacker, say so; plan to rotate it during recovery, not mid-triage.
 - **Containers:** if the host runs privileged containers or exposes the container runtime socket,
   assume a container compromise may be a host compromise, and vice versa.
+
+## Desktops and laptops
+
+- **Desktop-specific indicators:** browser extensions nobody installed, new desktop autostart entries
+  (`~/.config/autostart/`, `/etc/xdg/autostart/`), desktop sharing or a remote-support agent turned on
+  that the user didn't enable, unknown MOKs (`mokutil --list-enrolled`) or Secure Boot suddenly off, an
+  AUR, Flatpak, or snap package that changed owner or behavior just before the symptoms, and new paired
+  devices in KDE Connect or GSConnect.
+- **Contain:** disconnect the computer from the network (Wi-Fi off or cable out) rather than shutting it
+  down, unless destruction is ongoing; turn off desktop sharing and remote-support agents by
+  disconnecting, not by uninstalling (keep the evidence). From a **different, trusted device**, sign out
+  the user's browser sessions and important accounts (email, password manager, cloud storage, Git
+  hosting): session cookies in the browser profile let an attacker in without passwords or MFA.
+- **Evidence:** in addition to the general list, copy (don't open in the browser) the browser profile's
+  extension list and history databases if a specialist needs them, the autostart directories, the
+  Flatpak and snap lists with versions, `pacman -Qm` and `/var/log/pacman.log` on Arch, and remote-desktop
+  configuration and logs.
+- **Scope:** everything the user's session could reach: saved browser passwords and cookies, the
+  desktop keyring (GNOME Keyring, KWallet), SSH and GPG keys, password-manager vaults that were unlocked,
+  synced cloud folders, and any work systems the user signed in to from this computer.
+- **Lost or stolen laptop:** this is an incident even without malware. Establish whether the disk was
+  encrypted and how it unlocked (domain P): passphrase-only with the laptop powered off is the best case;
+  TPM-only unlock with auto-login, or a laptop taken while unlocked or asleep, means treat everything on
+  it as exposed. Sign out its sessions from other devices, revoke its SSH keys, API tokens, and VPN
+  peers, rotate saved passwords, and remove it from accounts that list trusted devices. Linux has no
+  built-in remote wipe; don't promise one.
+- **Recovery:** reinstall from verified media, with full-disk encryption on; restore documents from a
+  backup taken before the compromise, but not the browser profile, autostart entries, or shell startup
+  files without review; reinstall extensions and apps from their official sources only.
 
 ## Evidence to preserve (Linux-specific)
 
@@ -739,6 +1031,10 @@ Start with the core quick checklist, plus:
 - [ ] List accounts, sudoers, authorized_keys, cron, systemd units/timers, and `/etc/ld.so.preload`.
 - [ ] List every key and credential on the host and what it opens elsewhere; plan to rotate all of them.
 - [ ] Plan to rebuild from verified media or a known-good template rather than cleaning in place.
+- [ ] Desktop or laptop: from another device, sign out browser and account sessions, and review browser
+      extensions, autostart entries, remote-desktop settings, and MOKs.
+- [ ] Lost laptop: confirm how its disk unlocks, then revoke its keys, tokens, and VPN peers and rotate
+      saved passwords.
 
 ---
 
@@ -747,7 +1043,7 @@ Start with the core quick checklist, plus:
 Always prefer current distribution documentation; lifecycles, defaults, and tooling change between
 releases. Re-verify links and contents when updating this skill.
 
-Last verified: 2026-10-30
+Last verified: 2026-10-31
 
 ## Vendor (authoritative)
 
@@ -788,6 +1084,46 @@ Last verified: 2026-10-30
 - Rocky Linux release and support information: https://wiki.rockylinux.org/rocky/version/
 - AlmaLinux release information: https://wiki.almalinux.org/release-notes/
 - Fedora release life cycle: https://docs.fedoraproject.org/en-US/releases/lifecycle/
+
+### Desktop distributions and rolling releases
+
+- Ubuntu Secure Boot (MOK enrollment and DKMS module signing):
+  https://documentation.ubuntu.com/security/security-features/platform-protections/secure-boot/
+- Ubuntu 26.04 LTS announcement (TPM-backed full-disk encryption generally available in the desktop
+  installer): https://canonical.com/blog/canonical-releases-ubuntu-26-04-lts-resolute-raccoon
+- Ubuntu 25.10 security features (TPM-backed FDE groundwork):
+  https://ubuntu.com/blog/ubuntu-25-10-security-updates
+- Linux Mint releases and end-of-support dates: https://linuxmint.com/download_all.php
+- Fedora Magazine, controlling the firewall (the FedoraWorkstation zone's open 1025-65535 range):
+  https://fedoramagazine.org/control-the-firewall-at-the-command-line/
+- Fedora Silverblue (Atomic desktops) documentation: https://docs.fedoraproject.org/en-US/fedora-silverblue/
+- Arch Linux news (manual-intervention notices; read before upgrading): https://archlinux.org/news/
+- Arch wiki, System maintenance (full upgrades, partial upgrades unsupported, `.pacnew` handling):
+  https://wiki.archlinux.org/title/System_maintenance
+- Arch wiki, Arch User Repository (unsupported, user-produced content; review PKGBUILDs):
+  https://wiki.archlinux.org/title/Arch_User_Repository
+- Arch wiki, dm-crypt (LUKS setups) and Unified Extensible Firmware Interface/Secure Boot:
+  https://wiki.archlinux.org/title/Dm-crypt and https://wiki.archlinux.org/title/Unified_Extensible_Firmware_Interface/Secure_Boot
+
+### Desktop components
+
+- `systemd-cryptenroll(1)` (TPM2, FIDO2, PKCS#11, recovery keys, TPM PIN):
+  https://www.freedesktop.org/software/systemd/man/latest/systemd-cryptenroll.html
+- cryptsetup / LUKS project: https://gitlab.com/cryptsetup/cryptsetup
+- GNOME System Administration Guide, screen lock lockdown (dconf keys and locks):
+  https://help.gnome.org/admin/system-admin-guide/stable/desktop-lockscreen.html.en
+- GNOME Remote Desktop (RDP desktop sharing, headless and remote login):
+  https://github.com/GNOME/gnome-remote-desktop
+- Red Hat, administering RHEL 10 with the GNOME desktop (remote desktop configuration):
+  https://docs.redhat.com/en/documentation/red_hat_enterprise_linux/10/html-single/administering_rhel_by_using_the_gnome_desktop_environment/index
+- KDE KRdp (Plasma RDP server; default port 3389): https://github.com/KDE/krdp
+- KDE Connect (ports and pairing): https://userbase.kde.org/KDEConnect
+- Flathub app verification (what the verified badge means):
+  https://docs.flathub.org/docs/for-users/verification
+- Flatpak sandbox permissions: https://docs.flatpak.org/en/latest/sandbox-permissions.html
+- Snap confinement and Snap Store security:
+  https://snapcraft.io/docs/snap-confinement and https://snapcraft.io/blog/where-eagles-snap-snap-security-overview
+- fwupd / LVFS firmware updates: https://fwupd.org/ and https://lvfs.readthedocs.io/
 
 ### Raspberry Pi
 

@@ -1,0 +1,51 @@
+# ZFS and Ceph: References
+
+Always prefer current vendor and project documentation for the exact versions in use. Re-verify links and
+contents when updating this skill; record the date checked.
+
+Last verified: 2026-10-31
+
+## Vendor and project (authoritative)
+
+### OpenZFS
+
+- Documentation home: https://openzfs.github.io/openzfs-docs/
+- `zfsprops(7)` (encryption, keyformat, keylocation, sharenfs, sharesmb, snapdir):
+  https://openzfs.github.io/openzfs-docs/man/master/7/zfsprops.7.html
+- `zfs-load-key(8)` (what is and isn't encrypted, key changes and master key):
+  https://openzfs.github.io/openzfs-docs/man/master/8/zfs-load-key.8.html
+- `zfs-allow(8)` (delegation, `send:raw`, `send:encrypted`, `receive:append`):
+  https://openzfs.github.io/openzfs-docs/man/master/8/zfs-allow.8.html
+- `zfs-hold(8)`: https://openzfs.github.io/openzfs-docs/man/master/8/zfs-hold.8.html
+- `zfs-send(8)` (raw sends): https://openzfs.github.io/openzfs-docs/man/master/8/zfs-send.8.html
+- Releases: https://github.com/openzfs/zfs/releases
+- Security advisories: https://github.com/openzfs/zfs/security/advisories
+- Platform documentation (use for changes on appliances): TrueNAS https://www.truenas.com/docs/ and
+  Proxmox VE https://pve.proxmox.com/pve-docs/
+
+### Ceph
+
+- Security, past vulnerabilities, and vulnerability management: https://docs.ceph.com/en/latest/security/
+  and https://ceph.io/security/
+- Active releases and end-of-life dates: https://docs.ceph.com/en/latest/releases/
+- User management and cephx capabilities:
+  https://docs.ceph.com/en/latest/rados/operations/user-management/
+- cephx configuration: https://docs.ceph.com/en/latest/rados/configuration/auth-config-ref/
+- Messenger v2 (ports 3300/6789, `crc` vs `secure` modes):
+  https://docs.ceph.com/en/latest/rados/configuration/msgr2/
+- Network configuration (public and cluster networks, port ranges):
+  https://docs.ceph.com/en/latest/rados/configuration/network-config-ref/
+- Dashboard (ports, SSL, binding, lockout, password policy, SSO, audit):
+  https://docs.ceph.com/en/latest/mgr/dashboard/
+- Health checks (including insecure global_id reclaim):
+  https://docs.ceph.com/en/latest/rados/operations/health-checks/
+- Proxmox VE Ceph integration: https://pve.proxmox.com/wiki/Deploy_Hyper-Converged_Ceph_Cluster
+
+Generic vulnerability and incident sources (CISA KEV, NVD, CVE, CISA ransomware guidance, IC3) are listed in
+the core documents.
+
+## Third-party (not authoritative)
+
+None used for this version. Community snapshot and replication tools (sanoid/syncoid, zrepl) have their own
+documentation; consult it for their exact delegation and SSH requirements, and validate against the
+OpenZFS man pages above.

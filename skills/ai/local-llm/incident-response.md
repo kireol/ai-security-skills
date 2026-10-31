@@ -20,6 +20,11 @@ problem".
   - Unknown Open WebUI accounts, especially admins, new API keys, or an admin account created around
     the time the instance was first exposed.
   - Unexpected usage or charges on cloud model provider accounts whose keys are stored in the app.
+  - LiteLLM: virtual keys, users, teams, models, or credentials nobody created; spend spikes in the
+    spend logs; keys with budgets removed; the master key or a `proxy_admin` login used from an unknown
+    address; or a host that installed a release the vendor lists as compromised.
+  - LocalAI: models or backends nobody installed, unknown P2P workers or federated peers, or a P2P token
+    seen outside the owner's systems.
   - Outbound connections from the server process to unknown hosts, new tunnels or share links, new
     router port forwards.
   - Files in upload or output directories that nobody created, or unexpected files written outside them.
@@ -59,9 +64,18 @@ Collect before changing anything, and treat the copies as secret material:
 - Container state: `docker inspect` (store securely, it contains secrets) and an export of the container
   filesystem if the container may be wiped.
 - Cloud provider usage logs for every stored key, for the exposure period.
+- LiteLLM: a copy of the Postgres database (keys, users, spend logs, stored credentials; secret
+  material), `config.yaml`, the Admin UI's key, user, and team lists with creation dates, spend logs for
+  the exposure period, and the installed package version or image digest. Keep `LITELLM_SALT_KEY` with
+  the evidence securely, or the stored credentials in the copy can't be examined.
+- LocalAI: the models directory listing with YAML configs, installed backends, `.env` / `localai.env`
+  files (redacted), the auth database if accounts are on, and P2P settings.
 
 ## Scope checks specific to local LLM servers
 
+- **A gateway's whole key vault:** if a LiteLLM proxy, its master key, an admin account, or its database
+  together with the salt key may be exposed, every provider key it stored and every virtual key it issued
+  is in scope, plus every app holding a virtual key.
 - **Every credential the app held:** cloud model provider keys, Hugging Face tokens, web-search keys,
   tunnel tokens, OAuth client secrets, the Ollama account identity, LDAP bind accounts, and anything in
   `.env` files or container environments.
@@ -87,6 +101,11 @@ Collect before changing anything, and treat the copies as secret material:
   earliest plausible compromise. Review its users, admins, Functions, Tools, and connections before
   going live. If no clean backup exists, export only what users need (for example their own chats) and
   start a fresh instance.
+- **LiteLLM after a supply-chain or gateway compromise:** reinstall from a release the vendor lists as
+  verified, pinned by version or digest; treat the host that ran a malicious release as compromised (it
+  harvested credentials from the host, not only from LiteLLM). Rotate the master key, regenerate every
+  virtual key, and rotate every upstream provider key. If the salt key may be exposed, plan a fresh
+  database with re-entered credentials rather than changing the salt key on the old one.
 - **Rotate everything** the scope check listed. Generate a new `WEBUI_SECRET_KEY` on the rebuilt instance
   (sessions end; re-enter stored secrets as needed, following the live version's documentation).
 - **Before reconnecting:** APIs bound to loopback or behind authentication, no port forwards or share
@@ -101,5 +120,6 @@ Start with the core quick checklist, plus:
       network, without deleting the container or app.
 - [ ] Record models, custom nodes, extensions, Functions, Tools, and admins before touching anything.
 - [ ] Revoke or limit every cloud API key the app stored, and check the provider's usage.
+- [ ] For a LiteLLM gateway, rotate the master key, all virtual keys, and every upstream provider key.
 - [ ] If any plugin or model may be malicious, treat the whole host as compromised and plan a rebuild.
 - [ ] Decide with the user whether chat or document exposure must be disclosed to anyone.

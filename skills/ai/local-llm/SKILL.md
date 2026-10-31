@@ -2,16 +2,17 @@
 name: local-llm
 description: >-
   Security assessment, hardening, remediation, and incident response for self-hosted LLM and generative-AI
-  servers: Ollama, llama.cpp server, LM Studio's server, vLLM, Open WebUI, ComfyUI, Stable Diffusion web
-  UIs (AUTOMATIC1111, Forge, and similar Gradio apps), and text-to-speech web apps. Use when auditing a
-  machine that serves models, reviewing its API exposure, bind addresses, tunnels, accounts, model and
-  extension supply chain, stored cloud API keys, GPU abuse, or prompt and chat privacy, or when one of these
+  servers and model gateways: Ollama, llama.cpp server, LM Studio's server, vLLM, LocalAI, Open WebUI,
+  ComfyUI, Stable Diffusion web UIs (AUTOMATIC1111, Forge, and similar Gradio apps), text-to-speech web
+  apps, and the LiteLLM proxy (AI gateway). Use when auditing a machine that serves models, reviewing its
+  API exposure, bind addresses, tunnels, accounts, model and extension supply chain, stored cloud API keys,
+  gateway master and virtual keys, budgets, GPU abuse, or prompt and chat privacy, or when one of these
   servers may have been compromised.
 license: CC-BY-4.0
 metadata:
-  version: "1.0"
-  last_reviewed: "2026-10-30"
-  applies_to: "Ollama, llama.cpp server, LM Studio, vLLM, Open WebUI, ComfyUI, Gradio-based image and speech web UIs (verify each live version; defaults change often)"
+  version: "1.1"
+  last_reviewed: "2026-10-31"
+  applies_to: "Ollama, llama.cpp server, LM Studio, vLLM, LocalAI, Open WebUI, ComfyUI, Gradio-based image and speech web UIs, LiteLLM proxy (verify each live version; defaults change often)"
   audience: "home, work, homelab"
   finding_prefix: "LLM"
   modes: "discover, recommend, remediate, respond"
@@ -24,8 +25,8 @@ are usually installed for convenience, by one person, on a powerful machine with
 exposed to the network with no authentication because the defaults assume a single trusted user. Their
 plugins, custom nodes, and some model formats run arbitrary code, and their chat histories and uploaded
 documents can hold the most private data in the house or office. Identify, explain, prioritize, remediate
-(only when authorized), and verify weaknesses in the model servers, the web front ends on top of them, and
-the host that runs them.
+(only when authorized), and verify weaknesses in the model servers, the web front ends on top of them, the
+gateways that hold everyone's cloud provider keys, and the host that runs them.
 
 ## How to use this skill
 
@@ -59,7 +60,12 @@ and vector databases, also use the [mcp-servers](../mcp-servers/SKILL.md) skill.
     endpoints, and says not to rely on `--api-key` alone.
   - **LM Studio:** "Require Authentication" is an opt-in server setting.
   - **ComfyUI and AUTOMATIC1111-style Gradio UIs:** no login by default.
+  - **LocalAI:** no API key by default. `LOCALAI_API_KEY` (or `--api-keys`) adds keys, and the vendor says
+    these keys grant full admin access with no role separation. Optional user accounts
+    (`LOCALAI_AUTH`) make the first user to sign in an admin.
   - **Open WebUI:** has accounts, but whoever creates the first account becomes admin.
+  - **LiteLLM proxy:** requests need a key once a master key is set. The master key is also the default
+    Admin UI password (user `admin`) unless `UI_PASSWORD` is set.
 - **The bind address is the main control, and containers can override it.** Most of these servers listen
   only on loopback by default, but one setting changes that. Examples: `OLLAMA_HOST=0.0.0.0:11434`,
   ComfyUI `--listen` with no value (all IPv4 and IPv6 interfaces), A1111 `--listen`, LM Studio "Serve on
@@ -85,6 +91,11 @@ and vector databases, also use the [mcp-servers](../mcp-servers/SKILL.md) skill.
   - Read only with documented `GET` endpoints or the product's own read-only CLI commands.
 - **Prompts, outputs, uploads, and chat histories are sensitive data.** Handle them like email. Read
   metadata (counts, sizes, dates, owners), not content, unless the user asks and the data is theirs.
+- **A model gateway is a vault of everyone's provider keys.** A LiteLLM proxy typically holds the cloud
+  provider API keys for a whole household, team, or homelab, issues virtual keys to every app, and records
+  spend. Whoever holds its master key, a `proxy_admin` account, or its database plus `LITELLM_SALT_KEY`
+  can use or read every provider key. Treat the gateway like a password manager: its compromise means
+  rotating every upstream key, not just its own.
 - **These apps hold other systems' credentials.** Examples: cloud model provider API keys (OpenAI-style
   connections in Open WebUI), Hugging Face tokens, tunnel tokens, web-search API keys, and an Ollama
   account sign-in. Exposing the app exposes those credentials and the bills they run up.
@@ -97,6 +108,8 @@ and vector databases, also use the [mcp-servers](../mcp-servers/SKILL.md) skill.
 | **Linux service** (systemd) | `ollama.service` or similar; settings in the unit or a drop-in override. | Bind address and other settings live in `Environment=` lines. Check overrides as well as the main unit. Logs go to the journal. |
 | **Containers** (Docker/Compose/Podman) | `docker ps` shows `ollama/ollama`, `ghcr.io/open-webui/open-webui`, ComfyUI images, and similar. | Exposure is set by published ports, not the app's bind. Secrets often sit in environment variables or `.env` files. Data lives in volumes. GPU passthrough, and any mount of the Docker socket, widen the blast radius. |
 | **Bundled stack** (Open WebUI image with Ollama inside, Compose files from tutorials) | One Compose project or image tagged with Ollama. | The model API may be published to the host as well as the UI. Check every published port, not just the UI port. |
+| **Model gateway / proxy** (LiteLLM proxy: `berriai/litellm` container images, verify the current registry, or the `litellm[proxy]` Python package) | A `config.yaml` with `model_list` and `general_settings`; a Postgres database alongside; clients point at it as their "OpenAI" base URL. | Holds the provider keys and issues virtual keys. Its security rests on the master key, the salt key, the database, and the Admin UI. Clients reach the local model servers through it, so the model servers themselves can stay on loopback or a private network. |
+| **All-in-one model server** (LocalAI container or binary) | `localai/localai` images (CPU, GPU, and "AIO" variants), or the `local-ai` binary; a models directory with YAML model configs. | One process serves text, image, audio, and embeddings, has its own web UI, and can install models and backends from galleries at runtime. Optional P2P/federated mode links instances over the internet. |
 | **Python virtual environment** (ComfyUI, A1111, Forge, TTS apps) | `venv`/`conda` directory; launched with `python main.py`, `webui.sh`, or similar scripts. | Launch flags are the configuration: read the launch script and the running command line. Extensions install packages into the same environment. |
 | **Rented GPU or cloud instance** | Public IP; provider console; template images. | Everything bound to all interfaces is on the internet unless the provider firewall says otherwise. Template images may pre-enable listeners, tunnels, or notebooks. |
 | **Published through a reverse proxy, tunnel, or share link** | Proxy config, a tunnel client (Cloudflare Tunnel, ngrok, Tailscale Funnel), a Gradio `*.gradio.live` link, or a router port forward. | The real exposure is whatever the proxy, tunnel, or forward publishes. A proxy without authentication adds nothing. Some tunnels require specific Host-header handling (the Ollama FAQ notes this). |
@@ -114,6 +127,14 @@ Defaults can be changed, so confirm with the user before relying on a match.
 - **vLLM:** OpenAI-compatible server; vendor examples commonly use port 8000 (check the live command
   line). `/version`, `/health`, and `/metrics` answer without the API key.
 - **LM Studio:** port 1234 by default; OpenAI-compatible `GET /v1/models`.
+- **LocalAI:** TCP 8080 by default (`LOCALAI_ADDRESS`, default `:8080`, all interfaces). The same port
+  serves the web UI, the OpenAI-compatible API (`GET /v1/models`), and `/metrics` unless disabled. Port
+  8080 is also used by Open WebUI inside its container and older llama.cpp builds, so confirm by page
+  content, not the port alone. Images are `localai/localai` (verify current registry names).
+- **LiteLLM proxy:** TCP 4000 by default. The Admin UI is at `/ui`. Swagger API docs are served by the
+  proxy unless `NO_DOCS`, `NO_REDOC`, and `NO_OPENAPI` are set. `GET /health/liveliness` and
+  `GET /health/readiness` answer without a key (current releases keep the readiness payload low-detail).
+  A Postgres server (5432) is usually alongside.
 - **Open WebUI:** port 8080 inside the container. Vendor Docker examples publish it on host port 3000.
   The page title is "Open WebUI". `GET /api/version` returns its version.
 - **ComfyUI:** TCP 8188. `GET /system_stats` returns ComfyUI, Python, and PyTorch versions and GPU/VRAM
@@ -160,6 +181,16 @@ curl -s http://127.0.0.1:9931/props        # read-only GET; POST /props is a wri
 # vLLM (vendor-documented unauthenticated endpoints)
 curl -s http://127.0.0.1:8000/version
 
+# LocalAI (vendor-documented API; candidates)
+curl -s http://127.0.0.1:8080/v1/models    # model list; needs the key if one is set
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8080/v1/models   # 401 means a key is required
+
+# LiteLLM proxy (vendor-documented endpoints; candidates)
+curl -s http://127.0.0.1:4000/health/liveliness       # unauthenticated probe
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:4000/v1/models  # 401 means keys are enforced
+# With a read-only key the user supplies (never the master key unless the user decides to):
+# curl -s -H "Authorization: Bearer <api-token>" http://127.0.0.1:4000/key/info
+
 # ComfyUI (observed; endpoints in the ComfyUI server source)
 curl -s http://127.0.0.1:8188/system_stats
 curl -s http://127.0.0.1:8188/object_info | head -c 2000   # node list; large output
@@ -189,7 +220,14 @@ curl -s --max-time 5 http://<llm-host>:11434/api/version
   any Open WebUI admin setting.
 - Export the Open WebUI database or chats, or open other users' chats.
 - Sign the server out of, or into, any account (Ollama has sign-in and sign-out endpoints).
-- Print API keys, tokens, `WEBUI_SECRET_KEY`, Hugging Face tokens, `.env` files, or private key files
+- Install or apply anything on LocalAI: no gallery installs, no `POST /models/apply`, no backend installs,
+  and no P2P token reads (`/p2p/token` returns the swarm's join secret).
+- Create, regenerate, update, block, or delete LiteLLM keys, users, teams, models, or credentials
+  (`/key/generate`, `/key/regenerate`, `/key/update`, `/key/delete`, `/model/new`, `/credentials`, and
+  the Admin UI equivalents). Don't ask the user for the master key to "check"; ask them to read the
+  relevant screens, or for a scoped read-only key.
+- Print API keys, tokens, `WEBUI_SECRET_KEY`, `LITELLM_MASTER_KEY`, `LITELLM_SALT_KEY`, `DATABASE_URL`,
+  `LOCALAI_API_KEY`, `LOCALAI_P2P_TOKEN`, Hugging Face tokens, `.env` files, or private key files
   such as the Ollama key in `~/.ollama/`.
 - Try default credentials, guess passwords, or run exploit code against these apps.
 
@@ -244,6 +282,15 @@ Accepted risk).
 - **LM Studio:** "Require Authentication" on if "Serve on Local Network" is on. "Allow calling servers
   from mcp.json" should be off unless authentication is on (vendor guidance), because it lets API
   clients drive the local MCP servers.
+- **LocalAI:** `LOCALAI_API_KEY` / `API_KEY` / `--api-keys` set? Those keys are admin-equivalent (vendor
+  documentation). If user accounts are on (`LOCALAI_AUTH`, or implicitly by setting GitHub or OIDC client
+  IDs), check `LOCALAI_REGISTRATION_MODE` (`open`, `approval`, or `invite`; verify the live default), who
+  the admins are, and whether the first account was created before the instance was exposed (the first
+  user to sign in becomes admin and bypasses approval). Legacy keys still work as an admin fallback when
+  accounts are on. `LOCALAI_DISABLE_API_KEY_REQUIREMENT_FOR_HTTP_GET` (vendor: test environments only)
+  and a widened `LOCALAI_HTTP_GET_EXEMPTED_ENDPOINTS` open reads to everyone. `LOCALAI_DISABLE_CSRF`
+  should stay off.
+- **LiteLLM proxy:** see domain L.
 - **ComfyUI and Gradio UIs:** no built-in login unless configured (A1111 `--gradio-auth`, `--api-auth`).
   Credentials on the command line or in a world-readable file are findings.
 - **Open WebUI:** see domain D.
@@ -299,6 +346,17 @@ Accepted risk).
 - **llama.cpp:** `--tools`, `--agent`, `--mcp-servers-config`, `--mcp-servers-json`, and `--ui-mcp-proxy`
   are marked by the vendor "do not enable in untrusted environments". MCP child processes run with the
   server's privileges.
+- **LocalAI galleries and backends:** galleries (`LOCALAI_GALLERIES`, loaded at startup by default with
+  `LOCALAI_AUTOLOAD_GALLERIES`) and `POST /models/apply` install models from URLs while the server runs.
+  Backends are downloaded and executed by the server, and `--external-grpc-backends` can point at a local
+  file or a remote URL. On an instance without keys, anyone who can reach it can install a model or
+  backend. Check whether `LOCALAI_DISABLE_GALLERY_ENDPOINT` is set where runtime installs aren't needed,
+  which galleries are configured (only the official one, or third-party URLs), and any `PRELOAD_MODELS`
+  or `github://` config URLs used at startup. LocalAI also reads `.env` / `localai.env` files from the
+  working directory, the home directory, and `/etc`; check all of them.
+- **LocalAI agents and MCP:** built-in agents can call MCP tools and run commands; `local-ai chat --yolo`
+  (`LOCALAI_CHAT_YOLO`) auto-approves every tool call. Agents created by an admin get admin-owned keys.
+  Use the [mcp-servers](../mcp-servers/SKILL.md) skill for the tools they reach.
 - **vLLM:** endpoint and model plugins are trusted code. Model options that run code shipped with a model
   repository (Hugging Face "remote code" options) should be off unless the repository is trusted and
   pinned.
@@ -346,6 +404,12 @@ Accepted risk).
 - Where secrets live: environment variables (visible to anyone who can inspect the container), database
   (Open WebUI encrypts some stored secrets with `WEBUI_SECRET_KEY`), plaintext config files, the command
   line.
+- LocalAI P2P/federated mode (`LOCALAI_P2P`, `LOCALAI_FEDERATED`, workers): the vendor calls it
+  experimental. Anyone with the P2P token can join the network and use its workers, discovery uses a
+  public DHT unless `LOCALAI_P2P_DISABLE_DHT=true` (local mDNS only), and listing a swarm in the public
+  explorer publishes its full token. Check whether P2P is on, where the token lives (command line,
+  environment, file), whether DHT is needed, and whether the swarm is listed anywhere. Distributed
+  llama.cpp workers (`LLAMACPP_GRPC_SERVERS`) must be reachable only from the main instance.
 - vLLM on Ray: driver environment variables (including tokens) can propagate to workers (vendor note).
 
 #### I. GPU and resource abuse
@@ -386,6 +450,49 @@ Accepted risk).
   (a compromised custom node pivots from there).
 - Backups of configuration and data, and whether restoring them has been tested.
 
+#### L. Model gateways (LiteLLM proxy)
+
+- **Version and supply chain:** installed version and install method (pinned image tag or digest, or a
+  `pip` package). The LiteLLM project has had serious advisories, including an injection flaw in API-key
+  verification and a short-lived compromise of published PyPI releases that stole credentials from hosts
+  that installed them. Check the installed version against the vendor's security notices and verified
+  release list (references), per core triage. A host that installed an affected release is a P0
+  indicator: switch to Respond.
+- **Master key:** `LITELLM_MASTER_KEY` (or `general_settings.master_key`) set? Where does it live (secret
+  manager, `.env`, Compose file, `config.yaml` in a git repository)? Is it used by applications, rather
+  than only by administrators? Apps should use scoped virtual keys; a master key in an app's config is a
+  finding.
+- **Admin UI login:** the UI is at `/ui`, user `admin` (`UI_USERNAME`) by default, password `UI_PASSWORD`
+  or, if unset, the master key. Check whether per-person `proxy_admin` accounts or SSO exist and whether
+  `general_settings.disable_env_credential_login: true` has turned off the shared login (vendor
+  guidance). `DISABLE_ADMIN_UI="True"` removes the UI entirely where it isn't used. Failed-login limits
+  only see real client addresses when `general_settings.trusted_proxy_ranges` is set.
+- **Virtual keys:** with the user, list keys (Admin UI, or `/key/list` / `/key/info` with an admin's
+  session; read-only). For each: owner or team, allowed `models`, `max_budget`, budget duration, `tpm_limit`
+  / `rpm_limit`, expiry, last use. Keys with no model restriction, no budget, no expiry, or no known owner
+  are findings. A key owned by a `proxy_admin` can call management routes unless `allowed_routes`
+  restricts it.
+- **Budgets and limits:** global, team, user, and key budgets; `upperbound_key_generate_params` caps on
+  what keys can be created with. Also set hard spending limits at each upstream provider: the gateway's
+  budget doesn't help if the provider key leaks.
+- **Stored provider keys and the database:** `DATABASE_URL` (Postgres) holds keys, users, spend logs,
+  and, with `store_model_in_db: true`, models and provider credentials encrypted with
+  `LITELLM_SALT_KEY`. Check that the salt key is set to a long random value and kept apart from database
+  backups, that Postgres isn't published beyond the gateway (port 5432 on the host or LAN), that its
+  password isn't a tutorial default, and that backups are protected as secret material. Provider keys in
+  plain `config.yaml` or environment variables count as stored secrets too (domain H).
+- **Exposure:** where port 4000 is published (loopback, LAN, reverse proxy, internet). Which routes are
+  exposed through a proxy (vendor guidance: only the routes needed; keep `/ui` and management routes
+  internal). Swagger docs on (`NO_DOCS`, `NO_REDOC`, `NO_OPENAPI`). TLS termination: `PROXY_BASE_URL` set
+  to the HTTPS origin so cookies get the `Secure` flag. `LITELLM_MODE="PRODUCTION"` (stops loading a local
+  `.env` automatically). `allow_requests_on_db_unavailable` should be off unless the gateway is on a
+  private network (vendor).
+- **Logging and callbacks:** `set_verbose` / debug logging off in production; which logging callbacks
+  (observability platforms) receive prompts and responses, and whether users know. Spend logs record
+  request metadata for every user.
+- **Upstreams:** the gateway's `model_list` often points at local servers (Ollama, vLLM, LocalAI). Those
+  should accept traffic only from the gateway, or the gateway's keys and budgets are bypassed.
+
 ---
 
 ## Recommend
@@ -409,6 +516,10 @@ List what depends on the current setup before recommending a change:
   the old key unreadable (check the live version's documentation first). Rotating cloud keys breaks
   every app that uses them.
 - **Tunnels and proxies:** other services may share the same tunnel or proxy.
+- **Gateway clients:** every app, script, and IDE plugin that holds a LiteLLM virtual key, and every
+  local model server behind the gateway. Rotating the master key logs out env-credential UI sessions and
+  breaks anything that (wrongly) uses it; disabling the shared UI login locks out anyone without a
+  personal account.
 
 ### Recommendation guidance
 
@@ -427,6 +538,13 @@ List what depends on the current setup before recommending a change:
 | Custom nodes or extensions from unknown or abandoned sources | Remove them, or pin them to a reviewed commit. Rebuild the environment if any looks malicious (Respond). | Workflows using them break. |
 | Pickle models from untrusted sources | Replace with `safetensors` or GGUF from known publishers; keep pickle checks on. | Some models exist only in pickle form; the user must accept or drop them. |
 | Cloud API keys stored in an exposed app | Close the exposure first, then rotate the keys, set provider spending limits, and use per-app keys. | Brief outage while keys are replaced. |
+| LocalAI with no API key or accounts on a networked host | Bind to loopback or a private network; set `LOCALAI_API_KEY` for single-owner use, or turn on accounts with registration `approval` or `invite` after creating the admin. | Clients need a key; legacy keys stay admin-level, so prefer per-user keys when several people use it. |
+| LocalAI gallery endpoints or `/models/apply` reachable by untrusted clients | Set `LOCALAI_DISABLE_GALLERY_ENDPOINT` where models are managed by the owner only; keep only the official gallery. | Installing models from the UI stops; install from the host instead. |
+| LocalAI P2P on with DHT discovery, or token exposed | Turn P2P off if unused; otherwise `LOCALAI_P2P_DISABLE_DHT=true` for LAN-only swarms, rotate the token, keep it out of command lines and the public explorer. | Workers must rejoin with the new token. |
+| LiteLLM master key used by apps, or Admin UI on the shared env login | Issue scoped virtual keys per app; create per-person admin accounts or SSO, then set `disable_env_credential_login: true`; rotate the master key through the vendor's rotation flow. | Apps need new keys; admins need personal logins first, or they're locked out. |
+| LiteLLM virtual keys without model limits, budgets, or expiry | Restrict `models`, set `max_budget` and duration, rate limits, and expiry; delete keys with no owner after confirming with the user. | Apps that hit a budget stop until it resets. |
+| LiteLLM UI, docs, or management routes reachable from the LAN or internet | Publish only the inference routes through the proxy; keep `/ui` internal or disabled; set `NO_DOCS`, `NO_REDOC`, `NO_OPENAPI`. | Admins use the UI over the VPN or from the host. |
+| LiteLLM database or salt key weakly protected | Unpublish Postgres, use a strong password, store `LITELLM_SALT_KEY` in a secret manager separate from DB backups. Don't change an existing salt key. | Changing the salt key makes stored credentials unreadable (vendor). |
 | Ollama signed in or cloud features enabled when unneeded | Sign out and set `OLLAMA_NO_CLOUD=1`. | Cloud models and web search stop working. |
 | Permissive CORS (`*`, broad extension patterns) | Set explicit origins (`OLLAMA_ORIGINS`, `CORS_ALLOW_ORIGIN`, llama.cpp `--cors-origins`). | Browser-based clients from other origins stop working. |
 | `WEBUI_SESSION_COOKIE_SECURE` off behind HTTPS | Turn it on. | Plain-HTTP access stops keeping sessions. |
@@ -468,6 +586,14 @@ Apply only approved changes, one at a time, following the core rules. Product sp
   stop and switch to Respond; don't just delete it.
 - **Updates:** C2. Read release notes; custom nodes and extensions frequently break on core updates.
   Take a snapshot (ComfyUI-Manager snapshot, container image tag, or virtual-environment copy) first.
+- **LiteLLM:** back up `config.yaml` and the Postgres database (secret material) before changes. Rotate
+  the master key with the vendor's documented rotation flow rather than by editing it in place, and only
+  after every app has its own virtual key. Never change `LITELLM_SALT_KEY` on a database that already
+  holds credentials. Key edits, blocks, and deletions are C1 or C2 depending on who uses the key; block
+  before delete.
+- **LocalAI:** setting `LOCALAI_API_KEY` or enabling accounts is C2 (every client breaks until it has a
+  key). Enabling accounts on an existing instance can hide existing agents and collections (vendor
+  warning); back up the data directory and test on a copy first.
 - **Key rotation:** close the exposure first, then rotate, then update every client, then revoke the old
   key at the provider. Check the provider's usage log for the period of exposure.
 
@@ -484,6 +610,8 @@ confirm the intended clients still work.
 - Loading an untrusted pickle model to "check" it, or running a scanner that loads it rather than
   reading it statically.
 - Changing `WEBUI_SECRET_KEY` on a live instance without confirming what it encrypts on that version.
+- Changing or removing `LITELLM_SALT_KEY` on a gateway that holds stored credentials, or dropping or
+  resetting the LiteLLM database.
 - Installing nodes, extensions, Functions, or models on the user's behalf as remediation.
 - Changing router port forwards or tunnels that other services share, without the owner present.
 
@@ -532,3 +660,7 @@ recommended; restrict the forward's source instead if remote access is essential
 ## Version history
 
 - **1.0** (2026-10-30): Initial version.
+- **1.1** (2026-10-31): Added LocalAI (API keys and accounts, galleries and runtime installs, backends,
+  agents, P2P/federated mode) and the LiteLLM proxy (master key, Admin UI login, virtual keys, budgets,
+  database and salt key, exposure, supply-chain advisories), with detection, Recommend, Remediate, and
+  Respond guidance.

@@ -1,0 +1,479 @@
+---
+name: vmware-esxi
+description: >-
+  Security assessment, hardening, remediation, and incident response for VMware ESXi hosts (standalone or
+  managed by a small vCenter Server), including the free vSphere Hypervisor edition and the server
+  hardware's BMC. Use when auditing an ESXi host, reviewing its patch level and Broadcom entitlement, Host
+  Client, SSH and ESXi Shell, lockdown mode, local and Active Directory accounts, OpenSLP and other
+  services, firewall, management network, VIB acceptance level, datastores, or backups, or when an ESXi
+  host may have been hit by ransomware or otherwise compromised.
+license: CC-BY-4.0
+metadata:
+  version: "1.0"
+  last_reviewed: "2026-10-31"
+  applies_to: "VMware ESXi 8.x and ESX 9.x, standalone or with vCenter Server; 7.x and older are past end of general support (verify the live build and Broadcom lifecycle page)"
+  audience: "home, work, homelab"
+  finding_prefix: "ESX"
+  modes: "discover, recommend, remediate, respond"
+---
+
+# VMware ESXi Security
+
+Act as a careful, evidence-driven virtualization security engineer. ESXi is the trust boundary for every
+VM on it: whoever controls the host, its `root` account, a vCenter that manages it, or its BMC controls
+every guest, can read or encrypt every virtual disk, and can stop everything at once. ESXi is also a
+favorite ransomware target, because encrypting one host's datastores takes out every server on it in a
+single step. Identify, explain, prioritize, remediate (only when authorized), and verify weaknesses in the
+host, its management plane, its patch path, its backups, and the hardware underneath.
+
+## How to use this skill
+
+This skill holds only ESXi-specific guidance. It builds on the shared core, which always applies:
+
+| Core document | Covers |
+|---|---|
+| [modes-and-authorization.md](../../../core/modes-and-authorization.md) | The four modes, transitions, operation classes (R/C1/C2/C3), standing authorization |
+| [operating-principles.md](../../../core/operating-principles.md) | Principles, capability discovery, scope, communication, untrusted data |
+| [vulnerability-triage.md](../../../core/vulnerability-triage.md) | Lifecycle, CVE/KEV validation, P0–P4 priority scale |
+| [evidence-and-reporting.md](../../../core/evidence-and-reporting.md) | Evidence labels, statuses, finding template, report format, cadence |
+| [tool-use-contract.md](../../../core/tool-use-contract.md) | Rules for commands, APIs, MCP tools, and third-party integrations |
+| [reporting-protocol.md](../../../core/reporting-protocol.md) | Optional live progress reporting to a dashboard |
+| [incident-response.md](../../../core/incident-response.md) | The generic Respond playbook |
+
+ESXi-specific Respond steps are in [incident-response.md](incident-response.md). Vendor documentation and
+advisories are in [references.md](references.md). For the BMC under the host, see
+[out-of-band management](../../hardware/out-of-band-management/SKILL.md). For a comparable open-source
+hypervisor, see [Proxmox VE](../proxmox-ve/SKILL.md) and [XCP-ng](../xcp-ng/SKILL.md).
+
+## ESXi-specific principles
+
+- **The host is above every guest.** ESXi `root`, any account with the Administrator role on the host,
+  vCenter administrators, members of a directory group that ESXi trusts as administrators, and anyone with
+  BMC or physical access can read and change every VM. Rate host findings by the most sensitive guest on
+  it: a weakness on a host that runs the network's firewall is a firewall weakness.
+- **Know which guests the agent depends on.** If the firewall, DNS, VPN, vCenter itself, or the agent's own
+  machine runs as a VM here, host reboots, firewall changes, vSwitch changes, and lockdown changes can cut
+  off the agent and the user. Treat any change that could stop those guests as **C2**, and confirm an
+  out-of-band path (physical console, DCUI, or BMC remote console) first.
+- **ESXi is not a general-purpose Linux.** It is a vendor appliance with a BusyBox shell, a mostly
+  in-memory root filesystem, and configuration that persists only through supported mechanisms. Don't
+  assume Linux tools, paths, or package managers. Make changes through the Host Client, vCenter,
+  `esxcli`, `vim-cmd`, or PowerCLI, not by editing files under `/etc`.
+- **Patch access depends on Broadcom entitlement.** Since the Broadcom acquisition, perpetual licenses and
+  the old free edition were withdrawn, then a free vSphere Hypervisor edition was reinstated on an 8.0
+  update. Downloading patches needs a Broadcom Support Portal account, and many patches need an active
+  entitlement. Broadcom has said critical ("zero-day") security patches for supported versions are
+  available to perpetual-license customers with expired support, but users report delays. **A host that
+  can't get patches is effectively unsupported.** Verify the current policy on the Broadcom pages in
+  [references.md](references.md); don't rely on this paragraph.
+- **ESXi is a top ransomware target.** Attackers reach it through exposed services (historically OpenSLP),
+  stolen or guessed `root` passwords, directory groups trusted as admins, vCenter compromise, or SSH from a
+  compromised admin workstation. They then stop VMs and encrypt datastore files. Internet exposure, SSH
+  left on, and backups reachable from the host are high-priority findings.
+- **Lockdown mode needs vCenter.** Lockdown restricts management to vCenter. On a standalone host
+  without vCenter, enabling it can lock everyone out of the Host Client; don't recommend it there.
+- **The BMC is a second front door.** iDRAC, iLO, XClarity, and generic IPMI give power control, a remote
+  console, and virtual media below ESXi. Ask the user about it; **never** test BMC logins, try default
+  credentials, or run IPMI tools against it.
+
+## Deployment variants
+
+| Variant | How to recognize it | What changes |
+|---|---|---|
+| **Standalone host, paid license** | Host Client at `/ui/`; Licensing shows a vSphere edition; no vCenter connection. | Host Client and `esxcli` are the management plane. Lockdown mode doesn't apply. |
+| **Free vSphere Hypervisor edition** | Licensing page shows the free edition key or "vSphere Hypervisor". | Standalone only; no vCenter, no vendor support, and no vSphere backup APIs, so image-level backup tools that rely on them won't work. Patch availability is limited; verify what the user can actually download. Weigh isolation more heavily. |
+| **Evaluation mode** | Licensing shows an evaluation that expires. | When it expires, VMs keep running but can't be powered on again after a stop. Note the expiry date as an availability risk. |
+| **Managed by vCenter Server** | Host summary shows "Managed by" a vCenter; a `vpxuser` account exists. | vCenter is above the host: its SSO administrators control every host. Assess vCenter too (VCSA on 443 and its management interface on 5480). Lockdown mode and vCenter roles apply. Don't edit `vpxuser`. |
+| **vCenter running on the host it manages** | The VCSA is a VM on this host. | A host outage or lockdown error can remove the only management path. Keep DCUI and Host Client access with a known `root` password. |
+| **Active Directory-joined host** | Authentication Services shows a domain. | The directory becomes part of the host's trust boundary; check which directory group ESXi trusts as administrators. |
+| **Unsupported or past end of general support** (7.x or older, or a build that can't be patched) | `esxcli system version get` reports 7.x or older; the user has no entitlement. | Core end-of-life rule: plan migration or replacement; isolate meanwhile. |
+| **Server hardware with a BMC** | Enterprise server; BMC web UI on the network; the user confirms. | The BMC is part of the trust boundary. |
+| **Nested ESXi** (inside another hypervisor) | Virtual hardware reported by the host; the user confirms. | The outer hypervisor is above this one; assess it too. |
+
+## Detection
+
+Hints for recognizing this product during a network inventory (used by the `full-assessment` skill).
+Defaults can be changed, so confirm with the user before relying on a match.
+
+- **HTTPS 443** (vendor default): Host Client at `/ui/`, page title mentioning VMware ESXi, the vSphere API
+  at `/sdk`, and a self-signed certificate naming VMware on a fresh install. **HTTP 80** redirects to 443.
+- **TCP 902** answers with a banner beginning `VMware Authentication Daemon` (remote console, MKS, and
+  NFC traffic). This banner is a strong ESXi or VMware Workstation indicator.
+- **TCP and UDP 427** (OpenSLP / CIM SLP): on current builds the service is normally stopped by default;
+  if it answers, record it as a finding to check. **TCP 5989** (CIM over HTTPS) may also answer.
+- **TCP 22** (SSH) answers only if SSH has been enabled; disabled by default.
+- vCenter Server Appliance: HTTPS 443 with a vSphere Client landing page, plus the appliance management
+  interface on HTTPS **5480**.
+- No mDNS or SSDP announcement by default.
+- **Guests:** VMware-generated VM MAC addresses use OUIs registered to VMware, Inc. (for example the
+  `00:50:56` and `00:0C:29` prefixes; confirm in the IEEE registry). Many VMs with those prefixes suggest
+  an ESXi host nearby. Additional VMkernel interfaces (`vmk1` and later) usually also use a VMware OUI.
+- **The host itself:** the first management interface (`vmk0`) usually uses its physical NIC's MAC, so
+  it shows the NIC or server maker, not VMware.
+- **BMCs** show the server maker's or BMC chip's OUI and usually a web UI on 443 and IPMI on UDP 623.
+  Don't probe IPMI beyond recording that the port answers.
+
+---
+
+## Discover
+
+All operations in this mode are class **R** (read-only). Confirm scope and access first (core: operating
+principles). Mark anything you can't inspect **Not assessed**.
+
+### Access and baseline
+
+Prefer the Host Client or vSphere Client with a **read-only** account (the built-in ReadOnly role), the
+vSphere API or PowerCLI with that account, or user-run checks. Ask the user before enabling SSH just for
+the assessment: enabling it is a change (**C1**, and a temporary exposure); if they do, agree to disable it
+afterwards. These are *candidate* read-only commands from the ESXi Shell; lines marked
+*vendor-documented* appear in the `esxcli` reference, the rest are **not yet verified** on every build.
+
+```sh
+esxcli system version get                         # version, update, build (vendor-documented)
+vmware -vl                                        # version string
+esxcli software profile get                       # image profile
+esxcli software vib list                          # installed VIBs with vendor and acceptance level (vendor-documented)
+esxcli software acceptance get                    # host acceptance level (vendor-documented)
+esxcli system settings kernel list -o execInstalledOnly   # only run installed binaries
+esxcli system settings encryption get             # configuration encryption / TPM mode
+esxcli system account list                        # local accounts (vendor-documented)
+esxcli system permission list                     # role assignments (vendor-documented)
+esxcli network ip interface ipv4 get              # VMkernel addresses
+esxcli network ip interface tag get -i vmk0       # which services each vmk carries
+esxcli network vswitch standard list; esxcli network vswitch standard portgroup list
+esxcli network firewall get; esxcli network firewall ruleset list
+esxcli network firewall ruleset allowedip list    # source restrictions per ruleset
+esxcli network ip connection list                 # listening and established connections
+esxcli system syslog config get                   # remote syslog (vendor-documented)
+esxcli system ntp get                             # time source
+esxcli storage filesystem list                    # datastores
+vim-cmd vmsvc/getallvms                           # VMs on this host
+vim-cmd hostsvc/hostsummary                       # host summary, including lockdown and connection state
+/etc/init.d/slpd status; chkconfig --list         # OpenSLP state and services set to start at boot
+esxcli system settings advanced list -o /UserVars/SuppressShellWarning
+esxcli system settings advanced list -o /UserVars/ESXiShellInteractiveTimeOut
+esxcli system settings advanced list -o /UserVars/ESXiShellTimeOut
+esxcli system settings advanced list -o /UserVars/HostClientSessionTimeout
+esxcli system settings advanced list -o /Security/AccountLockFailures
+esxcli system settings advanced list -o /Security/PasswordQualityControl
+esxcli system settings advanced list -o /Config/HostAgent/plugins/hostsvc/esxAdminsGroup
+cat /etc/rc.local.d/local.sh                      # boot-time customization script
+cat /var/spool/cron/crontabs/root                 # cron entries
+```
+
+- **Never run** in Discover (all are C2 or C3): `vim-cmd vmsvc/power.*`, `esxcli vm process kill`,
+  `vim-cmd vmsvc/destroy` or `unregister`, snapshot removal, `esxcli software vib install`/`update`/
+  `remove`, `esxcli software profile update`, any `esxcli storage` or `vmkfstools` change, `vmfs` or
+  partition tools, `esxcli network firewall set`, `esxcli system maintenanceMode set`, lockdown changes,
+  account changes, service start/stop, and reboots.
+- **Never read** `/etc/shadow`, private keys under `/etc/vmware/ssl/`, `/etc/ssh/` host keys, or
+  `authorized_keys` contents beyond key types, comments, and fingerprints. Never export a configuration
+  bundle in Discover; it contains secrets.
+- The Host Client and vCenter show most of the same information (Manage → Services, Security & users,
+  Advanced settings, Packages, Networking); prefer them when shell access isn't already enabled.
+
+### Assessment domains
+
+Every domain must end with a status in the report (Pass / Finding / Not assessed / Not applicable /
+Accepted risk).
+
+#### A. Platform, version, lifecycle, and patch access
+
+- Version, update, and build (`esxcli system version get`). Compare against Broadcom's ESXi release notes,
+  build-number list, and VMware Security Advisories (VMSAs) on the Broadcom support portal (core triage:
+  validate before rating). Check CISA KEV for ESXi and vCenter entries; several have been exploited by
+  ransomware groups.
+- Lifecycle: ESXi 7.0 reached end of general support in 2025-10; a host on 7.x or older is an end-of-life
+  finding. Confirm the current dates for 8.x and 9.x on Broadcom's product lifecycle page.
+- **Patch access:** does the user have a Broadcom Support Portal account and an entitlement that lets them
+  download the current patch for this version? A free-edition host that can't get security patches is a
+  finding in its own right, rated by exposure. Record what the user can actually download, not what should
+  be available.
+- Image profile and vendor add-ons (OEM custom images): who supplies driver and firmware updates, and do
+  they match the server's hardware compatibility listing?
+- Pending reboot after an update (the new image isn't active until reboot).
+- vCenter, if present: its own version and VMSAs. A vulnerable vCenter is a route to every host it
+  manages.
+
+#### B. Accounts, roles, and authentication
+
+- Local accounts (`esxcli system account list`): `root`, `dcui`, `vpxuser` (vCenter-managed), and any
+  others. Who uses `root`, is it unique and strong, and is it stored in a password manager? Is `root`
+  used for daily work or by integrations?
+- Role assignments (`esxcli system permission list`): who has Administrator; any custom roles.
+- Password policy (`Security.PasswordQualityControl`), account lockout (`Security.AccountLockFailures`,
+  `Security.AccountUnlockTime`). Lockout set to 0 disables it.
+- **Active Directory:** if joined, which group ESXi treats as administrators
+  (`Config.HostAgent.plugins.hostsvc.esxAdminsGroup`, default `ESX Admins`) and whether it is added
+  automatically. Ransomware groups have abused this by creating that group in the directory
+  (CVE-2024-37085). Check the Broadcom advisory and KB for the current fix and recommended advanced
+  settings; confirm the group exists, is tightly controlled, or is changed. Anyone who can create or edit
+  that directory group can become host admin.
+- vCenter SSO: identity sources, administrators, MFA or federation for vCenter logins, and whether local
+  vCenter accounts are shared.
+- API, PowerCLI, and integration credentials (backup tools, monitoring, automation): what account each
+  uses and with what role. Record existence and scope only, never values.
+- SSH keys for `root` (`/etc/ssh/keys-root/authorized_keys`): count, key types, comments. Every key should
+  belong to a current admin.
+
+#### C. Management-plane exposure (Host Client, API, SSH, ESXi Shell, DCUI)
+
+- Is 443, 902, 427, 5989, or 22 reachable from the internet? Check upstream port forwards, reverse
+  proxies, and tunnels. ESXi management must never be exposed directly; internet-exposed ESXi is usually
+  **P1**, and **P0** if there are signs of compromise. Test from outside only with explicit authorization.
+- Which internal segments can reach the management interface. Ideally only a management VLAN or admin
+  hosts, enforced upstream and by the ESXi firewall's allowed-IP lists.
+- SSH and ESXi Shell services: running? Policy (start and stop manually, start with host)? Both are
+  disabled by default. Left running permanently is a finding; so is `UserVars.SuppressShellWarning=1`,
+  which hides the console warning that they are on.
+- Shell and session timeouts (`UserVars.ESXiShellTimeOut`, `ESXiShellInteractiveTimeOut`,
+  `HostClientSessionTimeout`): set, or unlimited?
+- DCUI: who can use it (`DCUI.Access` advanced setting and lockdown exception users), and physical
+  access to the console.
+- Managed Object Browser (MOB): should be disabled (the default on supported releases; verify with
+  `Config.HostAgent.plugins.solo.enableMob`).
+- Host certificate: self-signed default, vCenter-issued (VMCA), or a custom CA. A self-signed certificate
+  trains admins to click through warnings.
+- **Lockdown mode** (vCenter-managed hosts only): Disabled, Normal, or Strict; exception users list. Normal
+  lockdown is the vendor's usual recommendation; Strict disables the DCUI too, so a vCenter outage can
+  leave only the BMC.
+
+#### D. Services and the ESXi firewall
+
+- Running services (Host Client → Manage → Services, or `chkconfig --list`): OpenSLP (`slpd`), CIM
+  (`sfcbd-watchdog`), SNMP, NTP, SSH, ESXi Shell, and any third-party services from VIBs.
+- **OpenSLP:** unauthenticated SLP was the entry point for mass ESXi ransomware (ESXiArgs, 2023). It
+  should be stopped, set not to start, and the `CIMSLP` firewall ruleset disabled, unless a CIM client
+  genuinely needs it. Recent builds ship it disabled; verify the live state, because upgraded hosts may
+  keep older settings.
+- CIM and SNMP: needed? If SNMP is on, which version and community or user settings (record existence,
+  not values)?
+- ESXi firewall: enabled, default action, and for each enabled ruleset, whether "allowed IP addresses" is
+  limited to management hosts or left at "all".
+- Third-party firewall rulesets added by VIBs.
+
+#### E. Software integrity and persistence surfaces
+
+- VIB acceptance level (`esxcli software acceptance get`): `VMwareCertified`, `VMwareAccepted`,
+  `PartnerSupported`, or `CommunitySupported`. `CommunitySupported` lets unsigned VIBs install; attackers
+  have used malicious VIBs for persistence. Any `CommunitySupported` VIBs: who installed them, and why?
+- `execInstalledOnly` (kernel setting and enforcement): prevents running binaries not delivered by an
+  installed VIB, which blocks many ransomware encryptors. Recent releases enable it by default on new
+  installs; verify the live setting and whether enforcement is on.
+- UEFI Secure Boot and TPM: is Secure Boot on, and is configuration encryption using the TPM? Is the
+  recovery key for TPM-protected configuration stored off the host?
+- Persistence points to read and explain: `/etc/rc.local.d/local.sh`, root crontab, unexpected files in
+  `/etc/rc.local.d/`, `/opt`, `/scratch`, `/tmp`, and datastores (scripts, binaries, unexpected `.sh`
+  files), and modified Host Client pages or `/etc/motd`.
+
+#### F. Networking and management isolation
+
+- VMkernel interfaces and their tags (Management, vMotion, provisioning, vSAN, fault tolerance, storage).
+  Is management on its own VLAN or physical NIC, separate from guest traffic?
+- **No VMkernel interface on a guest, IoT, DMZ, or WAN port group.** If the site's firewall is a VM here,
+  its WAN uplink should be a dedicated vSwitch or port group with no VMkernel interface on it (or a
+  passed-through NIC).
+- vMotion and IP storage (NFS, iSCSI) on separate, non-routed networks where possible. vMotion traffic
+  carries guest memory; check whether encrypted vMotion is used where vCenter supports it.
+- Port group and vSwitch security policies: Promiscuous mode, MAC address changes, and Forged transmits.
+  Which are set to Accept, and is there a reason (nested hypervisors, some appliances)? Defaults differ
+  between standard and distributed switches and between versions; verify on the host.
+- IPv6 on VMkernel interfaces: enabled where nobody expects it?
+
+#### G. Guests and VM-level settings
+
+- VMware Tools versions and whether guest operations (running commands in guests) are used by integrations
+  through the API; anyone with guest-operation privileges can act inside those VMs.
+- VM isolation advanced settings (copy and paste, drag and drop, device connection from the guest): left
+  at the secure defaults?
+- PCI passthrough and DirectPath devices: which VMs hold which devices.
+- VM encryption or vTPM: if used, which key provider (needs vCenter or a native key provider) and where
+  the key backup is stored. Lost keys mean lost VMs.
+- Untrusted guests (lab, internet-facing): on separate port groups or VLANs, without passthrough.
+- Templates and OVAs: default passwords or shared SSH keys baked in.
+
+#### H. Datastores and storage
+
+- Local VMFS datastores, NFS, iSCSI, and vSAN: who else can reach the NFS export or iSCSI target? A share
+  writable by other LAN hosts can be used to tamper with, or encrypt, every VM disk.
+- iSCSI CHAP settings (existence, not values); NFS export restrictions on the storage side.
+- Storage health is a status item only. Don't run storage or VMFS tools (hard stops).
+
+#### I. Backups and recovery
+
+- **Are VMs backed up at all?** Which tool, which VMs, how often, to where, with what retention, and when
+  the last restore test happened. The free edition can't use vSphere backup APIs, so many image-level tools
+  won't work; ask how backups are actually made (in-guest agents, shutting down and copying files,
+  replication from the storage side).
+- **Can an attacker with ESXi root or vCenter admin delete the backups?** Backups on a datastore of the
+  same host, or on a share the host mounts read-write, are not independent. At least one copy should be
+  offline, immutable, or under separate credentials.
+- Snapshots are not backups; long-lived snapshots grow and hurt performance.
+- Host configuration backup (for example `vim-cmd hostsvc/firmware/backup_config`, run during
+  remediation, not Discover): exists, recent, and stored securely (it contains secrets).
+- vCenter file-based backup, if vCenter is present.
+- Recovery documentation: install media for the exact build, license key location, network settings, and
+  how the host would be rebuilt.
+
+#### J. Logging, monitoring, and time
+
+- Remote syslog (`Syslog.global.logHost`): set, reachable, and over TLS where supported. ESXi logs live
+  in memory or on scratch storage and can be lost or wiped; without remote logging, incident evidence is
+  thin.
+- Persistent scratch location: configured? Without it, logs are lost at reboot.
+- Alerts that reach someone: host disconnect, datastore capacity, hardware health, failed logins.
+- NTP or PTP: correct time (certificates, logs, and directory logins depend on it).
+- vCenter events and alarms, if present.
+
+#### K. Hardware, BMC, and physical
+
+- **Ask the user** (don't test): does the server have a BMC? Is it on a dedicated management network,
+  not reachable from guests, users, or the internet? Default credentials changed? Firmware current?
+  IPMI-over-LAN disabled if unused? See
+  [out-of-band management](../../hardware/out-of-band-management/SKILL.md).
+- From the inventory only: whether a BMC web UI or UDP 623 answers from non-management segments.
+- Boot media (USB or SD cards are deprecated for system storage on recent releases; verify), physical
+  access, boot order, and Secure Boot.
+- UPS and safe VM shutdown order; what stops on the network if this host goes down.
+
+---
+
+## Recommend
+
+No changes are made in this mode. For each finding, produce a recommendation using the core finding
+template, including **Dependencies / blast radius** and the **operation class**.
+
+### Dependency and blast-radius check (required)
+
+- **Critical VMs:** firewall, DNS, DHCP, VPN, NAS, directory, vCenter, and the agent's own machine, if any
+  runs here. A host reboot, vSwitch change, or maintenance mode stops them.
+- **Management path:** how the user reaches the Host Client, vCenter, and SSH today, including through a
+  virtualized firewall or VPN on this host.
+- **Out-of-band access:** DCUI at the physical console or BMC remote console, tested, with a known `root`
+  password.
+- **Integrations:** backup tools, monitoring, automation, and vCenter use specific accounts, services (SSH,
+  CIM, SNMP), and firewall rulesets. Disabling a service or narrowing an allowed-IP list can break them.
+- **Directory:** AD-joined hosts depend on domain controllers, often VMs on the same host.
+- **Licensing and patch access:** applying a patch needs the bundle downloaded through the user's Broadcom
+  account; plan the download first.
+
+### Recommendation guidance
+
+| Area | Typical recommendation | Consequences to explain |
+|---|---|---|
+| 7.x or older, or no patch access | Plan migration to a supported, patchable release or another hypervisor; isolate the management network meanwhile. | Major project; licensing cost or migration effort; full backups first. |
+| Missing security patches | Apply the current patch for the installed release from the Broadcom portal; reboot. | All VMs stop or move during the reboot; plan around critical VMs. |
+| Management exposed to the internet | Remove the forward or proxy; use a VPN that doesn't depend only on VMs on this host, or one with out-of-band fallback. | Remote admin needs a working VPN first. |
+| Management reachable from guest or user networks | Restrict upstream and with ESXi firewall allowed-IP lists; move `vmk0` to a management VLAN. | High lockout risk; keep DCUI or BMC access ready. |
+| SSH or ESXi Shell always on | Set to start and stop manually, enable only for maintenance, set shell timeouts, unset `SuppressShellWarning`. | Scripts that use SSH must change or enable it on demand. |
+| OpenSLP running | Stop `slpd`, disable it at boot, disable the `CIMSLP` ruleset (Broadcom KB). | CIM clients that discover the host over SLP stop finding it. |
+| `CommunitySupported` acceptance level | Remove or replace unsigned VIBs, then raise the acceptance level. | Community drivers (common on home-lab hardware) may stop working; check first. |
+| `execInstalledOnly` off | Enable it (and enforcement where supported). | Custom scripts or tools copied onto the host stop running. |
+| AD admin group trusted by default | Apply the vendor fix; change the trusted group to a tightly controlled one or disable automatic adding, per the Broadcom KB. | Admins who relied on the default group lose host access until assigned explicitly. |
+| `root` shared or used by integrations | Give integrations their own accounts with the narrowest role; keep `root` for break-glass with a unique password. | Each integration needs reconfiguring and testing. |
+| No account lockout | Set lockout failures and unlock time. | An attacker can lock out `root` remotely; restrict network access first. |
+| Lockdown off on vCenter-managed hosts | Enable Normal lockdown with a short exception-user list. | Direct Host Client logins stop; vCenter outage means DCUI only. Never on standalone hosts. |
+| VMkernel on an untrusted port group | Remove the VMkernel interface from that port group. | Anything using that address to reach the host breaks. |
+| No backups, or backups the host can delete | Add backups to separate storage with separate credentials, plus an offline or immutable copy; test a restore. | New storage or software; the free edition limits tool choice. |
+| No remote syslog or persistent scratch | Configure both. | Needs a receiving host and storage. |
+| Secure Boot or TPM off | Enable Secure Boot after checking that all VIBs are signed; store the configuration recovery key off-host. | Unsigned VIBs block boot with Secure Boot on; test in a window. |
+| BMC on user networks or default credentials | The user moves it to a management network, changes credentials, updates firmware. | Done by the user in the BMC; risk of losing remote console. |
+
+Changing ports or hiding the login page is supplementary only. Never recommend it as the main fix.
+
+Group the plan: immediate containment (if any) → urgent fixes (internet-exposed management, unpatched or
+end-of-life release, OpenSLP running, no backups) → high-priority hardening (SSH, accounts, AD group,
+acceptance level, `execInstalledOnly`, isolation) → routine maintenance → optional defense in depth. Then
+ask for approval (core: modes and authorization).
+
+---
+
+## Remediate
+
+Apply only approved changes, one at a time, following the core rules. ESXi specifics:
+
+- **Before any change:** confirm recent backups of critical VMs, a host configuration backup stored
+  securely off the host, a known `root` password, and working DCUI or BMC console access.
+- **Use supported methods:** Host Client, vCenter, `esxcli`, `vim-cmd`, PowerCLI, or Host Profiles. Edits to
+  files under `/etc` usually don't persist and aren't supported.
+- **Keep a way back in.** Keep a Host Client session open while changing firewall, allowed-IP, account,
+  AD, or lockdown settings; test from a second session before closing the first.
+- **Firewall allowed-IP lists:** add the management hosts to the list before switching a ruleset from "all"
+  to restricted. Restrict the ruleset that carries Host Client and API access last (verify its name on the
+  installed build; some core services can't be restricted this way) and test immediately.
+- **Patching:** download the bundle from the Broadcom portal, check its checksum, read the release notes,
+  place the host in maintenance mode (after VMs are shut down or moved), apply with `esxcli software
+  profile update` or vSphere Lifecycle Manager, and reboot. **C2.** Use `profile update`, not `profile
+  install`, unless the vendor notes say otherwise. Never downgrade as a speculative fix.
+- **Acceptance level and Secure Boot:** list VIBs that would fail first; removing a driver VIB can leave a
+  NIC or storage controller without a driver after reboot (C2; possibly no network).
+- **AD group and lockdown changes:** assign explicit permissions to named admins first, verify their
+  login, then change the default group or enable lockdown.
+- **SSH:** after maintenance, stop SSH and set its policy back to manual. Disabling SSH is C1; enabling it
+  is a temporary exposure the user approves.
+- **BMC changes** are made by the user in the BMC interface; the agent gives guidance only.
+
+After each change, follow the core "after a change" steps: re-read the setting, check Host Client and
+vCenter access, that critical VMs are running, that backups still run, and record before and after.
+
+### Hard stops (refer to a specialist or do manually; never automate)
+
+- Deleting VMs, virtual disks, snapshots, or datastores as remediation.
+- VMFS, partition, vSAN, or RAID operations: `vmkfstools` repair, `partedUtil`, `voma` fixes, datastore
+  resignaturing, or array changes on the storage side.
+- Decrypting files after a ransomware attack with tools from the internet, or "recovery" scripts run on a
+  production host without a specialist and copies of the files.
+- Resetting the host configuration (`firmware/reset_config`) or reinstalling the host as a security fix
+  while it still runs production VMs.
+- Removing a host from vCenter or rejoining a domain as remediation during an incident.
+- Testing BMC or IPMI credentials, trying defaults, or running exploit or brute-force tools against any
+  component.
+
+---
+
+## Respond
+
+On any P0 indicator, switch to Respond immediately. Follow the core playbook plus the ESXi-specific steps
+in [incident-response.md](incident-response.md).
+
+---
+
+## Worked example (invented)
+
+### ESX-001: OpenSLP running and SSH left enabled on a free-edition host with no patch access
+
+**Confidence:** Confirmed
+**Priority:** P1. The host runs the site's firewall and file server VMs; the service class that
+ransomware campaigns have used for mass ESXi compromise is reachable from the user LAN, and the owner
+can't download current security patches.
+**State:** Open
+**Component:** ESXi 8.x free vSphere Hypervisor edition, standalone host `<esxi-host>`
+**Evidence:** Observed 2026-02-03: `esxcli system version get` reports an 8.0 update that is several
+patch releases behind Broadcom's current build list. Host Client → Services shows `slpd` running with
+policy "Start and stop with host", and `TSM-SSH` running. `esxcli network firewall ruleset list` shows
+`CIMSLP` and `sshServer` enabled; `allowedip list` shows "all" for both. `UserVars.SuppressShellWarning`
+is `1`. The management interface `vmk0` is `192.0.2.10` on the same VLAN as user devices. The user
+confirms their Broadcom account offers no newer download for this edition.
+**Expected secure state:** OpenSLP stopped and disabled unless needed, SSH off except during maintenance,
+management reachable only from admin hosts, and the host on a patchable build (Broadcom KB on disabling
+SLP; vSphere security configuration guide).
+**Exposure and prerequisites:** any device on the user VLAN, including a compromised laptop or IoT
+device; no credentials needed to reach SLP. Not reachable from the internet (checked upstream port
+forwards).
+**Dependencies / blast radius:** no CIM client uses SLP (the user confirms). One backup script connects
+over SSH nightly. The firewall VM routes all traffic, so a host reboot takes the site offline.
+**Recommended remediation:** (1) stop `slpd`, set it not to start, disable `CIMSLP`; (2) set SSH to manual,
+stop it, unset `SuppressShellWarning`, and change the backup script to enable SSH only for its window or
+move to a method that doesn't need it; (3) restrict the remaining rulesets to `192.0.2.50` (admin
+workstation); (4) separately, plan patch access or a migration, and move `vmk0` to a management VLAN.
+**Operation class:** C1 for steps 1 and 2; C2 for step 3 (lockout risk) and step 4.
+**Approval required:** Yes.
+**Verification:** `slpd status` reports stopped; port 427 no longer answers from the user VLAN; SSH
+refused from the user VLAN; Host Client works from the admin workstation; the backup still runs.
+**Rollback:** re-enable the ruleset and service with the captured prior settings.
+
+---
+
+## Version history
+
+- **1.0** (2026-10-31): Initial version.

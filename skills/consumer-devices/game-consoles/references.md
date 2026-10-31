@@ -1,0 +1,47 @@
+# Game Consoles and Handhelds: References
+
+Always prefer each platform's current support pages; account features, family settings, and menu names
+change often and differ by region. Re-verify links and contents when updating this skill.
+
+Last verified: 2026-10-31
+
+## Vendor (authoritative for their own products)
+
+- PlayStation, 2-step verification and passkey sign-in (Account Management > Security):
+  https://www.playstation.com/en-us/support/account/2sv-psn-login/
+- PlayStation account and security support hub: https://www.playstation.com/en-us/support/account/
+- PlayStation, parental controls and spending limits (Family Management, child accounts):
+  https://www.playstation.com/en-us/support/account/ps5-parental-controls-spending-limits/
+- Xbox, network ports used by Xbox network:
+  https://support.xbox.com/en-US/help/hardware-network/connect-network/network-ports-used-xbox-live
+- Xbox family settings and Microsoft Family Safety: https://www.xbox.com/en-US/family-hub
+- Microsoft account security (2-step verification, passkeys): https://account.microsoft.com/security
+- Nintendo, managing passkey authentication for a Nintendo Account:
+  https://www.nintendo.com/en-gb/Support/Troubleshooting/How-to-Manage-Passkey-Authentication-for-a-Nintendo-Account-2438143.html
+- Nintendo, unable to sign in with a passkey (fallbacks, 2-step verification codes):
+  https://en-americas-support.nintendo.com/app/answers/detail/a_id/62567
+- Nintendo Switch Parental Controls: https://www.nintendo.com/us/switch/parental-controls/
+- Steam Guard mobile authenticator: https://help.steampowered.com/en/faqs/view/7EFD-3CAE-64D3-1C31
+- Steam, required ports (Remote Play UDP 27031–27036, TCP 27036):
+  https://help.steampowered.com/en/faqs/view/2EA8-4D75-DA21-31EB
+- Steam Deck desktop mode FAQ (setting a password with `passwd` to use `sudo`):
+  https://help.steampowered.com/faqs/view/671A-4453-E8D2-323C
+- Steam Families (child accounts, purchase requests, playtime): https://store.steampowered.com/families
+
+## Child safety (government and nonprofit)
+
+- NCMEC CyberTipline (US reporting of online child sexual exploitation): https://report.cybertip.org/
+- FBI guidance on sextortion: https://www.fbi.gov/how-we-can-help-you/scams-and-safety/common-scams-and-crimes/sextortion
+
+Generic vulnerability and incident sources (CISA KEV, NVD, CVE, CISA ransomware guidance, IC3) are listed in
+the core documents.
+
+## Third-party (not authoritative)
+
+- Tech Insider, summary of an October 2026 report that Steam still relies on Steam Guard rather than
+  passkeys while PlayStation, Xbox, and Nintendo offer passkey sign-in:
+  https://tech-insider.org/?p=40366 (secondary source; check Valve's own pages).
+- Port-forwarding guides for PlayStation from VPN vendors and gaming sites disagree on the exact PSN
+  port list; use Sony's own connection-troubleshooting pages instead.
+- GamingOnLinux, setting and resetting the Steam Deck `sudo` password:
+  https://www.gamingonlinux.com/guides/view/how-to-set-change-and-reset-your-steamos-steam-deck-desktop-sudo-password/

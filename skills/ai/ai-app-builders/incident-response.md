@@ -1,0 +1,83 @@
+# AI App Builders: Respond (Incident Response)
+
+Use with the core playbook, [incident-response.md](../../../core/incident-response.md), which always
+applies. This file adds only builder-specific steps.
+
+A builder incident is usually one of three things: **code execution on the host** (through a
+vulnerability, an exposed instance, or a malicious account editing flows), **theft or abuse of stored
+credentials and API keys** (provider keys used elsewhere, published flows run up spend or drive tools),
+or **data exposure or poisoning** in knowledge bases and conversation logs. The first is a host
+compromise and usually includes the second.
+
+## Triage and containment
+
+- **Indicators:**
+  - New accounts, admins, API keys, or workspaces nobody created; first-run setup completed by someone
+    else.
+  - Flows, components, code nodes, Custom MCP entries, or plugins nobody added or changed.
+  - Unexpected processes, outbound connections, or files in the builder's containers or host (miners,
+    reverse shells, downloaded scripts).
+  - Model-provider spend spikes, or provider keys used from unknown addresses.
+  - Actions in connected services (messages sent, files changed, home-automation events) traced to the
+    builder's credentials.
+  - Requests in logs to code-execution or validation endpoints from unknown sources, or advisories for
+    the installed version marked as exploited.
+- **Cut access, keep the evidence.** Remove port forwards and tunnel routes, or block the instance at the
+  firewall. Don't stop or delete the containers yet if the host may be compromised; snapshot or
+  export them first (see evidence). Each step needs approval unless an emergency standing authorization
+  names it.
+- **Revoke stored credentials at their providers** from a clean device: model providers, vector DBs,
+  search, email, chat, cloud, and home-automation tokens. Don't rely on deleting them inside the builder.
+- **Disable published apps and API keys** so anonymous callers can't keep driving tools.
+- **If code ran on the host,** treat the host (and anything sharing its Docker daemon) as compromised and
+  follow the core playbook and the [docker](../../containers/docker/SKILL.md) skill's Respond steps.
+
+## Evidence to preserve (builder-specific)
+
+Collect before changing anything, and store copies as secret material:
+
+- The database (SQLite file or a database dump), uploaded files, vector store data, and the `.env` and
+  encryption key as they were.
+- Container state: `docker inspect` output, image digests, and, with approval, an export or snapshot of
+  affected containers' filesystems.
+- Application, nginx or reverse-proxy, and container logs for the incident window; the SSRF proxy's
+  logs (Dify) showing outbound destinations.
+- Exports of flows, apps, and plugin lists, with modification times and authors where recorded.
+- Account, role, and API key lists (metadata), and login history.
+- Conversation logs and traces for published apps during the window.
+- Provider-side usage and audit logs for every stored credential.
+
+## Scope checks specific to builders
+
+- **Every service behind a stored credential**: review each provider's logs for use from other addresses
+  or unusual volume during the window.
+- **Every flow with tools that write or send**: what did they do during the window, and who called them?
+- **Everything the host could reach**: LAN services through HTTP nodes or code execution (router, NAS,
+  hypervisor, Home Assistant, cloud metadata), other containers on the same Docker networks.
+- **Knowledge bases**: which documents were readable by the attacker, and whether any were added or
+  changed (poisoning).
+- **Other instances** sharing the same `.env`, keys, or database credentials.
+- **Embedding sites** where published widgets or API keys appear.
+
+## Eradication and recovery
+
+- Rebuild the stack from the vendor's current release on a clean host (or a cleaned host per the core
+  playbook), with every secret regenerated. Don't reuse the old `.env`.
+- Restore data from a backup taken before the earliest plausible compromise. Review restored flows for
+  code nodes, Custom MCP entries, and components before enabling them, and re-enter credentials as new,
+  restricted, spend-limited keys.
+- Rebuild affected knowledge bases from trusted source documents rather than editing them in place.
+- Before reconnecting: no direct internet exposure, authentication on, first-run setup complete with a
+  strong admin, default secrets gone, internal ports unpublished, SSRF controls in place, and the
+  initial access path closed.
+
+## Quick checklist tailored for builders
+
+Start with the core quick checklist, plus:
+
+- [ ] Remove internet and LAN access to the instance (port forwards, tunnels, published ports) without
+      deleting containers.
+- [ ] From a clean device, revoke every stored provider key and connected-service token.
+- [ ] Disable published apps and API keys.
+- [ ] Save the database, `.env`, encryption key, logs, and flow exports before rebuilding.
+- [ ] Treat the host as compromised if any code-execution indicator is present.

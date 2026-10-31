@@ -29,6 +29,35 @@ important observations from outside it (hypervisor, network, backup system, log 
 - **Containers:** if the host runs privileged containers or exposes the container runtime socket,
   assume a container compromise may be a host compromise, and vice versa.
 
+## Desktops and laptops
+
+- **Desktop-specific indicators:** browser extensions nobody installed, new desktop autostart entries
+  (`~/.config/autostart/`, `/etc/xdg/autostart/`), desktop sharing or a remote-support agent turned on
+  that the user didn't enable, unknown MOKs (`mokutil --list-enrolled`) or Secure Boot suddenly off, an
+  AUR, Flatpak, or snap package that changed owner or behavior just before the symptoms, and new paired
+  devices in KDE Connect or GSConnect.
+- **Contain:** disconnect the computer from the network (Wi-Fi off or cable out) rather than shutting it
+  down, unless destruction is ongoing; turn off desktop sharing and remote-support agents by
+  disconnecting, not by uninstalling (keep the evidence). From a **different, trusted device**, sign out
+  the user's browser sessions and important accounts (email, password manager, cloud storage, Git
+  hosting): session cookies in the browser profile let an attacker in without passwords or MFA.
+- **Evidence:** in addition to the general list, copy (don't open in the browser) the browser profile's
+  extension list and history databases if a specialist needs them, the autostart directories, the
+  Flatpak and snap lists with versions, `pacman -Qm` and `/var/log/pacman.log` on Arch, and remote-desktop
+  configuration and logs.
+- **Scope:** everything the user's session could reach: saved browser passwords and cookies, the
+  desktop keyring (GNOME Keyring, KWallet), SSH and GPG keys, password-manager vaults that were unlocked,
+  synced cloud folders, and any work systems the user signed in to from this computer.
+- **Lost or stolen laptop:** this is an incident even without malware. Establish whether the disk was
+  encrypted and how it unlocked (domain P): passphrase-only with the laptop powered off is the best case;
+  TPM-only unlock with auto-login, or a laptop taken while unlocked or asleep, means treat everything on
+  it as exposed. Sign out its sessions from other devices, revoke its SSH keys, API tokens, and VPN
+  peers, rotate saved passwords, and remove it from accounts that list trusted devices. Linux has no
+  built-in remote wipe; don't promise one.
+- **Recovery:** reinstall from verified media, with full-disk encryption on; restore documents from a
+  backup taken before the compromise, but not the browser profile, autostart entries, or shell startup
+  files without review; reinstall extensions and apps from their official sources only.
+
 ## Evidence to preserve (Linux-specific)
 
 Collect before changing anything, saving output off the host (to the admin workstation or a log host),
@@ -108,3 +137,7 @@ Start with the core quick checklist, plus:
 - [ ] List accounts, sudoers, authorized_keys, cron, systemd units/timers, and `/etc/ld.so.preload`.
 - [ ] List every key and credential on the host and what it opens elsewhere; plan to rotate all of them.
 - [ ] Plan to rebuild from verified media or a known-good template rather than cleaning in place.
+- [ ] Desktop or laptop: from another device, sign out browser and account sessions, and review browser
+      extensions, autostart entries, remote-desktop settings, and MOKs.
+- [ ] Lost laptop: confirm how its disk unlocks, then revoke its keys, tokens, and VPN peers and rotate
+      saved passwords.

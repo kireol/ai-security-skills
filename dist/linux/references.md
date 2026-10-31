@@ -5,7 +5,7 @@
 Always prefer current distribution documentation; lifecycles, defaults, and tooling change between
 releases. Re-verify links and contents when updating this skill.
 
-Last verified: 2026-10-30
+Last verified: 2026-10-31
 
 ## Vendor (authoritative)
 
@@ -46,6 +46,46 @@ Last verified: 2026-10-30
 - Rocky Linux release and support information: https://wiki.rockylinux.org/rocky/version/
 - AlmaLinux release information: https://wiki.almalinux.org/release-notes/
 - Fedora release life cycle: https://docs.fedoraproject.org/en-US/releases/lifecycle/
+
+### Desktop distributions and rolling releases
+
+- Ubuntu Secure Boot (MOK enrollment and DKMS module signing):
+  https://documentation.ubuntu.com/security/security-features/platform-protections/secure-boot/
+- Ubuntu 26.04 LTS announcement (TPM-backed full-disk encryption generally available in the desktop
+  installer): https://canonical.com/blog/canonical-releases-ubuntu-26-04-lts-resolute-raccoon
+- Ubuntu 25.10 security features (TPM-backed FDE groundwork):
+  https://ubuntu.com/blog/ubuntu-25-10-security-updates
+- Linux Mint releases and end-of-support dates: https://linuxmint.com/download_all.php
+- Fedora Magazine, controlling the firewall (the FedoraWorkstation zone's open 1025-65535 range):
+  https://fedoramagazine.org/control-the-firewall-at-the-command-line/
+- Fedora Silverblue (Atomic desktops) documentation: https://docs.fedoraproject.org/en-US/fedora-silverblue/
+- Arch Linux news (manual-intervention notices; read before upgrading): https://archlinux.org/news/
+- Arch wiki, System maintenance (full upgrades, partial upgrades unsupported, `.pacnew` handling):
+  https://wiki.archlinux.org/title/System_maintenance
+- Arch wiki, Arch User Repository (unsupported, user-produced content; review PKGBUILDs):
+  https://wiki.archlinux.org/title/Arch_User_Repository
+- Arch wiki, dm-crypt (LUKS setups) and Unified Extensible Firmware Interface/Secure Boot:
+  https://wiki.archlinux.org/title/Dm-crypt and https://wiki.archlinux.org/title/Unified_Extensible_Firmware_Interface/Secure_Boot
+
+### Desktop components
+
+- `systemd-cryptenroll(1)` (TPM2, FIDO2, PKCS#11, recovery keys, TPM PIN):
+  https://www.freedesktop.org/software/systemd/man/latest/systemd-cryptenroll.html
+- cryptsetup / LUKS project: https://gitlab.com/cryptsetup/cryptsetup
+- GNOME System Administration Guide, screen lock lockdown (dconf keys and locks):
+  https://help.gnome.org/admin/system-admin-guide/stable/desktop-lockscreen.html.en
+- GNOME Remote Desktop (RDP desktop sharing, headless and remote login):
+  https://github.com/GNOME/gnome-remote-desktop
+- Red Hat, administering RHEL 10 with the GNOME desktop (remote desktop configuration):
+  https://docs.redhat.com/en/documentation/red_hat_enterprise_linux/10/html-single/administering_rhel_by_using_the_gnome_desktop_environment/index
+- KDE KRdp (Plasma RDP server; default port 3389): https://github.com/KDE/krdp
+- KDE Connect (ports and pairing): https://userbase.kde.org/KDEConnect
+- Flathub app verification (what the verified badge means):
+  https://docs.flathub.org/docs/for-users/verification
+- Flatpak sandbox permissions: https://docs.flatpak.org/en/latest/sandbox-permissions.html
+- Snap confinement and Snap Store security:
+  https://snapcraft.io/docs/snap-confinement and https://snapcraft.io/blog/where-eagles-snap-snap-security-overview
+- fwupd / LVFS firmware updates: https://fwupd.org/ and https://lvfs.readthedocs.io/
 
 ### Raspberry Pi
 

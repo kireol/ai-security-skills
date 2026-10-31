@@ -7,12 +7,14 @@ description: >-
   embedded web server (EWS) admin password, exposed print and management services (raw 9100, IPP/IPPS,
   LPD, SNMP, FTP/Telnet, Wi-Fi Direct), cloud printing accounts, scan-to-email/SMB/FTP and LDAP stored
   credentials, stored jobs and internal storage at disposal, internet exposure, network placement, or
-  logging, or when a printer may have been compromised or used as a pivot.
+  logging; standalone network document scanners (Brother ADS, Epson WorkForce DS and ES-W, PFU/Ricoh
+  ScanSnap iX, and similar) and their scan-to-folder (SMB), scan-to-email (SMTP), scan-to-FTP/SFTP, and
+  scan-to-cloud destinations; or when a printer or scanner may have been compromised or used as a pivot.
 license: CC-BY-4.0
 metadata:
-  version: "1.0"
-  last_reviewed: "2026-10-30"
-  applies_to: "Networked single-function printers and MFPs from any vendor, home through small office (verify each model's current firmware, support status, and menu names)"
+  version: "1.1"
+  last_reviewed: "2026-10-31"
+  applies_to: "Networked single-function printers, MFPs, and standalone network document scanners from any vendor, home through small office (verify each model's current firmware, support status, and menu names)"
   audience: "home, work, homelab"
   finding_prefix: "PRN"
   modes: "discover, recommend, remediate, respond"
@@ -27,8 +29,10 @@ printer is an embedded computer with a web server, several network listeners, of
 "direct" access point, and, on MFPs, a store of credentials for other systems (email accounts, file
 shares, LDAP directories) and copies of what was printed and scanned. Printers are rarely updated, are
 usually on the same flat network as everything else, and are trusted by every computer that prints.
-Identify, explain, prioritize, remediate (only when authorized), and verify weaknesses in the printer, the
-credentials it holds, what it stores, and what it can reach.
+Standalone network document scanners are the same kind of device without the print engine: a web admin
+page, an address book of scan destinations with stored credentials, and often a cloud connector or a
+companion app account. Identify, explain, prioritize, remediate (only when authorized), and verify
+weaknesses in the printer or scanner, the credentials it holds, what it stores, and what it can reach.
 
 ## How to use this skill
 
@@ -61,6 +65,10 @@ in more depth by wifi-and-switches (`dist/wifi-and-switches.md`) and the firewal
   read or write the printer's file system, and can crash or brick some models. Discovery uses service
   presence (an open port, an mDNS record, an IPP attribute query the user agrees to), never job
   submission.
+- **Never start a scan either.** Starting a scan through eSCL/AirScan, WSD, a vendor app, or a "push"
+  button profile moves paper, captures whatever is on the glass or in the feeder (someone else's
+  document), and sends it to a destination. Discovery of scanners uses advertisements and capability
+  reads only.
 - **The address book is a password vault for other systems.** Scan-to-email (SMTP), scan-to-folder (SMB),
   scan-to-FTP, and LDAP settings store usernames and passwords for mail accounts, file servers, and
   directories. Anyone with EWS admin access can often read or redirect them. Never export, print, or
@@ -89,6 +97,8 @@ in more depth by wifi-and-switches (`dist/wifi-and-switches.md`) and the firewal
 | **Small-office MFP** (print, copy, scan, fax) | Touch panel, user/department codes, address book, scan-to-folder/email, often an internal drive or large flash. | Stored credentials, stored jobs, LDAP, fax line, and disposal become the main concerns. Many settings exist; vendors publish hardening guides. |
 | **Managed or leased MFP** | A dealer or managed-print-service agent reports meter readings; a service account or remote-support tool exists. | The dealer's remote access and service credentials are in scope; changes may need the dealer, and disposal is governed by the lease contract. |
 | **Enterprise-class device in a small site** | Enterprise firmware families with signed firmware, runtime integrity features, syslog, and certificate management. | More controls are available; use the vendor's security guide and any fleet tool the user already has. |
+| **Standalone network document scanner with a web admin** (for example Brother ADS, Epson WorkForce DS/ES-W network models) | Sheet-fed scanner with Ethernet or Wi-Fi, a touch panel, and a vendor web admin ("Web Based Management", "Web Config"); scan profiles or shortcuts to folders, email, FTP/SFTP, SharePoint, or cloud services. | Treat it like a small-office MFP without print ports: web admin password, panel lock, stored destination credentials (domain E), cloud connectors, Wi-Fi Direct, and firmware. See domain K. |
+| **App-tethered Wi-Fi scanner** (for example ScanSnap iX models) | Set up with a vendor app (ScanSnap Home) on a computer or phone; no general web admin; can scan to the app, or directly to cloud services through a vendor cloud service and account (ScanSnap Cloud). | The security boundary is the Wi-Fi it joins, the companion app's computers, the vendor account and its linked cloud storage accounts, and firmware updated through the app. Destination credentials for network folders usually live on the computer, not the scanner. See domain K. |
 | **Printer behind a print server** | Clients print to a Windows, CUPS, or macOS print queue that forwards to the device. | The print server is a separate system (assess it with the OS skill); the printer can then be firewalled to accept jobs only from the server. |
 | **USB-attached or shared from a computer** | No network address; shared through the host. | Out of this skill's network scope; the host's printer sharing is covered by the OS skills. |
 
@@ -111,10 +121,20 @@ Defaults can be changed, so confirm with the user before relying on a match.
 - EWS page titles and headers usually name the vendor and model (for example "HP Embedded Web Server",
   "Brother" Web Based Management, Epson "Web Config", Canon "Remote UI", Xerox "CentreWare"/"Embedded Web
   Server", Lexmark EWS). A self-signed certificate naming the model or vendor is common.
-- Wi-Fi: a second SSID beginning with `DIRECT-` (Wi-Fi Direct) near the printer's location.
+- Scanners: WSD scan uses UDP 3702 discovery and the WSD HTTP/HTTPS ports (TCP 5357/5358 are the
+  commonly documented defaults; verify per model). A device that advertises `_uscan._tcp` or
+  `_uscans._tcp` and answers on 80/443 but has no 9100, 515, or 631 is probably a standalone network
+  scanner rather than a printer.
+- Standalone scanner admin pages reuse the vendor's printer web admin names: Brother "Web Based
+  Management" on ADS models, Epson "Web Config" on WorkForce DS/ES-W network models. App-tethered
+  scanners (such as ScanSnap iX) may expose no web admin at all; identify them from DHCP names, the
+  vendor app's scanner list, or the OUI.
+- Wi-Fi: a second SSID beginning with `DIRECT-` (Wi-Fi Direct) near the printer's location. Some
+  scanners offer their own "direct connect" access point mode; its SSID and key are shown on the
+  scanner's panel (naming varies by model; verify on the device).
 - MAC vendors (OUI) usually name the printer maker (HP, Brother, Canon, Seiko Epson, Xerox, Lexmark,
-  Kyocera, Ricoh, Konica Minolta), but Wi-Fi models may show the Wi-Fi module's maker and rebranded
-  devices show the OEM.
+  Kyocera, Ricoh, Konica Minolta, and PFU or Fujitsu for ScanSnap scanners), but Wi-Fi models may show
+  the Wi-Fi module's maker and rebranded devices show the OEM.
 
 ---
 
@@ -155,6 +175,11 @@ snmpget -v2c -c <community-from-user> <printer-ip> SNMPv2-MIB::sysDescr.0
 
 - A port that is open is evidence enough. Don't connect to 9100, 515, or 631 with `nc`, `telnet`, or a
   browser to "see what it says": raw ports print whatever they receive.
+- For scanners, browse `_uscan._tcp` and `_uscans._tcp` as above. An eSCL capabilities read (an HTTP
+  GET of the scanner's capabilities document, commonly at `/eSCL/ScannerCapabilities`; not verified for
+  every model) is read-only, but on some models eSCL has disclosed the serial number (see the Brother
+  note), so agree it with the user first and redact identifiers. Never send an eSCL or WSD scan job
+  request.
 - The IPP query and SNMP query read attributes; they don't change settings. Some IPP attributes reveal
   the serial number, location, and organization name. Record them in the report only as needed and
   redact identifiers.
@@ -173,7 +198,9 @@ snmpget -v2c -c <community-from-user> <printer-ip> SNMPv2-MIB::sysDescr.0
   or export a configuration or "clone" file that contains them.
 - Factory-reset, "restore defaults", initialize storage, flash or downgrade firmware, or enable Telnet,
   FTP, or debug and service modes to look around.
-- Join the printer's Wi-Fi Direct network to test it.
+- Join the printer's Wi-Fi Direct network, or a scanner's direct-connect access point, to test it.
+- Start a scan (eSCL, WSD, vendor app, or a panel shortcut), run a "test" of a scan-to-folder, email, or
+  cloud profile yourself, or sign in to a linked cloud account to look at scanned files.
 
 ### Assessment domains
 
@@ -329,6 +356,59 @@ List, without exposing secrets:
 - Network evidence: firewall logs for the printer's outbound traffic (unexpected destinations) and
   inbound connections from unusual hosts to 9100, 631, 515, or the EWS.
 
+#### K. Standalone scanners and scan-to destinations
+
+Apply domains A–J to network document scanners as well (firmware, web admin, protocols, placement,
+exposure, disposal, logging), then add these checks. On MFPs, use the scan-destination checks here too.
+
+- **Inventory:** every scanner, its model, firmware, connection (Ethernet, Wi-Fi, direct-connect mode),
+  and how it is managed: a web admin on the device, or only a companion app (ScanSnap Home and similar)
+  on named computers and phones.
+- **Web admin password:** ask whether it was changed. Brother documents a factory password printed on a
+  label marked "Pwd" for many models (some older models use a fixed default), and Epson documents the
+  serial number or an 8-digit "PASSWORD" label as the initial Web Config password, including on network
+  scanners named in Epson's CVE-2025-35970 advisory. An unchanged factory password on a scanner with
+  stored destination credentials is at least P2, and P1 when the derivable-password issue applies (see
+  vendor notes). Lockout settings and HTTPS-only access where offered.
+- **Panel and walk-up access:** can anyone at the scanner pick any destination, add a new destination,
+  type an arbitrary email address, or edit profiles? Look for a panel lock, user authentication, or
+  restricted address entry. A lobby scanner that emails anywhere is a data-leak path.
+- **Scan-to-folder (SMB):** the target share and account (as in domain E), plus:
+  - SMB version and authentication: the device's options (for example Brother offers Auto, Kerberos, and
+    NTLMv2 on many models; some scanner models don't support Kerberos). Older devices that only speak
+    SMB1 or NTLMv1 are a finding: don't recommend enabling SMB1 or weakening NTLM on the NAS or file
+    server to accommodate them (see the storage and OS skills).
+  - Who can read the destination folder: scans are often IDs, tax, medical, and banking documents. A
+    share that everyone on the LAN can read, or that syncs to a personal cloud account, widens exposure.
+  - Retention: is the scan inbox cleared or filed, or does it hold years of scans?
+- **Scan-to-email (SMTP):** the sending account (dedicated, not a person's mailbox), authentication and
+  TLS required, an app password where the provider requires one, and whether recipients are limited to
+  internal or listed addresses. Mail providers retire basic authentication over time; check whether the
+  device still supports the provider's current sign-in method rather than weakening the mail account.
+- **Scan-to-FTP/SFTP and SharePoint/WebDAV:** clear-text FTP sends the password on every scan; prefer SFTP
+  or SMB3. For SharePoint or other web destinations, which account and which site.
+- **Scan-to-cloud connectors:** list each linked service and account (for example Brother Web Connect to
+  Google Drive, OneDrive, SharePoint Online, Box, or Evernote; ScanSnap Cloud to Box, Dropbox, Google
+  Drive, OneDrive, and others, varying by region). For each: whose account it is, whether it is a
+  personal account on a shared office device, whether the connector is PIN-protected on the device (where
+  offered), and when it was last reviewed. A linked account lets anyone at the panel send documents into
+  it; on devices that can also print or download from the cloud, it can let them read from it too.
+- **Vendor account for app-tethered scanners:** for ScanSnap Cloud, the ScanSnap account's password,
+  two-factor authentication (offered by the vendor), and the scanners and computers registered to it;
+  the linked cloud storage accounts and their authorizations (review them in each cloud provider's
+  connected-apps page).
+- **Companion-app computers:** ScanSnap Home and similar apps store their own save destinations
+  (network folders, cloud apps) on each computer; the credentials live there, and the OS skill applies.
+- **Direct-connect / Wi-Fi Direct:** on or off; if on, who uses it. For ScanSnap iX, Direct Connect mode
+  is the scanner's own network for a single device; note it and whether it is needed.
+- **Push scan to computers (WSD, vendor "scan to PC" listeners):** which computers register as
+  destinations, and whether anyone on the network can register one.
+- **Firmware path:** for app-tethered scanners, firmware is updated through the companion app (for
+  example ScanSnap Home); check the vendor's firmware page for security changes. PFU's iX1600 firmware page lists
+  a ScanSnap Cloud communication security update and states that scanners without it can't reach
+  ScanSnap Cloud from March 26, 2026, so an iX scanner whose cloud scanning stopped is probably also
+  missing security updates (verify on the model's firmware page).
+
 ---
 
 ## Recommend
@@ -350,6 +430,9 @@ List what depends on the setting before recommending a change:
 - **Managed print / dealer:** meter reading, supplies ordering, and remote support use SNMP, a vendor
   agent, or a cloud connection.
 - **Monitoring:** anything polling SNMP.
+- **Scanner workflows:** scan profiles and shortcuts on the panel, cloud connectors linked to specific
+  people's accounts, companion-app computers, and any document-management or OCR pipeline that watches
+  the scan folder.
 - **Firmware updates:** downgrades are usually blocked after an update, and updates can change cartridge
   acceptance or remove old protocols.
 
@@ -376,6 +459,14 @@ List what depends on the setting before recommending a change:
 | Printer on a flat network | Move printers to a printer or IoT segment; allow print ports from clients and EWS/SNMP from an admin host only; allow the printer outbound only to its scan, mail, LDAP, NTP, and update destinations. | C2 project; discovery needs an mDNS reflector or manual queues; scan workflows need explicit rules. |
 | No disposal process | Document vendor secure erase plus storage removal or a dealer certificate; remove cloud bindings and rotate stored credentials at disposal. | Lease contracts may restrict drive removal. |
 | Email-to-print address open to anyone | Restrict to allowed senders or turn it off. | Unlisted senders can't print. |
+| Scanner web admin password unchanged (label, serial, or fixed default) | The user sets a strong, unique password and enables lockout and HTTPS where offered. | Anyone using Remote Setup or vendor tools needs the new password. |
+| Scanner panel lets anyone add destinations or email any address | Enable the panel lock or user authentication; restrict email to listed or internal recipients; use fixed profiles. | Walk-up users lose ad hoc destinations. |
+| Scanner only supports SMB1 or NTLMv1 | Replace the scanner or update firmware if a newer SMB version is offered; meanwhile use SFTP, scan-to-email through an internal relay, or a companion app on a computer. Don't enable SMB1 on the file server. | Scan-to-folder may stop until replaced; hardware cost. |
+| Scan folder readable by everyone or retained indefinitely | Restrict read access to the people who need scans; file or delete scans on a schedule. | Users who browse the shared folder lose access. |
+| Cloud connector linked to a personal account on a shared device | Link a dedicated or business account, protect it with a PIN where offered, and remove unused connectors; review the app authorization in the cloud provider. | People using the old connector re-link; files already uploaded stay in the old account. |
+| Vendor scanner account (for example ScanSnap account) without two-factor authentication | Turn on two-factor authentication and review registered devices and linked services. | Sign-in prompts on registered computers and phones. |
+| Direct-connect or Wi-Fi Direct mode on and unused | Turn it off and use the main Wi-Fi or Ethernet. | Phones that connected directly need the main network. |
+| App-tethered scanner firmware behind | Update ScanSnap Home (or the vendor app) first, then the scanner firmware through it. | Short outage; cloud scanning may need re-linking. |
 | No logging | Send syslog to a central server where supported; otherwise rely on firewall logs. | Needs a log receiver. |
 
 Changing default ports and hiding the printer from discovery are supplementary only. Never recommend them
@@ -410,6 +501,10 @@ Apply only approved changes, one at a time, following the core rules. Printer sp
 - **Network moves (C2):** reserve the new address, add the firewall rules and any mDNS reflector, move the
   printer, re-add or confirm client queues, then test print and every scan workflow. Keep EWS access from
   an admin host until verified.
+- **Scanner destinations (C1 for profile edits, C2 for credential rotation and cloud re-linking):** the
+  user creates the new destination account or relink, updates the profile, and performs one test scan of
+  a blank or non-sensitive page; the agent never starts the scan. Remove old cloud authorizations in the
+  cloud provider's connected-apps page, not only on the device.
 - **Storage encryption or overwrite settings (C3 when they initialize storage):** user-run, after the user
   confirms nothing stored on the device is needed.
 
@@ -421,7 +516,9 @@ firewall logs, and record before and after.
 
 - Testing default, factory, or serial-derived passwords, guessing SNMP communities, brute force, or
   running exploit code or printer exploitation frameworks, for any reason.
-- Sending print jobs, PJL, PostScript, or PCL to a printer as part of an assessment.
+- Sending print jobs, PJL, PostScript, or PCL to a printer, or starting scans (eSCL, WSD, apps, panel
+  profiles), as part of an assessment.
+- Signing in to linked cloud accounts or opening scan folders to look at scanned documents.
 - Factory reset, "restore all defaults", storage initialization, or secure erase (except as the user's
   own disposal step).
 - Flashing, downgrading, or cross-flashing firmware, or using service, debug, or bootloader modes.
@@ -491,6 +588,25 @@ the vendor's current documentation for the exact model; menus and defaults chang
   least-privilege accounts for every stored credential. Xerox publishes per-family security bulletins and
   an RSS feed.
 
+### Document scanners
+
+- **PFU/Ricoh ScanSnap (iX series):** set up and managed through ScanSnap Home on a computer or mobile
+  device; connects through a wireless access point or in Direct Connect mode, in which the scanner shows
+  an SSID and security key on its panel and the connected device can't reach the internet or other
+  devices over Wi-Fi. ScanSnap Cloud sends scans straight to supported cloud services through a ScanSnap
+  account, which offers two-factor authentication. Firmware is updated through ScanSnap Home (update the
+  app first); check the model's firmware page for security changes.
+- **Brother ADS series:** managed through Web Based Management; Brother documents a default password on
+  a label marked "Pwd" on the device and a Login Password page with lockout settings. A network reset
+  clears the password and network settings. Scan to Network (SMB) offers Auto, Kerberos, or NTLMv2
+  authentication on many models, but some ADS models don't support Kerberos. Brother Web Connect links
+  cloud services to the device. Check Brother's security notifications and affected-model list for the
+  derivable-password and serial-disclosure issues (see the Brother note) for the scanner model.
+- **Epson WorkForce DS and ES-W network scanners:** managed through Web Config; Epson documents the
+  initial administrator password as the serial number or an 8-digit number on a "PASSWORD" label, and
+  restoring defaults resets it to the initial value. Network scanner models such as the DS-790WN appear
+  in Epson's CVE-2025-35970 advisory; change the administrator password.
+
 ### Lexmark
 
 - Lexmark publishes security advisories per firmware family on its security advisories page and
@@ -538,13 +654,20 @@ the admin password can be cleared by the user from the EWS.
 ## Version history
 
 - **1.0** (2026-10-30): Initial version.
+- **1.1** (2026-10-31): Added standalone network document scanners (Brother ADS, Epson WorkForce DS and
+  ES-W, PFU/Ricoh ScanSnap iX) and scan-to destinations: deployment variants, scanner detection hints
+  (eSCL, WSD, web admin names, direct-connect mode), "never start a scan" rule, domain K (web admin and
+  panel access, SMB version and authentication, scan-to-email, FTP/SFTP, cloud connectors, vendor
+  scanner accounts, companion apps, firmware path), recommendations, remediation notes, vendor notes,
+  and Respond steps.
 
 ---
 
 # Printers and MFPs: Respond (Incident Response)
 
 Use with the core playbook, incident-response.md (included in this file), which always
-applies. This file adds only printer-specific steps.
+applies. This file adds only printer-specific steps. They apply to standalone network document scanners
+too; scanner-specific additions are marked.
 
 A compromised printer matters less for what it prints than for what it holds and what it can reach: the
 credentials in its scan and directory settings, copies of documents in its storage, and a trusted
@@ -558,7 +681,10 @@ read or redirected.
   LDAP server addresses, new or changed address book entries, Telnet, FTP, or remote-management services
   turned on, unfamiliar firmware versions, a Wi-Fi Direct network the user didn't enable, outbound
   connections from the printer to unknown internet addresses, or the printer connecting to internal hosts
-  it never talked to before (a sign of use as a pivot or a pass-back capture).
+  it never talked to before (a sign of use as a pivot or a pass-back capture). For scanners: new or
+  edited scan profiles or shortcuts, a cloud connector linked to an account nobody recognizes, scans
+  arriving in an unexpected folder, mailbox, or cloud account, scan-to-email sent to outside addresses,
+  or an unknown device or sign-in on the vendor scanner account (for example a ScanSnap account).
 - **Contain at the network, not at the printer.** Block the printer's switch port or wireless client, or
   add a firewall rule isolating its address, with approval. Turn off Wi-Fi Direct from the control panel
   if it is in use by an unknown client. Don't factory-reset or power-cycle it before evidence is
@@ -566,6 +692,9 @@ read or redirected.
   reboot.
 - **If the printer is internet-exposed,** remove the port forward or UPnP mapping first (core: containment
   at the edge).
+- **Scanner cloud links:** with approval, revoke the scanner's or vendor service's authorization in each
+  linked cloud provider's connected-apps page and sign out unknown devices from the vendor scanner
+  account; that cuts the path even if the device itself is not yet reachable.
 - **Stop trusting stored credentials immediately:** treat every SMTP, SMB, FTP, LDAP, and cloud credential
   on the device as exposed, even before scoping confirms it.
 
@@ -594,6 +723,10 @@ Collect with the user, without printing or opening stored jobs:
 - File servers and shares the printer could reach: new files, changed permissions, or logins from the
   printer's address using unexpected accounts.
 - The vendor cloud account: sign-in history, shared users, registered devices, and print history.
+- For scanners: every linked cloud storage account (files uploaded by the scanner, app authorizations,
+  sharing links), the vendor scanner account's registered scanners and computers, the scan folder's
+  access log where available, and the companion-app computers, whose saved destinations hold their own
+  credentials.
 - Clients that print to it: rogue firmware could serve malicious drivers or content over the EWS or
   discovery responses; check whether any client recently installed a driver from the printer.
 - Other printers of the same model and firmware: the same weakness probably applies.
@@ -610,7 +743,9 @@ Collect with the user, without printing or opening stored jobs:
   export taken after the compromise.
 - **Rotate every credential the printer held**, on the target systems: scan-to-folder accounts, SMTP
   mailbox, LDAP bind account, FTP, cloud tokens, SNMP communities, and the Wi-Fi password if the printer
-  joined the main Wi-Fi with a shared passphrase that may have been read. Replace privileged accounts with
+  joined the main Wi-Fi with a shared passphrase that may have been read. For scanners, also re-link
+  cloud connectors to accounts the user controls and reset the vendor scanner account's password with
+  two-factor authentication on. Replace privileged accounts with
   least-privilege ones as part of the rotation.
 - Before reconnecting: EWS admin password set by the user, unused protocols and Telnet/FTP off, Wi-Fi
   Direct off or with a new passphrase, no internet inbound path, outbound limited to required
@@ -625,6 +760,7 @@ Start with the core quick checklist, plus:
 - [ ] List every credential stored on the device (scan, email, LDAP, FTP, cloud) and start rotating them
       on the target systems.
 - [ ] Check the scan share, mailbox, and directory for activity from the printer's accounts.
+- [ ] For scanners, revoke and review cloud connector authorizations and the vendor scanner account.
 - [ ] Update firmware from the vendor, reset, and reconfigure with least-privilege accounts before
       reconnecting.
 
@@ -635,7 +771,7 @@ Start with the core quick checklist, plus:
 Always prefer current vendor documentation for the exact model; menu names, defaults, and firmware
 behavior change between models and releases. Re-verify links and contents when updating this skill.
 
-Last verified: 2026-10-30
+Last verified: 2026-10-31
 
 ## Vendor (authoritative)
 
@@ -650,6 +786,25 @@ Last verified: 2026-10-30
 - Canon CP2023-003, Wi-Fi settings not erased by initialization (inkjet models):
   https://psirt.canon/advisory-information/cp2023-003/
 - Xerox security information and bulletins: https://security.business.xerox.com/en-us/
+- PFU/Ricoh ScanSnap iX1600 firmware (security notes, ScanSnap Cloud cut-off for old firmware, update
+  through ScanSnap Home): https://www.pfu.ricoh.com/global/scanners/scansnap/dl/firmware/ix1600.html
+- ScanSnap, Direct Connect mode (iX1600/iX1500):
+  https://www.pfu.ricoh.com/imaging/downloads/manual/basic/mac/en/topics/wf_drc_mobile_lcd.html
+- ScanSnap Help, what a ScanSnap account is (ScanSnap Cloud, two-factor authentication):
+  https://www.pfu.ricoh.com/imaging/downloads/manual/scansnap_help/en/pc/topic/su_info_account_cloud.html
+- ScanSnap Cloud overview and supported services: https://www.pfu.fujitsu.com/global/scanners/scansnap/sscloud/
+- Brother, Scan to Network (SMB) authentication methods and ports:
+  https://support.brother.com/g/s/id/smb/stn/stn-a-scan.html
+- Brother ADS online user guide (example: ADS-1800W, Kerberos not supported for network scanning):
+  https://support.brother.com/g/s/id/htmldoc/ads/cv_ads1800w/uke/html/GUID-78664BF7-D3F6-4C09-9086-31437E12EEBF_1.html
+- Brother, notice on default login passwords (label "Pwd" and older fixed defaults):
+  https://support.brother.co.jp/j/b/files/dlf/docp100511/important_notice_for_network_security_default_login_password_change_en_01.pdf
+- Brother Web Connect (scan to cloud services): https://brother-usa.com/brother-web-connect
+- Epson, where to find the default administrator password: https://www.epson.co.uk/en_GB/faq/KA-02053/contents
+- Epson scanner user guide example (DS-785W), configuring the administrator password:
+  https://download4.epson.biz/sec_pubs/ds-785w/useg/us/GUID-18B8BC45-98BA-4996-BE00-AEE43E3C2FB6.htm
+- Epson DS-790WN User's Guide, forgot the administrator password:
+  https://files.support.epson.com/docid/cpd6/cpd61515/source/scanners/source/troubleshooting/reference/problem_administrator_password_scanners.html
 - Lexmark security advisories: https://www.lexmark.com/en_us/solutions/security/lexmark-security-advisories.html
 - Konica Minolta advisory on derivable initial passwords (KM-2025-0005):
   https://www.konicaminolta.com/global-en/security/advisory/pdf/km-2025-0005.pdf
@@ -667,12 +822,19 @@ Last verified: 2026-10-30
   security functions (image overwrite, storage encryption, audit): https://www.commoncriteriaportal.org/files/ppfiles/c0553_pp.pdf
 - Apple Bonjour Printing Specification (DNS-SD service types for printers):
   https://developer.apple.com/bonjour/printing-specification
+- Mopria Alliance, eSCL Scan Technical Specification (licensed download):
+  https://mopria.org/mopria-escl-specification
 - RFC 3805, Printer MIB v2: https://www.rfc-editor.org/rfc/rfc3805
 
 Generic vulnerability and incident sources (CISA KEV, NVD, CVE, CISA ransomware guidance, IC3) are listed in
 the core documents.
 
 ## Third-party (not authoritative)
+
+- sane-airscan man page (eSCL and WSD scanner discovery from Linux):
+  https://manpages.ubuntu.com/manpages/noble/man5/sane-airscan.5.html
+- Konica Minolta manual, WSD scan (example of WSD HTTPS port 5358 on an MFP):
+  https://manuals.konicaminolta.eu/bizhub-451i/EN/contents/WC_05_05.html
 
 - Rapid7, Brother and multi-vendor printer vulnerabilities (CVE-2024-51977, CVE-2024-51978), June 2025:
   https://www.rapid7.com/blog/post/multiple-brother-devices-multiple-vulnerabilities-fixed/

@@ -1,0 +1,73 @@
+# openmediavault: Respond (Incident Response)
+
+Use with the core playbook, [incident-response.md](../../../core/incident-response.md), which always
+applies. This file adds only OMV-specific steps.
+
+## Triage and containment
+
+- **Isolate without powering off.** Remove router port forwards and UPnP mappings from a clean device, or
+  disconnect the host at the switch. For virtualized OMV, disconnecting the VM's virtual NIC on the
+  hypervisor is often the cleanest isolation.
+- **Stop the spread through shares.** Ransomware often runs on a client and encrypts shares over SMB or
+  NFS. Find which client or user is writing and isolate it too. Disabling the SMB or NFS service in the
+  Workbench stops share access without touching storage.
+- **Stop suspicious containers** (don't remove them) so their filesystem and logs remain. Pause compose
+  backup and update jobs, rsync jobs, and sync tasks that could overwrite good copies, after checking that
+  pausing won't prune recovery points.
+- **Protect backup destinations** the host can write to: disconnect USB disks, or revoke the host's
+  credentials at remote destinations from a clean device.
+- **If RAID is degraded or a filesystem reports errors, don't run repairs.** See the hard stops in
+  [SKILL.md](SKILL.md).
+
+## Evidence to preserve (OMV-specific)
+
+- `/etc/openmediavault/config.xml` (contains configuration and possibly credentials; store it securely),
+  plus the output of `omv-env list`.
+- Systemd journal and `/var/log` (authentication, nginx, Samba, and syslog files), exported off the host.
+- Workbench users and the `openmediavault-admin`, `_ssh`, and `sudo` group memberships; `/etc/passwd` and
+  `/etc/group` for accounts created outside OMV.
+- SSH authorized keys for root and every user.
+- Scheduled Tasks, crontabs, and systemd units and timers (including ones not created by OMV).
+- Installed plugins (`dpkg -l | grep openmediavault-`), configured APT repositories, and recently installed
+  or changed packages (APT history and `dpkg` logs).
+- Compose files, the global environment file, container list with image IDs, volumes, and ports;
+  `docker inspect` output for suspicious containers.
+- Effective firewall rules (`iptables-save`, `ip6tables-save`), listening ports, and running processes.
+- For virtualized OMV: a hypervisor snapshot may capture VM state; passed-through disks usually aren't
+  included.
+
+## Scope checks specific to OMV
+
+- Every client that maps or mounts the shares, and every user whose credentials could have been used.
+- Every container: each can reach the volumes it mounts and the LAN.
+- Systems sharing the admin or root password, or holding SSH keys that the NAS trusts (and keys stored on
+  the NAS that other systems trust).
+- VPN plugin peers that could still reach the host.
+- For virtualized OMV: the hypervisor's admin accounts and logs.
+
+## Eradication and recovery
+
+- If host integrity is in doubt, reinstall the OS drive from the vendor ISO (or a fresh Debian base for the
+  supported release), then reconfigure. Use a saved `config.xml` only as a reference for settings, not as a
+  file to copy back blindly; it could contain attacker changes (users, jobs, keys, plugin settings).
+- Reinstall omv-extras and plugins from their documented sources; don't reuse manually downloaded packages.
+- Data disks normally survive an OS reinstall, but mount and share them only after the new system is
+  hardened. Never format or repair data disks as part of eradication.
+- Restore data from a backup outside the host's admin boundary, taken before the earliest plausible
+  compromise. Snapshots on the compromised host may have been altered.
+- Rebuild containers from verified images with fresh secrets.
+- Before reconnecting: new admin and root passwords, root SSH login off, keys reviewed, unauthorized users,
+  jobs, plugins, repositories, and containers removed, OMV and Debian fully updated on a supported release,
+  firewall and remote access reviewed, and the initial access path identified and closed.
+
+## Quick checklist tailored for OMV
+
+When the user says "I think my openmediavault NAS has been hacked," start with the core quick checklist,
+plus:
+
+- [ ] From a clean device, remove port forwards, or unplug the host's network cable. Don't power it off.
+- [ ] Copy `config.xml`, the journal, and `/var/log` to a clean machine.
+- [ ] Find which client or user is modifying files; isolate it.
+- [ ] Stop (don't remove) suspicious containers; disconnect backup disks attached to the NAS.
+- [ ] List users, `_ssh`/`sudo` members, Scheduled Tasks, crontabs, plugins, and SSH keys before changing
+      anything.

@@ -3,7 +3,7 @@
 Always prefer current vendor documentation. These projects release often and change defaults, flags, and
 ports between versions. Re-verify links and contents when updating this skill.
 
-Last verified: 2026-10-30
+Last verified: 2026-10-31
 
 ## Vendor (authoritative)
 
@@ -26,6 +26,28 @@ Last verified: 2026-10-30
     https://lmstudio.ai/docs/developer/core/server/settings
   - Integration page documenting the default port and token headers:
     https://lmstudio.ai/docs/integrations/claude-code
+- LocalAI
+  - CLI reference (address, API keys, web UI, CORS, CSRF, galleries, P2P, auth flags):
+    https://localai.io/docs/reference/cli-reference/
+  - Authentication and authorization (accounts, first admin, registration modes, legacy keys):
+    https://localai.io/docs/features/authentication/
+  - Advanced usage (preloaded models, `/models/apply`, external gRPC backends, `.env` files):
+    https://localai.io/docs/advanced/
+  - Distributed inference (P2P token, DHT, federated mode, workers):
+    https://localai.io/docs/features/distribute/
+  - Security advisories: https://github.com/mudler/LocalAI/security/advisories
+- LiteLLM proxy
+  - Security best practices (env credential login, SSO, network, secrets, docs endpoints):
+    https://docs.litellm.ai/docs/proxy/security_best_practices
+  - Production checklist (master key, salt key, database, `LITELLM_MODE`):
+    https://docs.litellm.ai/docs/proxy/prod
+  - Admin UI (path, `UI_USERNAME`, `UI_PASSWORD`, `DISABLE_ADMIN_UI`, login limits):
+    https://docs.litellm.ai/docs/proxy/ui
+  - Virtual keys, budgets, and rate limits: https://docs.litellm.ai/docs/proxy/virtual_keys
+  - Health endpoints (unauthenticated probes): https://docs.litellm.ai/docs/proxy/health
+  - Security notices (including the March 2026 PyPI compromise and verified releases):
+    https://docs.litellm.ai/blog/tags/security
+  - Security advisories: https://github.com/BerriAI/litellm/security/advisories
 - Open WebUI
   - Environment variable reference (signup, roles, auth, API keys, CORS, persistent config, admin
     posture): https://docs.openwebui.com/reference/env-configuration

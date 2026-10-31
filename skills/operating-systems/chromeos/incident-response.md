@@ -1,0 +1,91 @@
+# ChromeOS: Respond (Incident Response)
+
+Use with the core playbook, [incident-response.md](../../../core/incident-response.md), which always
+applies. This file adds only ChromeOS-specific steps.
+
+A compromised Chromebook is usually one of four things: a **Google account takeover** (the most common
+and most damaging, because the account holds email, passwords, and files); a **malicious or hijacked
+browser extension** reading pages and stealing sessions; **unexpected management or policies** (a browser
+policy or enrollment the user didn't set up); or a **modified device** (developer mode or custom firmware
+enabled by someone with physical access). Malware that persists in a verified-boot ChromeOS system is
+rare; most incidents are recovered by securing the account and powerwashing the device.
+
+## Triage and containment
+
+- **Indicators:** Google security alerts about new sign-ins, password changes, or recovery-option changes
+  nobody made; "OS verification is off" at boot on a device nobody put in developer mode; "This device is
+  managed by…" or browser policies on a personal device; extensions nobody installed, or a familiar
+  extension suddenly injecting ads, redirecting searches, or asking for new permissions; the browser's
+  search engine, home page, or proxy changed; unknown devices or third-party apps in the Google account;
+  email forwarding rules or filters nobody created.
+- **Secure the account first, from a clean device.** If the account may be compromised, use a different
+  trusted device (not the Chromebook) to change the Google account password, review and remove unknown
+  devices and third-party access, check recovery phone and email, and turn on 2-step verification. Google
+  sign-out of all other sessions follows a password change; verify on the live account pages.
+- **Contain a malicious extension:** disconnect the Chromebook from the network (turn off Wi-Fi) rather
+  than removing the extension straight away, so evidence can be captured first. Then disable it.
+- **Don't powerwash yet** if evidence still matters; powerwash erases local evidence (and, with it,
+  anything not backed up).
+- **Lost or stolen device:** sign it out from the Google account's device list, and change the password
+  if the device was unlocked or the lock was weak.
+- **Managed device:** contact the organization's administrator immediately; they hold the logs and the
+  remote-wipe and disable controls. Don't try to remove management.
+
+## Evidence to preserve (ChromeOS-specific)
+
+Collect before removing anything or powerwashing:
+
+- Screenshots of About ChromeOS (version, channel, Additional details), chrome://management,
+  chrome://policy, and chrome://extensions (with each suspicious extension's details page: ID,
+  permissions, source).
+- The Google account's security activity (recent security events), devices list, third-party access, and
+  Gmail forwarding and filter settings, from a clean device.
+- Browser history and downloads around the suspected time, if the user is willing to share them.
+- Whether developer mode is on, and any changes the user notices (new users on the sign-in screen, Linux
+  enabled, unknown Android apps).
+- Router or DNS-filter logs for the device's traffic, if available.
+- For deeper analysis (rare), ChromeOS can generate system logs and a feedback report; these contain
+  personal data. Ask before collecting, and refer to a specialist if forensics is needed.
+
+## Scope checks specific to ChromeOS
+
+- **Everything the Google account touches:** Gmail (forwarding rules, sent mail), Drive (shared files),
+  Google Password Manager (every saved password must be treated as exposed if the account was
+  compromised), Google Photos, Android phones on the same account, and smart-home devices linked to it.
+- **Sites the extension could read:** a malicious extension with "all websites" access may have stolen
+  session cookies for banking, email, and work accounts. Sign out of those sessions and change
+  passwords from a clean device.
+- **Other users of the device** and other devices using the same Google account or synced extensions
+  (Chrome sync can bring a malicious extension back to every signed-in browser).
+- **The Linux container:** if Linux was enabled, its SSH keys, cloud credentials, and anything in shared
+  folders.
+- **Who had physical access**, if developer mode or firmware changes are involved.
+
+## Eradication and recovery
+
+- Remove malicious extensions, and check that Chrome sync doesn't reinstall them (remove from every
+  synced browser, or reset sync).
+- **Powerwash** the device once evidence is preserved and local data is backed up; this returns it to a
+  clean, verified state for ordinary compromises.
+- If developer mode, custom firmware, or firmware write protection was involved, or if the device may
+  have been tampered with: use Google's recovery procedure (recovery media) to reinstall ChromeOS, with
+  the device in normal mode. If custom firmware was installed, restoring stock firmware is specialist
+  work; consider replacing the device.
+- If unexpected enterprise enrollment appears, only the enrolling organization can release it; contact
+  the seller or Google support.
+- Rotate passwords for sites exposed via the extension or account, review 2-step verification and
+  recovery options, and remove stale OAuth grants.
+- Before handing the device back: normal mode, Stable channel, up to date, only expected extensions,
+  sign-in restricted where appropriate, account secured with 2SV.
+
+## Quick checklist tailored for ChromeOS
+
+Start with the core quick checklist, plus:
+
+- [ ] From a clean device, secure the Google account: password, devices list, third-party access,
+      recovery options, 2-step verification, Gmail forwarding.
+- [ ] Turn off the Chromebook's Wi-Fi; screenshot extensions, management, policy, and About ChromeOS.
+- [ ] Disable suspicious extensions; check Chrome sync doesn't bring them back.
+- [ ] Sign out of and change passwords for sensitive sites the extension could read.
+- [ ] Back up local data, then powerwash (or recover, if developer mode or firmware was touched).
+- [ ] For managed devices, hand over to the organization's administrator.

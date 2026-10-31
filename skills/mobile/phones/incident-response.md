@@ -1,7 +1,8 @@
-# Cell Phones: Respond (Incident Response)
+# Phones and Tablets: Respond (Incident Response)
 
 Use with the core playbook, [incident-response.md](../../../core/incident-response.md), which always
-applies. This file adds only phone-specific steps.
+applies. This file adds only phone- and tablet-specific steps. "Phone" below also means an iPad or
+Android tablet unless a step says otherwise.
 
 Phone incidents usually fall into one of five patterns: **a lost or stolen phone**; **an account takeover**
 (Apple Account, Google Account, Samsung account, or the email behind them); **a SIM swap or number port**;
@@ -50,6 +51,13 @@ user acts on their own phone and accounts; the agent guides, records, and never 
   a caller's request): disconnect from the network (airplane mode), call the bank from the number on the
   card, then record and remove the app, revoke its permissions, and change passwords for anything entered
   into it.
+- **Shared or family tablet involved:** a tablet signed in to the user's account (at home, in another
+  household, or with a child) can show the user's messages, photos, and location to whoever holds it.
+  Before signing it out, find it in the account's device list and record it; in abuse situations the
+  same safety-first rule applies. A lost or stolen tablet is handled like a lost phone (Find My or Find
+  Hub), without the carrier steps for Wi-Fi-only models. If one user of a shared Android tablet is
+  suspected of installing something, remember that the owner profile controls device-wide settings and
+  other users' apps can't normally read the owner's data; check which profile the app is in.
 - **Unknown tracker alert:** don't throw the tracker away immediately. Note the alert time and place, use
   the alert's details to find it and view its information (the alert may show part of the owner's
   identifier), and contact police if the user feels unsafe; the tracker may be evidence.
@@ -83,7 +91,8 @@ with the time shown. Redact before sharing with the agent; keep the originals fo
   passkeys. If the account was taken over, treat saved passwords as exposed.
 - **Banking, payment, and wallet apps:** cards in Apple Pay, Google Wallet, or Samsung Wallet; bank and
   peer-to-peer payment apps. Ask the user to check transactions and call their banks.
-- **Other devices on the same accounts:** tablets, laptops, watches, smart speakers, cars, and smart-home
+- **Other devices on the same accounts:** shared and family tablets (including other Android users on
+  the same tablet), laptops, watches, smart speakers, cars, and smart-home
   apps (door locks, alarms, cameras; see their skills).
 - **The home network,** if the phone was compromised while on it: the Wi-Fi password is on the phone, and
   smart-home and router apps on it may hold admin sessions.

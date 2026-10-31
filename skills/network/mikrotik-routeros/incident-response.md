@@ -1,0 +1,94 @@
+# MikroTik RouterOS: Respond (Incident Response)
+
+Use with the core playbook, [incident-response.md](../../../core/incident-response.md), which always
+applies. This file adds only RouterOS-specific steps.
+
+A compromised edge router can redirect DNS, intercept or proxy traffic, open tunnels into the LAN, attack
+other networks (DDoS, proxying for botnets), and re-infect itself through scheduler scripts that download
+new instructions. Compromised MikroTik devices have also been used to attack the LAN behind them. Treat
+the router and every device that trusted it as in scope.
+
+## Triage and containment
+
+- **Indicators:** users nobody created, or `admin` re-enabled; logins from unknown addresses in `/log` or
+  `/user active`; scheduler entries or scripts that run `/tool fetch`, import `.rsc` files, or change
+  configuration; unknown `.rsc` or `.npk` files; SOCKS or web proxy enabled; unknown L2TP, PPTP, SSTP, GRE,
+  EoIP, or WireGuard tunnels or peers; DNS servers or static DNS entries changed; new dst-nat rules;
+  input rules accepting unusual ports (for example UDP 5678 from the WAN); packet sniffer streaming to an
+  external address; firewall drop rules disabled; device-mode reporting **flagged**; unexplained outbound
+  traffic bursts.
+- **Containment without losing evidence:** the safest first step is usually upstream: ask the ISP or use
+  the upstream modem to cut the WAN link, or unplug the WAN cable, keeping power on. That stops remote
+  control and attack traffic while preserving running state and in-memory logs. The LAN loses internet
+  access; plan that with the user.
+- If the WAN must stay up, then with approval and in Safe Mode: drop all WAN input except what is needed,
+  disable SOCKS, proxy, and unknown tunnels, and disable (don't delete) unknown scheduler entries and
+  users. Record each change.
+- **Don't reboot or reset** before collecting evidence: logs are in memory by default and are lost at
+  reboot, and a reset destroys the configuration that shows what the attacker did.
+- **Use a clean admin path:** a known-clean workstation connected directly to a LAN or management port,
+  or the console port. Don't log in from a device on a LAN segment that may itself be compromised.
+- If several MikroTik devices share passwords, RoMON, or CAPsMAN, assume they are all affected until
+  checked.
+
+## Evidence to preserve (RouterOS-specific)
+
+Collect before changing anything, and copy every file off the device:
+
+- `/export terse file=<name>` (sensitive values hidden by default in v7; on v6 use `hide-sensitive`).
+  Optionally, with approval, an encrypted binary backup for a forensic copy; treat it as secret material.
+- `/system resource print`, `/system package print`, `/system routerboard print`,
+  `/system device-mode print` (including `flagged`), `/system license print`.
+- `/user print detail`, `/user active print`, `/user ssh-keys print`, `/user group print`.
+- `/system scheduler print detail`, `/system script print detail`, and the content of every `.rsc` file
+  (copy files; don't run them). Netwatch, DHCP lease scripts, and PPP profile scripts.
+- `/file print` with sizes and dates; copies of unknown files.
+- `/log print` (copy it before reboot), the remote syslog server's copy if one exists, and
+  `/system history print`.
+- `/ip firewall filter|nat|raw|mangle print`, `/ipv6 firewall filter print`, `/ip service print detail`,
+  `/ip socks print`, `/ip proxy print`, `/ip dns print`, `/ip dns static print`, all tunnel and VPN
+  interfaces and peers, `/tool sniffer print`, `/ip neighbor print`.
+- Active connections (`/ip firewall connection print`) and per-interface traffic counters, if the attack
+  may be ongoing.
+- Upstream: the ISP or modem's view of traffic volume, and any abuse reports the ISP has received.
+
+## Scope checks specific to RouterOS
+
+- **Every LAN device:** DNS or DHCP changes can have sent clients to attacker-controlled resolvers,
+  gateways, or update servers. Check for credential phishing, malicious downloads, and changed DNS on
+  clients.
+- **Other MikroTik devices** reachable through RoMON, MAC-Winbox, CAPsMAN, The Dude, or shared
+  credentials.
+- **VPN users and site-to-site peers:** their keys and secrets were on the router.
+- **Systems behind port forwards**, which the attacker may have reached through new dst-nat rules.
+- **Workstations used to manage the router:** a compromised LAN host has been used to reconfigure
+  MikroTik devices; check the admin workstation.
+- **Monitoring and automation systems** that hold the router's credentials.
+
+## Eradication and recovery
+
+- Prefer a **clean reinstall** with netinstall to a current RouterOS version for the channel, from
+  packages downloaded from MikroTik and checked against published checksums, then a fresh configuration.
+  Reapply settings by hand or from a reviewed, sanitized export; don't restore a binary backup taken after
+  the compromise (it brings back the attacker's users, scripts, and keys).
+- Upgrade RouterBOARD firmware after reinstalling.
+- **Rotate every secret:** all router user passwords and SSH keys, WireGuard keys and peers, IPsec
+  pre-shared keys and certificates, PPP secrets, Wi-Fi passphrases if the router manages Wi-Fi, SNMP
+  communities, RADIUS secrets, DDNS and cloud credentials, and any password reused elsewhere.
+- Before reconnecting the WAN: management closed to the internet, named admins only, unneeded services,
+  MAC server, discovery, RoMON, proxy, SOCKS, and bandwidth server disabled, IPv4 and IPv6 input filtering
+  in place, remote logging configured, and device-mode set to the narrowest mode the owner needs
+  (physical confirmation).
+- Tell the ISP if the device took part in attacks; follow their guidance.
+
+## Quick checklist tailored for RouterOS
+
+Start with the core quick checklist, plus:
+
+- [ ] Cut the WAN upstream (keep the router powered) and manage it from a clean, directly connected host.
+- [ ] Copy `/log`, an `/export`, scheduler entries, scripts, and unknown files off the device before any
+      reboot.
+- [ ] Check device-mode for `flagged`, and check every MikroTik neighbor that shares credentials or RoMON.
+- [ ] Netinstall a current version and rebuild the configuration from a reviewed export, not a
+      post-compromise backup.
+- [ ] Rotate every password, key, and secret the router held; check LAN clients for DNS tampering.

@@ -198,34 +198,68 @@ tools/dashboard/          Local live dashboard and the report generator (report.
 | network | [`opnsense`](skills/network/opnsense/SKILL.md) | OPNsense firewall |
 | network | [`pfsense`](skills/network/pfsense/SKILL.md) | pfSense firewall (CE and Plus) |
 | network | [`vpn-servers`](skills/network/vpn-servers/SKILL.md) | WireGuard and OpenVPN servers (including wg-easy, PiVPN, Access Server) |
-| network | [`dns-filtering`](skills/network/dns-filtering/SKILL.md) | DNS filtering (AdGuard Home, Pi-hole) |
+| network | [`dns-filtering`](skills/network/dns-filtering/SKILL.md) | DNS filtering and DNS servers (AdGuard Home, Pi-hole, Technitium DNS) |
 | network | [`wifi-and-switches`](skills/network/wifi-and-switches/SKILL.md) | Consumer Wi-Fi mesh systems and managed switches |
 | network | [`home-routers`](skills/network/home-routers/SKILL.md) | Home routers, ISP gateways, modems, and bridge/passthrough mode |
+| network | [`mikrotik-routeros`](skills/network/mikrotik-routeros/SKILL.md) | MikroTik RouterOS (Winbox, WebFig, API, RoMON, CHR) |
 | edge | [`cloudflare`](skills/edge/cloudflare/SKILL.md) | Cloudflare (Tunnels, DNS, Zero Trust Access, proxied sites) |
 | edge | [`tunnels`](skills/edge/tunnels/SKILL.md) | Other tunnels and publishing services (ngrok, Tailscale Funnel/Serve, frp, Pangolin, zrok, Dev Tunnels, SSH reverse tunnels) |
 | storage | [`synology-dsm`](skills/storage/synology-dsm/SKILL.md) | Synology DSM (including DSM on non-Synology hardware) |
+| storage | [`qnap-qts`](skills/storage/qnap-qts/SKILL.md) | QNAP NAS (QTS, QuTS hero, myQNAPcloud) |
+| storage | [`truenas`](skills/storage/truenas/SKILL.md) | TrueNAS (Community Edition/SCALE, Enterprise, legacy CORE) |
+| storage | [`unraid`](skills/storage/unraid/SKILL.md) | Unraid (array, shares, Connect, Community Applications) |
+| storage | [`openmediavault`](skills/storage/openmediavault/SKILL.md) | openmediavault and omv-extras |
+| storage | [`object-storage`](skills/storage/object-storage/SKILL.md) | Self-hosted S3-compatible object storage (MinIO, Garage, SeaweedFS) |
+| storage | [`zfs-and-ceph`](skills/storage/zfs-and-ceph/SKILL.md) | ZFS and Ceph security: encryption, snapshots, delegation, cephx (no repair procedures) |
+| storage | [`backup-tools`](skills/storage/backup-tools/SKILL.md) | Backup tools and offsite targets (Restic, Borg, Veeam, Duplicati, Backblaze B2, Wasabi) |
 | virtualization | [`proxmox-ve`](skills/virtualization/proxmox-ve/SKILL.md) | Proxmox VE (including server BMCs) |
+| virtualization | [`vmware-esxi`](skills/virtualization/vmware-esxi/SKILL.md) | VMware ESXi (standalone hosts and small vCenter setups) |
+| virtualization | [`xcp-ng`](skills/virtualization/xcp-ng/SKILL.md) | XCP-ng and Xen Orchestra |
 | operating-systems | [`macos`](skills/operating-systems/macos/SKILL.md) | macOS (including Macs used as home servers) |
-| operating-systems | [`linux`](skills/operating-systems/linux/SKILL.md) | Linux (servers, VMs, LXC, Raspberry Pi) |
-| operating-systems | [`windows`](skills/operating-systems/windows/SKILL.md) | Windows 10/11 and small Windows Server installs |
-| mobile | [`phones`](skills/mobile/phones/SKILL.md) | Cell phones (iPhone and Android), including SIM-swap and stalkerware protection |
+| operating-systems | [`linux`](skills/operating-systems/linux/SKILL.md) | Linux (servers, desktops and laptops, VMs, LXC, Raspberry Pi) |
+| operating-systems | [`windows`](skills/operating-systems/windows/SKILL.md) | Windows 10/11 and small Windows Server installs, including domain controllers |
+| operating-systems | [`chromeos`](skills/operating-systems/chromeos/SKILL.md) | ChromeOS and ChromeOS Flex |
+| mobile | [`phones`](skills/mobile/phones/SKILL.md) | Phones and tablets (iPhone, iPad, Android), including SIM-swap and stalkerware protection |
 | containers | [`docker`](skills/containers/docker/SKILL.md) | Docker, Docker Desktop, Podman, NAS container managers |
 | home-automation | [`home-assistant`](skills/home-automation/home-assistant/SKILL.md) | Home Assistant |
 | home-automation | [`mqtt`](skills/home-automation/mqtt/SKILL.md) | MQTT brokers (Mosquitto) |
 | home-automation | [`smart-home-devices`](skills/home-automation/smart-home-devices/SKILL.md) | Smart home devices: plugs, bulbs, light switches, locks, thermostats, hubs and bridges, ESPHome/Tasmota |
+| home-automation | [`homebridge`](skills/home-automation/homebridge/SKILL.md) | Homebridge and its plugins |
 | surveillance | [`frigate-nvr`](skills/surveillance/frigate-nvr/SKILL.md) | NVR software (Frigate) |
 | surveillance | [`ip-cameras`](skills/surveillance/ip-cameras/SKILL.md) | IP cameras (with vendor-family notes) |
 | surveillance | [`video-doorbells`](skills/surveillance/video-doorbells/SKILL.md) | Video doorbells and cloud camera systems |
+| surveillance | [`nvr-software`](skills/surveillance/nvr-software/SKILL.md) | NVR software other than Frigate (Blue Iris, Synology Surveillance Station, other VMS) |
 | consumer-devices | [`smart-tvs`](skills/consumer-devices/smart-tvs/SKILL.md) | Smart TVs and streaming devices |
-| peripherals | [`printers`](skills/peripherals/printers/SKILL.md) | Network printers and multifunction printers |
+| consumer-devices | [`game-consoles`](skills/consumer-devices/game-consoles/SKILL.md) | Game consoles and handhelds (PlayStation, Xbox, Nintendo Switch, Steam Deck/SteamOS) |
+| peripherals | [`printers`](skills/peripherals/printers/SKILL.md) | Network printers, multifunction printers, and network scanners |
 | maker-devices | [`3d-printers`](skills/maker-devices/3d-printers/SKILL.md) | 3D printers (Bambu Lab, Prusa, OctoPrint, Klipper/Moonraker) |
 | maker-devices | [`craft-cutters`](skills/maker-devices/craft-cutters/SKILL.md) | Craft cutting machines (Cricut, Silhouette, Brother ScanNCut) |
 | media | [`media-automation`](skills/media/media-automation/SKILL.md) | Media automation (*arr apps, downloaders) |
 | media | [`media-servers`](skills/media/media-servers/SKILL.md) | Media servers (Plex, Jellyfin, Emby) and Tdarr |
-| ai | [`local-llm`](skills/ai/local-llm/SKILL.md) | Local LLM and generative-AI servers |
+| ai | [`local-llm`](skills/ai/local-llm/SKILL.md) | Local LLM and generative-AI servers (including LocalAI and the LiteLLM gateway) |
 | ai | [`mcp-servers`](skills/ai/mcp-servers/SKILL.md) | MCP and RAG servers, vector databases |
-| web-apps | [`self-hosted-web-apps`](skills/web-apps/self-hosted-web-apps/SKILL.md) | Small self-hosted web apps and dashboards |
+| ai | [`gpu-hosts`](skills/ai/gpu-hosts/SKILL.md) | GPU hosts (NVIDIA drivers, Container Toolkit, DCGM, notebooks) |
+| ai | [`ai-coding-agents`](skills/ai/ai-coding-agents/SKILL.md) | AI coding agents (Claude Code, OpenCode, Continue, and similar) |
+| ai | [`ai-app-builders`](skills/ai/ai-app-builders/SKILL.md) | Low-code LLM app builders (Flowise, Dify, Langflow) |
+| web-apps | [`self-hosted-web-apps`](skills/web-apps/self-hosted-web-apps/SKILL.md) | Small self-hosted web apps and dashboards (including ntfy, Gotify, CasaOS) |
+| web-apps | [`nextcloud`](skills/web-apps/nextcloud/SKILL.md) | Nextcloud Server and Nextcloud AIO |
+| web-apps | [`photo-and-document-apps`](skills/web-apps/photo-and-document-apps/SKILL.md) | Photo and document apps (Immich, Paperless-ngx) |
+| web-apps | [`automation-platforms`](skills/web-apps/automation-platforms/SKILL.md) | Workflow automation (n8n, Node-RED) |
 | web | [`web-servers`](skills/web/web-servers/SKILL.md) | Web servers and reverse proxies (Apache, nginx, Caddy, Traefik, HAProxy, NPM) |
+| identity | [`password-managers`](skills/identity/password-managers/SKILL.md) | Password managers (Bitwarden, Vaultwarden, 1Password, KeePass/KeePassXC) |
+| identity | [`mfa`](skills/identity/mfa/SKILL.md) | Multi-factor authentication (security keys, passkeys, authenticator apps, Duo) |
+| identity | [`identity-providers`](skills/identity/identity-providers/SKILL.md) | Self-hosted SSO and identity providers (Authentik, Authelia, Keycloak) |
+| monitoring | [`monitoring`](skills/monitoring/monitoring/SKILL.md) | Infrastructure monitoring (Prometheus, Netdata, Zabbix, Checkmk) |
+| monitoring | [`logging-and-siem`](skills/monitoring/logging-and-siem/SKILL.md) | Logging and SIEM (Wazuh, Graylog, ELK, OpenSearch, CrowdSec, Fail2ban) |
+| remote-access | [`remote-desktop-and-rmm`](skills/remote-access/remote-desktop-and-rmm/SKILL.md) | Remote desktop and RMM (Guacamole, RustDesk, MeshCentral, Tactical RMM) |
+| hardware | [`out-of-band-management`](skills/hardware/out-of-band-management/SKILL.md) | Out-of-band management (iDRAC, iLO, Supermicro IPMI, Redfish, Intel AMT) |
+| hardware | [`ups`](skills/hardware/ups/SKILL.md) | Network UPS devices and shutdown software (APC, CyberPower, Eaton, NUT) |
+| cloud | [`productivity-suites`](skills/cloud/productivity-suites/SKILL.md) | Microsoft 365 and Google Workspace |
+| cloud | [`cloud-storage`](skills/cloud/cloud-storage/SKILL.md) | Cloud storage and sync (Dropbox, OneDrive, Google Drive, iCloud) |
+| cloud | [`cloud-providers`](skills/cloud/cloud-providers/SKILL.md) | Cloud provider accounts (AWS, Azure, Google Cloud, DigitalOcean, Linode/Akamai) |
+| cloud | [`domain-registrars`](skills/cloud/domain-registrars/SKILL.md) | Domain registrars (Namecheap, GoDaddy, and others) |
+| dev | [`code-hosting-and-ci`](skills/dev/code-hosting-and-ci/SKILL.md) | Code hosting and CI/CD (GitHub, GitLab, Gitea, Forgejo, Actions, Jenkins) |
+| dev | [`infrastructure-as-code`](skills/dev/infrastructure-as-code/SKILL.md) | Infrastructure as code (Ansible, Terraform/OpenTofu) |
 
 Suggestions for new skills are welcome; start from `templates/skill-template/`.
 

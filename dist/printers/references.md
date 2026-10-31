@@ -5,7 +5,7 @@
 Always prefer current vendor documentation for the exact model; menu names, defaults, and firmware
 behavior change between models and releases. Re-verify links and contents when updating this skill.
 
-Last verified: 2026-10-30
+Last verified: 2026-10-31
 
 ## Vendor (authoritative)
 
@@ -20,6 +20,25 @@ Last verified: 2026-10-30
 - Canon CP2023-003, Wi-Fi settings not erased by initialization (inkjet models):
   https://psirt.canon/advisory-information/cp2023-003/
 - Xerox security information and bulletins: https://security.business.xerox.com/en-us/
+- PFU/Ricoh ScanSnap iX1600 firmware (security notes, ScanSnap Cloud cut-off for old firmware, update
+  through ScanSnap Home): https://www.pfu.ricoh.com/global/scanners/scansnap/dl/firmware/ix1600.html
+- ScanSnap, Direct Connect mode (iX1600/iX1500):
+  https://www.pfu.ricoh.com/imaging/downloads/manual/basic/mac/en/topics/wf_drc_mobile_lcd.html
+- ScanSnap Help, what a ScanSnap account is (ScanSnap Cloud, two-factor authentication):
+  https://www.pfu.ricoh.com/imaging/downloads/manual/scansnap_help/en/pc/topic/su_info_account_cloud.html
+- ScanSnap Cloud overview and supported services: https://www.pfu.fujitsu.com/global/scanners/scansnap/sscloud/
+- Brother, Scan to Network (SMB) authentication methods and ports:
+  https://support.brother.com/g/s/id/smb/stn/stn-a-scan.html
+- Brother ADS online user guide (example: ADS-1800W, Kerberos not supported for network scanning):
+  https://support.brother.com/g/s/id/htmldoc/ads/cv_ads1800w/uke/html/GUID-78664BF7-D3F6-4C09-9086-31437E12EEBF_1.html
+- Brother, notice on default login passwords (label "Pwd" and older fixed defaults):
+  https://support.brother.co.jp/j/b/files/dlf/docp100511/important_notice_for_network_security_default_login_password_change_en_01.pdf
+- Brother Web Connect (scan to cloud services): https://brother-usa.com/brother-web-connect
+- Epson, where to find the default administrator password: https://www.epson.co.uk/en_GB/faq/KA-02053/contents
+- Epson scanner user guide example (DS-785W), configuring the administrator password:
+  https://download4.epson.biz/sec_pubs/ds-785w/useg/us/GUID-18B8BC45-98BA-4996-BE00-AEE43E3C2FB6.htm
+- Epson DS-790WN User's Guide, forgot the administrator password:
+  https://files.support.epson.com/docid/cpd6/cpd61515/source/scanners/source/troubleshooting/reference/problem_administrator_password_scanners.html
 - Lexmark security advisories: https://www.lexmark.com/en_us/solutions/security/lexmark-security-advisories.html
 - Konica Minolta advisory on derivable initial passwords (KM-2025-0005):
   https://www.konicaminolta.com/global-en/security/advisory/pdf/km-2025-0005.pdf
@@ -37,12 +56,19 @@ Last verified: 2026-10-30
   security functions (image overwrite, storage encryption, audit): https://www.commoncriteriaportal.org/files/ppfiles/c0553_pp.pdf
 - Apple Bonjour Printing Specification (DNS-SD service types for printers):
   https://developer.apple.com/bonjour/printing-specification
+- Mopria Alliance, eSCL Scan Technical Specification (licensed download):
+  https://mopria.org/mopria-escl-specification
 - RFC 3805, Printer MIB v2: https://www.rfc-editor.org/rfc/rfc3805
 
 Generic vulnerability and incident sources (CISA KEV, NVD, CVE, CISA ransomware guidance, IC3) are listed in
 the core documents.
 
 ## Third-party (not authoritative)
+
+- sane-airscan man page (eSCL and WSD scanner discovery from Linux):
+  https://manpages.ubuntu.com/manpages/noble/man5/sane-airscan.5.html
+- Konica Minolta manual, WSD scan (example of WSD HTTPS port 5358 on an MFP):
+  https://manuals.konicaminolta.eu/bizhub-451i/EN/contents/WC_05_05.html
 
 - Rapid7, Brother and multi-vendor printer vulnerabilities (CVE-2024-51977, CVE-2024-51978), June 2025:
   https://www.rapid7.com/blog/post/multiple-brother-devices-multiple-vulnerabilities-fixed/

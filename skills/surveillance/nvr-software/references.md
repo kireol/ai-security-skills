@@ -1,0 +1,52 @@
+# NVR Software: References
+
+Always prefer each vendor's current documentation, release notes, and advisories; ports, defaults, and
+licensing change between versions. Re-verify links and contents when updating this skill.
+
+Last verified: 2026-10-31
+
+## Vendor (authoritative for their own products)
+
+### Blue Iris
+
+- Blue Iris Software (downloads, licensing, support plans): https://blueirissoftware.com/
+- Blue Iris help file (installed with the software and available from the console's Help menu): the
+  authoritative description of web server, authentication, user, and remote-access settings for the
+  installed version.
+
+### Synology Surveillance Station
+
+- Synology product security advisories (filter for Surveillance Station; for example Synology-SA-24:25):
+  https://www.synology.com/en-global/security/advisory
+- Synology-SA-24:25, Surveillance Station: https://www.synology.com/en-global/security/advisory/Synology_SA_24_25
+- What network ports are used by Synology services (Surveillance Station 5000/5001 and 1935; DS cam
+  5000/5001): https://kb.synology.com/en-global/DSM/tutorial/What_network_ports_are_used_by_Synology_services
+- Surveillance Station help and release notes: https://kb.synology.com/en-global/search?sources%5B%5D=release_note&services%5B%5D=Surveillance_Station
+- Synology DSM security recommendations: see the [synology-dsm](../../storage/synology-dsm/references.md)
+  references.
+
+### Other VMS
+
+- Agent DVR, LAN and remote access (UI on 8090, STUN/TURN 3478, WebRTC; remote access via iSpyConnect):
+  https://www.ispyconnect.com/docs/agent/remoteaccess
+- Agent DVR documentation: https://www.ispyconnect.com/docs/agent/about
+- Shinobi documentation (installation, superuser account): https://docs.shinobi.video/
+- Milestone XProtect hardening guide and ports used by the system (Mobile Server 8081/8082):
+  https://doc.milestonesys.com/ (navigate to the hardening guide and "Ports used by the system" for the
+  installed release)
+
+Generic vulnerability and incident sources (CISA KEV, NVD, CVE, CISA ransomware guidance, IC3) are listed in
+the core documents.
+
+## Third-party (not authoritative)
+
+- IPCamTalk forum and wiki (Blue Iris remote access, "Non-LAN only" behavior behind proxies, historical
+  IP-based authentication issues): https://ipcamtalk.com/ Community knowledge; widely used by Blue Iris
+  owners, but statements are tied to particular versions. Verify against the Blue Iris help file.
+- Reseller and support-partner articles on the Blue Iris 6 upgrade and support-plan requirements (for
+  example Amcrest's "How To Upgrade To Blue Iris Version 6"):
+  https://support.amcrest.com/hc/en-us/articles/44764359912333-How-To-Upgrade-To-Blue-Iris-Version-6
+- NAT Checker blog on Blue Iris remote access and default port 81 being scanned by internet search
+  engines: https://natchecker.com/blog/blue-iris-remote-access (vendor marketing; directionally useful).
+- Marius Hosting, Synology port list (Surveillance Station portal 9900/9901 as commonly configured):
+  https://mariushosting.com/what-network-ports-are-used-by-synology-services/

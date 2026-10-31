@@ -1,0 +1,53 @@
+# Infrastructure as Code: References
+
+Always prefer each tool's current documentation for the installed version. Backend options, state
+encryption, and ephemeral-value support change between releases. Re-verify links and contents when
+updating this skill.
+
+Last verified: 2026-10-31
+
+## Vendor (authoritative)
+
+- Terraform (HashiCorp)
+  - Sensitive data in state (plain-text state, `sensitive` doesn't keep values out of state or plans,
+    ephemeral values and write-only arguments, encryption by backend):
+    https://developer.hashicorp.com/terraform/language/state/sensitive-data
+  - S3 backend (`encrypt`, `kms_key_id`, `use_lockfile`, deprecated DynamoDB locking, bucket versioning,
+    credentials passed through `-backend-config` written to `.terraform` and plan files):
+    https://developer.hashicorp.com/terraform/language/backend/s3
+  - Dependency lock file: https://developer.hashicorp.com/terraform/language/files/dependency-lock
+  - Security advisories (HashiCorp): https://discuss.hashicorp.com/c/security
+- OpenTofu
+  - State and plan encryption (`encryption` block, `TF_ENCRYPTION`, key providers, `aes_gcm`,
+    `unencrypted` migration method, `enforced`, `fallback`):
+    https://opentofu.org/docs/language/state/encryption/
+  - Security advisories: https://github.com/opentofu/opentofu/security/advisories
+- Ansible
+  - Installing collections, including GPG signature verification (`--keyring`,
+    `--required-valid-signature-count`, `--disable-gpg-verify`, limits for git and tarball sources):
+    https://docs.ansible.com/ansible/latest/collections_guide/collections_installing.html
+  - Ansible Vault: https://docs.ansible.com/ansible/latest/vault_guide/index.html
+  - Tips and tricks (vars/vault split, `no_log`):
+    https://docs.ansible.com/ansible/latest/tips_tricks/ansible_tips_tricks.html
+  - Windows remote management (WinRM transports and certificate validation):
+    https://docs.ansible.com/ansible/latest/os_guide/windows_winrm.html
+  - ansible-core support matrix: https://docs.ansible.com/ansible/latest/reference_appendices/release_and_maintenance.html
+
+Generic vulnerability and incident sources (CISA KEV, NVD, CVE, CISA ransomware guidance, IC3) are listed in
+the core documents.
+
+## Third-party (not authoritative)
+
+- Checkov, tflint, Trivy config scanning, ansible-lint: static analysis tools whose rules are useful
+  candidates, not verdicts. Use their own docs for current rule sets.
+  - https://www.checkov.io/
+  - https://github.com/terraform-linters/tflint
+  - https://trivy.dev/
+  - https://ansible.readthedocs.io/projects/lint/
+
+## Not verified at time of writing
+
+- The Ansible Vault, tips-and-tricks, WinRM, and release-matrix pages were not re-fetched for this
+  version (the documentation site rate-limited requests); their content is summarized from the
+  documented features and should be checked against the current pages.
+- Default ports for Ansible Semaphore (3000) and Atlantis (4141) are common defaults, not re-verified.

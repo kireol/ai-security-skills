@@ -1,0 +1,83 @@
+# Out-of-Band Management: Respond (Incident Response)
+
+Use with the core playbook, [incident-response.md](../../../core/incident-response.md), which always
+applies. This file adds only BMC- and Intel AMT-specific steps.
+
+## Triage and containment
+
+- **Cut the controller's network path, not its power.** Disable the BMC's switch port or move it off every
+  network but an isolated one, from a clean device. Pulling server power doesn't stop a BMC on standby
+  power, and a power cycle destroys volatile evidence on the host.
+- **Shared NIC mode:** if the BMC shares the host's port, isolating the BMC also isolates the host. Decide
+  with the user which matters more, or block the BMC's own address and MAC at the switch or firewall.
+- **Remove internet exposure first** (port forwards, UPnP mappings, proxy routes) if the BMC was reachable
+  from outside.
+- **Don't reset the BMC to factory defaults yet.** A reset can wipe users, logs, and network settings that
+  show what happened. Preserve evidence first (below).
+- **Detach unexplained virtual media and end unknown console sessions** only after recording them (a
+  screenshot of the session list and media status), and with the user's approval.
+- **Assume the host may be compromised too.** An attacker with BMC access can boot the host from their own
+  media, change BIOS and boot settings, or read its console. Assess the host with its own skill. The
+  reverse also holds: an attacker with host root can usually reach the BMC in-band.
+- **Intel AMT:** if AMT was provisioned without the user's knowledge, isolate the PC from the network (its
+  AMT shares the PC's port), then treat the PC's operating system as untrusted, since local admin rights
+  are one way AMT gets provisioned.
+
+## Evidence to preserve (out-of-band-specific)
+
+- The System Event Log (`ipmitool sel elist` in-band, or exported from the web UI). Never clear it.
+- The vendor audit log: Dell Lifecycle Log, HPE iLO Event Log and Integrated Management Log, Supermicro
+  maintenance and event logs, or the equivalent. Export before any reset or firmware change; logs on
+  some BMCs are small ring buffers that overwrite quickly.
+- Current account list with privileges, active sessions, Redfish sessions and event subscriptions, SSH
+  keys, and directory settings.
+- Network settings, IP filters, enabled services, SNMP trap and syslog destinations, and alert email
+  targets (an attacker may add their own).
+- Firmware inventory (BMC, BIOS, storage controller, NICs) and root-of-trust or integrity-check status.
+  Compare with the versions the user remembers installing.
+- Virtual media status, remote file share settings, boot-order overrides, and recent power events.
+- Remote syslog copies, if forwarding was configured; they are the most trustworthy record.
+- Intel AMT: provisioning state and mode, configured users, audit log (if enabled), and the management
+  console's records.
+
+## Scope checks specific to out-of-band management
+
+- The host operating system or hypervisor and every guest on it; virtual-media boots or console sessions
+  during the incident window.
+- Every other BMC that shares the same password or sits on the same management network. RAKP hashes
+  taken from one BMC crack every BMC with the same password.
+- Systems that store BMC credentials: fencing agents on cluster nodes, monitoring servers, automation
+  repositories, password managers.
+- The management VLAN itself: jump hosts and admin workstations that can reach it.
+- For Intel AMT: the management console (Intel EMA, MeshCentral, or vendor tool) and its accounts, and any
+  other PCs it manages.
+
+## Eradication and recovery
+
+- Update the BMC to the vendor's current firmware for the model, using the vendor's procedure (C2/C3; see
+  the Remediate section of [SKILL.md](SKILL.md)). Where the vendor offers firmware integrity verification
+  or recovery from a known-good image, use it. If the platform is past support and the firmware can't be
+  trusted, plan replacement with the user.
+- Reset to defaults only after evidence is exported and the user approves; then reconfigure from scratch
+  rather than restoring a configuration backup taken during the incident window.
+- Reflash or verify the BIOS/UEFI firmware too; an attacker with BMC access may have changed it.
+- Rotate every BMC credential, every credential that shared a password with it, and every automation
+  secret that could reach it. Remove unknown accounts, SSH keys, alert destinations, and event
+  subscriptions.
+- Before reconnecting: BMC on an isolated management network, IPMI over LAN off or restricted, unused
+  services off, remote syslog on, and the initial access path closed.
+- Intel AMT: unprovision and re-provision only through the intended console, or disable it; update CSME
+  firmware through the PC vendor; set new MEBx and BIOS passwords.
+
+## Quick checklist tailored for a BMC or AMT
+
+When the user says "I think someone got into my server's iDRAC/iLO/IPMI," start with the core quick
+checklist, plus:
+
+- [ ] From a clean device, take the BMC off every network except an isolated one (switch port or VLAN),
+      and remove any internet exposure. Don't power off the server.
+- [ ] Screenshot or export the account list, sessions, virtual media status, SEL, and audit log before
+      changing anything.
+- [ ] Find every other BMC and system that used the same password, and plan to rotate them all.
+- [ ] Check the host for boots from unknown media, BIOS changes, and new accounts; assess it with its own
+      skill.

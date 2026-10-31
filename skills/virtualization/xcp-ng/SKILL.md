@@ -1,0 +1,438 @@
+---
+name: xcp-ng
+description: >-
+  Security assessment, hardening, remediation, and incident response for XCP-ng hosts and pools managed
+  with Xen Orchestra (the XOA appliance or XO built from sources) or XO Lite, including the server
+  hardware's BMC. Use when auditing an XCP-ng host or pool, reviewing its release and updates, XAPI and
+  management network exposure, SSH, the pool's shared root password and secrets, Xen Orchestra users,
+  ACLs, tokens, and plugins, storage repositories, or Xen Orchestra backups, or when an XCP-ng host, its
+  Xen Orchestra, or a guest may have been compromised.
+license: CC-BY-4.0
+metadata:
+  version: "1.0"
+  last_reviewed: "2026-10-31"
+  applies_to: "XCP-ng 8.3 LTS with Xen Orchestra (XOA or from sources); 8.2 is end of life since 2025-09 (verify the live version and the XCP-ng release page)"
+  audience: "home, work, homelab"
+  finding_prefix: "XCP"
+  modes: "discover, recommend, remediate, respond"
+---
+
+# XCP-ng Security
+
+Act as a careful, evidence-driven virtualization security engineer. An XCP-ng pool is the trust boundary
+for every VM on it, and Xen Orchestra is the trust boundary for every pool it manages: whoever has the
+pool's `root` password, an XO administrator account, or the host's BMC controls every guest, can read
+their disks and consoles, and can delete their backups. Identify, explain, prioritize, remediate (only
+when authorized), and verify weaknesses in the hosts, the pool, Xen Orchestra, the backups, and the
+hardware underneath.
+
+## How to use this skill
+
+This skill holds only XCP-ng and Xen Orchestra-specific guidance. It builds on the shared core, which
+always applies:
+
+| Core document | Covers |
+|---|---|
+| [modes-and-authorization.md](../../../core/modes-and-authorization.md) | The four modes, transitions, operation classes (R/C1/C2/C3), standing authorization |
+| [operating-principles.md](../../../core/operating-principles.md) | Principles, capability discovery, scope, communication, untrusted data |
+| [vulnerability-triage.md](../../../core/vulnerability-triage.md) | Lifecycle, CVE/KEV validation, P0–P4 priority scale |
+| [evidence-and-reporting.md](../../../core/evidence-and-reporting.md) | Evidence labels, statuses, finding template, report format, cadence |
+| [tool-use-contract.md](../../../core/tool-use-contract.md) | Rules for commands, APIs, MCP tools, and third-party integrations |
+| [reporting-protocol.md](../../../core/reporting-protocol.md) | Optional live progress reporting to a dashboard |
+| [incident-response.md](../../../core/incident-response.md) | The generic Respond playbook |
+
+XCP-ng-specific Respond steps are in [incident-response.md](incident-response.md). Vendor documentation
+and advisories are in [references.md](references.md). For the BMC under the host, see
+[out-of-band management](../../hardware/out-of-band-management/SKILL.md). Related hypervisor skills:
+[Proxmox VE](../proxmox-ve/SKILL.md) and [VMware ESXi](../vmware-esxi/SKILL.md).
+
+## XCP-ng-specific principles
+
+- **The pool is above every guest, and XO is above every pool.** Pool `root`, Xen Orchestra
+  administrators, and anyone with BMC or physical access can read and change every VM. Xen Orchestra
+  stores credentials for every pool it manages (often `root`), so an XO compromise is a compromise of all
+  of them. Rate findings by the most sensitive guest: a weakness on a pool that runs the network's firewall
+  is a firewall weakness.
+- **There is one `root` per pool.** XCP-ng hosts have a single `root` account; all pool members share its
+  password, and anyone who knows it can do everything on the pool. Host-level RBAC in XAPI exists but the
+  vendor doesn't recommend it on XCP-ng, and host-level Active Directory authentication is deprecated in
+  8.3. User separation, roles, and directory logins belong in Xen Orchestra.
+- **Know which guests the agent depends on.** If the firewall, DNS, VPN, Xen Orchestra itself, or the
+  agent's own machine runs as a VM here, toolstack restarts, host reboots, network changes, and
+  management-interface changes can cut off the agent and the user. Treat changes that could stop those
+  guests as **C2**, and confirm out-of-band access (physical console with `xsconsole`, or BMC) first.
+- **Dom0 is a vendor appliance, not a general server.** The control domain (dom0) is built from a
+  CentOS-derived base maintained by the XCP-ng project. Don't add third-party repositories (they can
+  overwrite core packages), install extra services, or hand-edit firewall rules that XAPI manages. Make
+  changes with `xe`, `xsconsole`, Xen Orchestra, or XO Lite.
+- **XO from sources is not XOA.** The vendor describes XO from the sources as community-supported only,
+  with no QA and no stable release, suitable for a home lab or tests but not production. XOA is the
+  supported appliance with an updater. Either way, XO is a high-value target and must be kept updated.
+- **The management network is the main defense.** The vendor's guidance is that hosts belong on an
+  internal management network reachable only by administrators; XAPI listens on 443 regardless of other
+  settings.
+- **The BMC is a second front door.** Ask the user about it; **never** test BMC logins, try default
+  credentials, or run IPMI tools against it.
+
+## Deployment variants
+
+| Variant | How to recognize it | What changes |
+|---|---|---|
+| **Single host, XO Lite only** | One host; no Xen Orchestra; admins use XO Lite at `https://<host>/`. | No central backups, users, or ACLs; everyone logs in as `root`. Backups must come from somewhere else. |
+| **Pool (several hosts)** | `xe host-list` shows several hosts; one is the pool master (coordinator). | One `root` password and one pool secret for all hosts. Updates go master first. A compromise of any member is a compromise of the pool. |
+| **Managed by XOA** | XOA VM (appliance) with the XOA updater; the user has a Vates account or free XOA registration. | Supported updates through the updater; check its channel and whether the support tunnel is enabled. |
+| **Managed by XO from sources** | XO built from the public repository on a Linux VM; no XOA updater; often installed with a community script. | Community-supported, no QA; updates are manual rebuilds. The VM's own OS, Node.js, and Redis must also be maintained. Weigh as a high-value, self-maintained web app. |
+| **XO running on the pool it manages** | The XO VM is a guest on the same pool. | A pool outage takes XO (and its backup jobs) down with it. Keep XO Lite and `xsconsole` as fallbacks. |
+| **XO Proxy at a remote site** | XO Proxy VMs listed in XO. | Another appliance with access to pools and backup remotes; assess it too. |
+| **8.2 or older** | `/etc/xensource-inventory` or XO reports 8.2. | End of life since 2025-09: no security updates. Core end-of-life rule applies. |
+| **Server hardware with a BMC** | Enterprise server; BMC web UI on the network; the user confirms. | The BMC is part of the trust boundary. |
+
+## Detection
+
+Hints for recognizing this product during a network inventory (used by the `full-assessment` skill).
+Defaults can be changed, so confirm with the user before relying on a match.
+
+- **XCP-ng host:** XAPI on **HTTPS 443** and **HTTP 80** (vendor-documented; pool members also talk to
+  each other on these). On 8.3, the XO Lite web client is served on 443 at `/`, with a self-signed
+  certificate. SSH on TCP 22 with an OpenSSH banner (enabled by default).
+- Clustered pools (for example with GFS2 shared storage) also use TCP 8892, 8896, 21064 and UDP 5404-5405
+  between hosts (vendor-documented connectivity requirements).
+- **Xen Orchestra:** a web UI (page title "Xen Orchestra") on HTTP 80 and/or HTTPS 443 of its own VM. XOA
+  and XO from sources look similar from the network; the about page or the updater tells them apart.
+- No mDNS or SSDP announcement by default.
+- **Guests:** XAPI generates VIF MAC addresses itself (typically random, not a fixed vendor OUI; verify
+  on the installed version). The XenSource OUI `00:16:3E` may appear on guests of Xen-based platforms.
+- **The host itself** shows the vendor of its physical NIC.
+- **BMCs** show the server maker's or BMC chip's OUI and usually a web UI on 443 and IPMI on UDP 623.
+  Don't probe IPMI beyond recording that the port answers.
+
+---
+
+## Discover
+
+All operations in this mode are class **R** (read-only). Confirm scope and access first (core: operating
+principles). Mark anything you can't inspect **Not assessed**.
+
+### Access and baseline
+
+Prefer Xen Orchestra with a **read-only** account (an XO user with only Viewer ACLs, or an XO
+administrator logged in by the user for screenshots), or user-run checks. If shell access to dom0 is
+available (as `root`; there is no other host account), these are *candidate* read-only commands. Lines
+marked *vendor-documented* appear in the XCP-ng or XAPI `xe` documentation; the rest are **not yet
+verified** on every version. Check each exists first.
+
+```sh
+cat /etc/xensource-inventory          # product version, build, host UUID, management interface
+cat /etc/os-release
+xe host-list params=uuid,name-label,address,software-version    # (vendor-documented)
+xe pool-list params=all               # pool name, master, HA, TLS verification settings
+xe vm-list is-control-domain=false params=uuid,name-label,power-state
+xe pif-list params=uuid,device,IP,netmask,VLAN,management,host-name-label
+xe network-list params=uuid,name-label,bridge
+xe sr-list params=uuid,name-label,type,shared,content-type
+xe pbd-list params=sr-uuid,device-config   # storage connection details; may show server paths (redact any secret)
+xe vm-param-get uuid=<vm-uuid> param-name=platform    # per-VM platform flags
+xe pci-list; xe vgpu-list             # passthrough devices
+xe task-list                          # running tasks
+xe subject-list; xe role-list         # host-level directory subjects and roles (deprecated feature)
+xe patch-list                         # legacy; updates are yum packages on XCP-ng
+yum repolist                          # enabled repositories (reads cached metadata)
+rpm -qa --last | head -50             # most recently installed or updated packages
+uptime; uname -r                      # boot time vs. last update (reboot pending?)
+ls /etc/xapi.conf.d/                  # XAPI overrides (for example XO Lite disabled)
+sshd -T 2>/dev/null | grep -Ei 'permitrootlogin|passwordauthentication|ciphers'
+iptables -S                           # current host firewall rules (read only)
+ss -tulpn                             # listening services
+systemctl list-units --type=service --state=running; systemctl list-timers --all
+crontab -l; ls -l /etc/cron.*; ls -l /etc/systemd/system/
+```
+
+- **Never run** in Discover (all are C2 or C3): `xe vm-shutdown`/`reboot`/`destroy`/`uninstall`,
+  `xe vm-snapshot` removal, `xe vdi-destroy`, `xe sr-forget`/`destroy`, `xe pbd-unplug`, `xe host-disable`,
+  `xe host-evacuate`, `xe pool-join`/`eject`, `xe pool-designate-new-master`, `xe-toolstack-restart`,
+  `xe host-management-reconfigure`, `xe pif-reconfigure-ip`, `yum update`/`install`/`remove`,
+  `xe user-password-change`, editing `/etc/sysconfig/iptables`, and reboots.
+- `yum check-update` refreshes repository metadata (harmless but makes outbound connections); ask first.
+- **Never read** `/etc/xensource/ptoken` (the pool secret), `/etc/shadow`, private keys under `/etc/ssh/`
+  or `/root/.ssh/`, the host TLS key (`/etc/xensource/xapi-ssl.pem` and similar), or XO's Redis database
+  and configuration secrets. Note names, permissions, and modification times only.
+- `xe pbd-list params=device-config` can show SMB or iSCSI credentials on some SR types. Redact.
+
+### Assessment domains
+
+Every domain must end with a status in the report (Pass / Finding / Not assessed / Not applicable /
+Accepted risk).
+
+#### A. Platform, release, and updates
+
+- Release on every host (`/etc/xensource-inventory`). 8.3 is the current LTS (support announced to end
+  2028-11; verify on the release page). 8.2 reached end of life in 2025-09; a host on 8.2 or older is an
+  end-of-life finding.
+- Pending updates and last update date. Compare against the XCP-ng blog's update announcements and the
+  Xen Project security advisories (XSAs) (core triage: validate before rating). Xen Orchestra's Patches
+  tab shows missing updates per pool.
+- **Reboot pending:** XCP-ng doesn't report whether a reboot is needed. Compare boot time with the last
+  installed Xen, kernel, or low-level library update; XO flags this only for updates it installed.
+- All pool members on the same versions; no member newer than the master.
+- Repositories (`yum repolist`): only XCP-ng repositories. Third-party repositories (CentOS, EPEL, others)
+  are a finding: the vendor says to disable them before updating because they can overwrite dom0
+  packages. Testing repositories on production hosts are a finding.
+- Extra packages or services in dom0 (agents, web servers, containers). Each runs as root next to every
+  guest.
+
+#### B. Pool root, SSH, and host-level authentication
+
+- Who knows the pool `root` password, is it unique and strong, and is it in a password manager? Does XO
+  connect to the pool as `root` (common) or with a scoped account?
+- SSH: enabled? (On by default; can be disabled in `xsconsole` under Remote Service Configuration.)
+  Password login or keys only? `PermitRootLogin`? Is it reachable only from the management network? The
+  vendor tightened SSH defaults in 8.3; check upgraded hosts keep the new defaults.
+- `/root/.ssh/authorized_keys`: count, key types, and comments. Every key should belong to a current admin
+  or a known integration.
+- XO Lite enabled (default on 8.3) or disabled (`disable-webserver=true` in a file under
+  `/etc/xapi.conf.d/`). XO Lite logs in with `root`, so where it is enabled, `root` password strength and
+  network restrictions matter more.
+- Host-level AD and RBAC (`xe subject-list`): deprecated on 8.3. If configured, note it and plan to move
+  directory logins to XO.
+
+#### C. Management network and exposure
+
+- Which PIF carries management (`xe pif-list params=management`). Is it on a dedicated VLAN or NIC,
+  separate from guest traffic?
+- Is 443, 80, or 22 on any host, or XO's web UI, reachable from the internet? Check upstream port
+  forwards, reverse proxies, and tunnels. Test from outside only with explicit authorization.
+- Which internal segments can reach host 443, 80, 22, and XO. Ideally only admin hosts and XO.
+- **No host address on guest, IoT, DMZ, or WAN networks.** If the site's firewall is a VM here, its WAN
+  network should have no host IP (check `xe pif-list` for an `IP` on that network's PIF).
+- Storage networks (NFS, iSCSI) and migration traffic: separate, non-routed networks where possible.
+- Pool TLS certificate verification between members (introduced in recent releases; check the pool
+  setting in `xe pool-list params=all` or XO and whether it is enabled on upgraded pools; verify the
+  parameter name on the installed version).
+- Host TLS certificate: self-signed default or installed from a CA (`xe host-install-server-certificate`).
+- The host firewall is managed by XAPI and the system; the vendor advises against hand-editing iptables.
+  Upstream filtering is the main control.
+
+#### D. Xen Orchestra (the management plane)
+
+Assess XO as its own internet-facing-class web application, even if it is internal.
+
+- Variant: XOA or from sources. For XOA: updater channel (latest or stable), last update, and whether the
+  support tunnel is enabled (it gives the vendor remote access when on). For sources: commit or version
+  date, how it is updated, and the VM's OS, Node.js, and Redis versions.
+- **Default administrator:** XO ships with a documented default admin login. Is it still present, or
+  still using the default password? This is an urgent finding if so.
+- XO users and groups: who is an admin; shared accounts; authentication plugins (LDAP/AD, SAML, OIDC,
+  GitHub) and their settings; OTP (two-factor) for administrators.
+- ACLs: who has Admin on pools, SRs, and networks; self-service groups and their quotas.
+- Authentication tokens: which exist, who owns them, their expiry, and what uses them (Terraform, scripts,
+  monitoring). Record existence and scope only.
+- Pool connections ("Servers" in Settings): which account each uses. `root` is common; note that XO holds
+  that credential.
+- XO web UI: HTTPS with a real certificate or self-signed; HTTP redirect; exposure (see C). Reverse
+  proxies in front of XO must pass WebSockets for consoles and become part of the exposure.
+- XO VM's own hardening: OS updates, SSH access, who can log in, firewall. The XOA console account has its
+  own password set at deployment.
+- Plugins enabled (backup reports, audit, load balancer, transport plugins, web hooks) and where they send
+  data.
+- The audit log plugin: enabled, and who can read it.
+
+#### E. Guests, passthrough, and guest tools
+
+- PCI passthrough and vGPU (`xe pci-list`, VM `other-config:pci`): which VMs hold which devices.
+- Guest tools and the management agent: present on VMs that need them.
+- Untrusted guests (lab, internet-facing): on separate networks or VLANs; no passthrough.
+- VM templates and cloud-init configurations: default passwords or shared SSH keys.
+- Console access: anyone with Operator rights on a VM in XO can open its console.
+
+#### F. Storage repositories
+
+- `xe sr-list`: local (EXT, LVM), NFS, SMB, iSCSI, GFS2, or other types. Which are shared?
+- Network SRs: who else can reach the NFS export or iSCSI target? A writable export is a path to tamper
+  with every VM disk on it.
+- SR credentials (SMB, iSCSI CHAP) are stored on the hosts; note which accounts, and whether they have more
+  rights than needed.
+- ISO SRs on shares writable by other users (a swapped ISO is a supply-chain path).
+- Storage health is a status item only. Don't run storage repair or SR operations (hard stops).
+
+#### G. Backups and recovery (Xen Orchestra)
+
+- **Are there backup jobs?** In XO → Backup: which VMs (smart mode by tags or pools, or explicit lists),
+  type (full, incremental/delta, replication, mirror), schedule, retention, last success, and failure
+  reports. No backups, or only on a single-host setup with XO Lite, is a finding, usually high priority.
+- **Backup repositories (remotes):** NFS, SMB, or S3-compatible; where they are; whether they are on the
+  same hardware as the pool. Is encryption enabled on the remote, and where is the key kept (off XO)?
+  Without the key, backups can't be restored.
+- **Can an attacker with XO admin or pool `root` delete the backups?** XO holds the remote's credentials.
+  At least one copy should be out of XO's reach: a mirror to storage XO can write but not delete
+  (object-lock or immutable storage, if the installed XO version supports it; verify), or offline media.
+- Replication (continuous or incremental replication to another SR or pool): useful, but not a backup on
+  its own.
+- Health checks and restore tests: when was a VM last restored and booted on an isolated network?
+- **Metadata backups:** XCP-ng pool metadata backup and XO configuration backup jobs exist, are recent, and
+  are stored off the pool. Without them, rebuilding a pool or XO is slow and error-prone.
+- Snapshots are not backups; note old snapshots that hold outdated sensitive state.
+
+#### H. Dom0 customization and persistence surfaces
+
+- Custom cron jobs, systemd units and timers, scripts in `/root`, `/usr/local/bin`, `/opt`, and
+  `/etc/xapi.d/plugins/` (XAPI plugins run as root). For each: what it does, who added it, whether it is
+  still needed.
+- Community scripts run from the internet against dom0: what they changed.
+- Monitoring or backup agents installed in dom0.
+
+#### I. Pool secrets and high availability
+
+- The pool secret (`/etc/xensource/ptoken`) is shared by every member and lets one host authenticate to
+  another. Note it for incident scoping; never read it. Check whether the installed version offers a
+  supported way to rotate it.
+- HA: enabled? Heartbeat SR? HA can fence (reboot) hosts unexpectedly.
+- Pool master: is a second host able to take over if the master is lost?
+
+#### J. Logging, monitoring, and time
+
+- Remote syslog configured on every host (the host's `logging` parameter, shown by `xe host-param-list`,
+  or XO host settings; verify on the installed version); without it, logs live only in dom0.
+- XO alerts and backup reports reach someone.
+- NTP: correct time on every host and on XO.
+
+#### K. Hardware, BMC, and physical
+
+- **Ask the user** (don't test): BMC present? On a dedicated management network? Defaults changed? Firmware
+  current? IPMI-over-LAN disabled if unused? See
+  [out-of-band management](../../hardware/out-of-band-management/SKILL.md).
+- From the inventory only: whether a BMC web UI or UDP 623 answers from non-management segments.
+- Physical access, boot order, Secure Boot (supported for guests; check host support on the installed
+  version).
+- UPS and safe VM shutdown; what stops on the network if this pool goes down.
+
+---
+
+## Recommend
+
+No changes are made in this mode. For each finding, produce a recommendation using the core finding
+template, including **Dependencies / blast radius** and the **operation class**.
+
+### Dependency and blast-radius check (required)
+
+- **Critical VMs:** firewall, DNS, DHCP, VPN, NAS, directory, Xen Orchestra itself, and the agent's own
+  machine. A host reboot, toolstack restart, or management-network change can stop them or cut them off.
+- **Management path:** how the user and XO reach the hosts today; XO depends on XAPI on 443 to every
+  host.
+- **Out-of-band access:** physical console with `xsconsole`, or BMC remote console, tested.
+- **Pool-wide effects:** the `root` password, pool settings, networks, and SRs are pool-wide; changing the
+  `root` password breaks XO's server connection until it is updated in XO.
+- **Integrations:** Terraform, scripts, monitoring, and backup jobs using XO tokens or `root`.
+- **Backups:** jobs depend on remotes and their credentials, and on XO running.
+
+### Recommendation guidance
+
+| Area | Typical recommendation | Consequences to explain |
+|---|---|---|
+| 8.2 or older | Upgrade to 8.3 LTS following the vendor upgrade guide. | Major change; full backups and metadata backups first; a maintenance window. |
+| Missing updates | Apply with Rolling Pool Update (shared storage) or host by host, master first; reboot when Xen, kernel, or core libraries changed. | VMs migrate or stop; HA, load balancer, and backup jobs pause during RPU. |
+| Third-party repositories in dom0 | Disable them; remove packages that came from them after checking dependents. | Whatever they provided stops; check before removing. |
+| Management reachable from guest or user networks | Move management to a dedicated VLAN or NIC and filter upstream. | Changing the management interface is high-risk C2; console access ready. |
+| Host or XO exposed to the internet | Remove the forward or proxy; use a VPN that doesn't run only on this pool, or one with out-of-band fallback. | Remote admin needs the VPN first. |
+| XO default admin still present | Create a named admin with OTP, verify login, then delete or disable the default account. | None, beyond updating anyone who used it. |
+| Shared XO admin, no OTP | Named admin users with OTP; directory or SSO login through XO plugins. | Each admin enrolls an authenticator. |
+| XO from sources for production | Move to XOA, or document the accepted risk and an update routine. | Cost or effort; XOA migration needs config export and import. |
+| XO from sources not updated | Rebuild on the current release; update the VM's OS, Node.js, and Redis. | Brief XO outage; backup jobs pause. |
+| SSH on with password login | Keys only, restricted upstream; or disable SSH and use XO and `xsconsole`. | Scripts using SSH passwords break. |
+| XO Lite on, `root` widely known | Disable XO Lite where XO is used, or restrict network access; rotate `root`. | Lose the local fallback UI; keep `xsconsole`. |
+| No backups, or backups XO can delete | Create jobs to a separate remote; add an encrypted, immutable or offline copy; enable metadata and XO config backups; test a restore. | Storage and time; keep the encryption key off XO. |
+| Backup encryption key only in XO | Export the key and store it in a password manager or on paper. | Anyone with the key can read backups. |
+| Pool TLS verification off | Enable it per vendor documentation. | Members with mismatched certificates may lose contact; plan it. |
+| No remote syslog | Configure it on every host. | Needs a receiving host. |
+| BMC on user networks or default credentials | The user moves it to a management network, changes credentials, updates firmware. | Done by the user in the BMC. |
+
+Changing ports is supplementary only. Never recommend it as the main fix.
+
+Group the plan: immediate containment (if any) → urgent fixes (internet exposure, end-of-life release, XO
+default admin, no backups) → high-priority hardening (management isolation, XO accounts and OTP, SSH,
+repositories) → routine maintenance → optional defense in depth. Then ask for approval (core: modes and
+authorization).
+
+---
+
+## Remediate
+
+Apply only approved changes, one at a time, following the core rules. XCP-ng specifics:
+
+- **Before any change:** confirm recent VM backups, a pool metadata backup and XO config backup stored off
+  the pool, the current `root` password, and working console or BMC access.
+- **Use supported tools:** `xe`, `xsconsole`, Xen Orchestra, or XO Lite. Don't hand-edit iptables or files
+  XAPI manages, and don't add repositories.
+- **Updates:** check `xe task-list` first; update the master first; never let a member run a newer version
+  than the master; prefer Rolling Pool Update; don't run updates from a VM console or the host's console
+  shell (vendor advice); unmount guest-tools ISOs before updating the tools package. **C2.**
+- **`root` password changes:** pool-wide. Change it once (`xsconsole` or `xe user-password-change`), then
+  update XO's server entries and any integration immediately. Keep a console session open.
+- **Management-interface changes** (`xe host-management-reconfigure`, IP changes): C2 with a high lockout
+  risk; do them from the physical or BMC console, one host at a time, master last.
+- **XO account changes:** add and test the new admin before removing the old one. Rotate tokens by creating
+  the new one, updating the integration, then deleting the old one.
+- **XO updates:** export the XO config backup first; for XOA, use the updater; for sources, follow the
+  documented rebuild. Backup jobs don't run while XO is down.
+- **Disabling XO Lite:** add the setting on every host and restart the toolstack when no critical tasks run
+  (vendor procedure). Toolstack restarts don't stop VMs but interrupt management.
+- **BMC changes** are made by the user in the BMC interface; the agent gives guidance only.
+
+After each change, follow the core "after a change" steps: re-read the setting, check XO's connection to
+every pool, that critical VMs run, that the next backup succeeds, and record before and after.
+
+### Hard stops (refer to a specialist or do manually; never automate)
+
+- Destroying VMs, VDIs, snapshots, SRs, or backups as remediation.
+- Storage operations: SR repair, `sr-forget`, LVM, GFS2, or RAID changes, VDI coalesce intervention.
+- Pool membership changes during an assessment: `pool-join`, `pool-eject`, emergency master transitions,
+  HA reconfiguration.
+- Restoring a pool database dump or host backup over a running pool.
+- Reinstalling a host as a security fix while it still runs production VMs.
+- Testing BMC or IPMI credentials, trying defaults, or running exploit or brute-force tools against any
+  component.
+
+---
+
+## Respond
+
+On any P0 indicator, switch to Respond immediately. Follow the core playbook plus the XCP-ng-specific
+steps in [incident-response.md](incident-response.md).
+
+---
+
+## Worked example (invented)
+
+### XCP-001: Xen Orchestra from sources holds pool root and can delete every backup
+
+**Confidence:** Confirmed
+**Priority:** P2. An attacker who compromises the XO VM, which runs an out-of-date build reachable from
+the user VLAN, gets pool `root` and can delete every backup, leaving no recovery for any VM.
+**State:** Open
+**Component:** Xen Orchestra (from sources) at `192.0.2.30`, managing pool `<pool-name>` (XCP-ng 8.3,
+two hosts)
+**Evidence:** Observed 2026-03-10: XO About page shows a build several months old; Settings → Servers
+shows the pool connected as `root`; Settings → Remotes lists one NFS remote on `192.0.2.40`, which XO
+mounts read-write; no mirror or second remote; no encryption on the remote. The user confirms no other
+copy exists. XO's web UI answers from the user VLAN `198.51.100.0/24`.
+**Expected secure state:** XO updated and reachable only from admin hosts; at least one backup copy that
+XO's credentials can't delete; encrypted backups with the key stored off XO (Xen Orchestra backup
+documentation; XCP-ng docs on management networks).
+**Exposure and prerequisites:** any device on the user VLAN that can reach XO and exploits a flaw in the
+old build, or obtains an XO admin login.
+**Dependencies / blast radius:** nightly incremental backups of all VMs use this remote; the firewall VM
+runs on this pool.
+**Recommended remediation:** (1) update XO and restrict its web UI to the admin VLAN upstream; (2) add a
+mirror job to an object-lock-capable or offline target under separate credentials; (3) enable encryption
+for new backups and store the key in the password manager; (4) test-restore one VM to an isolated network.
+**Operation class:** C2 for the XO update and firewall change; C1 for the mirror job and encryption on new
+backups.
+**Approval required:** Yes.
+**Verification:** XO unreachable from `198.51.100.0/24`; mirror job succeeds; the mirror target refuses
+deletion with XO's credentials; test VM boots.
+**Rollback:** restore the captured firewall rule; disable the mirror job (copies remain).
+
+---
+
+## Version history
+
+- **1.0** (2026-10-31): Initial version.

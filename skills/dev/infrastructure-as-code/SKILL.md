@@ -1,0 +1,427 @@
+---
+name: infrastructure-as-code
+description: >-
+  Security assessment, hardening, remediation, and incident response for infrastructure-as-code
+  tooling: Ansible (vault, inventories, become, Galaxy collections and roles) and Terraform and
+  OpenTofu (state files, remote backends and locking, state and plan encryption, provider credentials,
+  registry modules and providers, plan output). Use when auditing an IaC repository or control machine,
+  reviewing where secrets live in inventories, variables, state, or plans, checking backend access and
+  locking, or reviewing third-party modules and collections, or when IaC credentials, state, or a control
+  node may have been exposed or compromised.
+license: CC-BY-4.0
+metadata:
+  version: "1.0"
+  last_reviewed: "2026-10-31"
+  applies_to: "ansible-core and Ansible community packages; Terraform 1.x; OpenTofu 1.x (verify each installed version; state encryption, ephemeral values, and backend options vary by version)"
+  audience: "home, work, homelab"
+  finding_prefix: "IAC"
+  modes: "discover, recommend, remediate, respond"
+---
+
+# Infrastructure-as-Code Security
+
+Act as a careful, evidence-driven infrastructure-automation security engineer. IaC concentrates power:
+one repository and one control machine can reconfigure every server, router, hypervisor, DNS zone, and
+cloud account they describe. Its main risks are secrets in plain text (inventories, variable files,
+state, plan files, logs), over-privileged credentials that the tooling holds, third-party modules,
+collections, and providers that run with those credentials, and state backends that anyone on the
+network can read or overwrite. Identify, explain, prioritize, remediate (only when authorized), and
+verify these weaknesses without running the automation itself.
+
+## How to use this skill
+
+This skill holds only IaC-specific guidance. It builds on the shared core, which always applies:
+
+| Core document | Covers |
+|---|---|
+| [modes-and-authorization.md](../../../core/modes-and-authorization.md) | The four modes, transitions, operation classes (R/C1/C2/C3), standing authorization |
+| [operating-principles.md](../../../core/operating-principles.md) | Principles, capability discovery, scope, communication, untrusted data |
+| [vulnerability-triage.md](../../../core/vulnerability-triage.md) | Lifecycle, CVE/KEV validation, P0–P4 priority scale |
+| [evidence-and-reporting.md](../../../core/evidence-and-reporting.md) | Evidence labels, statuses, finding template, report format, cadence |
+| [tool-use-contract.md](../../../core/tool-use-contract.md) | Rules for commands, APIs, MCP tools, and third-party integrations |
+| [reporting-protocol.md](../../../core/reporting-protocol.md) | Optional live progress reporting to a dashboard |
+| [incident-response.md](../../../core/incident-response.md) | The generic Respond playbook |
+
+IaC-specific Respond steps are in [incident-response.md](incident-response.md). Vendor documentation is in
+[references.md](references.md). Related skills:
+
+- [code-hosting-and-ci](../code-hosting-and-ci/SKILL.md) for the repository, branch protection, secret
+  scanning, and the CI pipelines that run `ansible-playbook` or `terraform apply`.
+- [cloud-providers](../../cloud/cloud-providers/SKILL.md) for the cloud accounts Terraform manages and the
+  storage buckets that hold state.
+- [ai-coding-agents](../../ai/ai-coding-agents/SKILL.md) when an AI agent edits or runs IaC.
+- [linux](../../operating-systems/linux/SKILL.md), [macos](../../operating-systems/macos/SKILL.md), and
+  [windows](../../operating-systems/windows/SKILL.md) for the control machine, and the relevant product
+  skills (for example [proxmox-ve](../../virtualization/proxmox-ve/SKILL.md)) for what IaC manages.
+
+## IaC-specific principles
+
+- **Never run the automation to assess it.** `ansible-playbook`, `terraform plan`, `tofu plan`, and
+  `terraform init` are not read-only: plans refresh state by calling provider APIs, can write state and
+  lock files, and `init` downloads and runs provider and module code. Ansible's `--check` mode still
+  runs modules (most honor check mode; some don't, and `command`/`shell` tasks may be skipped or run
+  depending on settings). Treat all of them as at least **C1**, and anything that can apply as **C2** or
+  higher. Read files instead.
+- **State is a secrets file.** Terraform's docs say local state is a plain-text file that includes
+  secret values from the configuration. Marking a value `sensitive` only hides it from CLI output; it is
+  still stored in state and plan files. `terraform output -json` and `-raw` print sensitive values.
+  Ephemeral values and write-only arguments (names typically ending in `_wo`) are the mechanisms that
+  keep a value out of state and plan files entirely, where the provider and version support them.
+- **Plan files are secrets files too.** A saved plan (`-out`) contains the configuration and values,
+  including sensitive ones. Plans attached to pull requests or stored as CI artifacts leak them.
+- **Values passed to the backend can land on disk.** Terraform's S3 backend docs warn that credentials
+  passed through `-backend-config` or hard-coded are written to the `.terraform` directory and to plan
+  files, and recommend environment variables instead.
+- **Vault-encrypted is not the same as safe.** Ansible Vault protects files at rest; the password file,
+  the decrypted values in memory, task output, and `-vvv` logs are where secrets escape. `no_log: true`
+  on tasks that handle secrets is how output is suppressed.
+- **Third-party content runs with your credentials.** Ansible collections and roles from Galaxy or git,
+  Terraform/OpenTofu modules from registries or git, and providers are code executed on the control
+  machine with every credential in its environment.
+- **The control machine is the crown jewel.** Whoever controls it (or the CI runner that applies IaC)
+  controls everything the inventories and providers reach.
+
+## Deployment variants
+
+| Variant | How to recognize it | What changes |
+|---|---|---|
+| **Workstation control node** | IaC repositories on the user's laptop; tools installed with a package manager, `pipx`, or a version manager. | The laptop's security, credential storage, and backups are part of the IaC trust boundary. Local state files likely. |
+| **Dedicated control host or VM** | A server that runs scheduled playbooks or applies; often has SSH keys to every host. | Its access control, patching, and network reach are critical. Check who can log in and what cron or timers run. |
+| **CI-driven** | `.github/workflows`, `.gitlab-ci.yml`, Jenkinsfile, or Forgejo workflows that run Ansible or Terraform. | CI secrets and runners hold the credentials (see [code-hosting-and-ci](../code-hosting-and-ci/SKILL.md)). Plan output in logs and PR comments matters. |
+| **Managed IaC service** (HCP Terraform / Terraform Cloud, Spacelift, env0, Ansible Automation Platform, AWX, Semaphore) | Remote runs; state and credentials stored in the service. | Assess the service's accounts, teams, variable sets, and run permissions; the vendor holds state. Self-hosted AWX or Semaphore are web apps with their own exposure (see [self-hosted-web-apps](../../web-apps/self-hosted-web-apps/SKILL.md)). |
+| **Remote state in object storage** | `backend "s3"`, `"gcs"`, `"azurerm"`, or an S3-compatible store (MinIO, NAS-hosted S3). | Bucket access policy, encryption, versioning, and locking are the controls. |
+| **Remote state in a database or HTTP backend** | `backend "pg"`, `"http"`, `"consul"`, or a self-hosted forge's Terraform state API (GitLab offers one). | That service's authentication and network exposure decide who reads state. |
+| **Local state only** | `terraform.tfstate` and `terraform.tfstate.backup` next to the configuration. | Check that they're not committed, synced to cloud drives unencrypted, or readable by other users. |
+
+## Detection
+
+Hints for recognizing this tooling on a machine or in a repository (used by the `full-assessment`
+skill). IaC tools have no listening ports of their own.
+
+- **Ansible:** `ansible`, `ansible-playbook`, `ansible-vault`, `ansible-galaxy` on `PATH`; `ansible.cfg`
+  (in the project, `~/.ansible.cfg`, or `/etc/ansible/ansible.cfg`), the `ANSIBLE_CONFIG` variable;
+  inventories (`hosts`, `inventory/`, `*.ini`, `*.yml` with `all:` and `hosts:`), `group_vars/`,
+  `host_vars/`, `requirements.yml`, `collections/` and `roles/` directories, `~/.ansible/collections`.
+  Vault files begin with `$ANSIBLE_VAULT;` (vendor-documented header).
+- **Terraform / OpenTofu:** `terraform` or `tofu` on `PATH`; `*.tf`, `*.tofu`, `*.tfvars`,
+  `*.auto.tfvars`, `.terraform/` directories, `.terraform.lock.hcl`, `terraform.tfstate` and
+  `terraform.tfstate.backup`, saved plan files (any name; often `*.tfplan` or `plan.out`),
+  `~/.terraformrc` or `terraform.rc` (CLI config, may hold registry tokens), and
+  `~/.terraform.d/credentials.tfrc.json` (stored by `terraform login`).
+- **Self-hosted IaC front ends:** AWX (web UI behind its own ingress), Ansible Semaphore (web UI on 3000
+  by default; observed, verify), Atlantis (web UI on 4141 by default; observed, verify). Confirm with the
+  user.
+- **Processes and schedules:** cron entries or systemd timers that call `ansible-playbook`, `ansible-pull`,
+  `terraform apply`, or `tofu apply`.
+
+---
+
+## Discover
+
+All operations in this mode are class **R** (read-only). Confirm scope and access first (core: operating
+principles). Mark anything you can't inspect **Not assessed**.
+
+### Baseline commands
+
+Read files and metadata; don't run the tools against real infrastructure. These are *candidate*
+read-only checks, each labeled. **Redact every secret** before recording output, and never print vault
+contents, state values, or plan contents in the report.
+
+```sh
+# Versions only (vendor-documented; no network or state access)
+ansible --version          # also prints which ansible.cfg is in use
+terraform version          # or: tofu version
+
+# Where secrets might be, without printing them (not yet verified for every layout)
+git ls-files | grep -Ei 'tfstate|tfplan|\.tfvars$|vault|secret|\.pem$|\.key$|id_(rsa|ed25519)$|kubeconfig'
+git log --all --name-only --format= | sort -u | grep -Ei 'tfstate|tfvars|vault_pass|\.pem$'
+grep -rLE '^\$ANSIBLE_VAULT;' group_vars host_vars 2>&1 | head   # files NOT vault-encrypted (review each)
+grep -rnE '^\s*(ansible_password|ansible_become_password|ansible_ssh_pass)\s*[:=]' . \
+  | sed -E 's/([:=]).*/\1 <redacted>/'                            # plain-text connection passwords
+
+# Ansible config that affects secret handling (read-only)
+ansible-config dump --only-changed     # vault_password_file, log_path, host_key_checking, become settings
+
+# Terraform/OpenTofu configuration review (read-only text search)
+grep -rnE 'backend "|encryption *\{|use_lockfile|dynamodb_table|encrypt *=' --include='*.tf' --include='*.tofu' .
+grep -rnE 'source *= *"(git::|github.com|https?://)' --include='*.tf' --include='*.tofu' .   # module sources
+grep -rnE 'version *= *"' --include='*.tf' .                                               # pinned or ranges
+grep -rnE 'sensitive *= *true|ephemeral|_wo *=' --include='*.tf' .
+
+# Local state and plan files: existence, size, permissions, age (never cat them)
+find . -name '*.tfstate*' -o -name '*.tfplan' | xargs ls -l 2>&1
+ls -l ~/.terraform.d/credentials.tfrc.json ~/.terraformrc 2>&1
+```
+
+- `terraform state list`, `terraform providers`, and `terraform show` on a remote backend contact the
+  backend and can need a lock; `terraform show` on a state or plan file prints values. Use them only with
+  approval, never on a production backend during someone else's run, and redact output.
+- `ansible-inventory --list` resolves dynamic inventory plugins (which call APIs with credentials) and
+  prints variables, including decrypted vault values if a vault password is available. Treat it as
+  sensitive and ask first.
+- Static analysis is read-only and useful: `ansible-lint`, `tflint`, `checkov`, `trivy config`,
+  `terrascan`. Their findings are candidates; validate each.
+
+**Never do any of these during Discover:**
+
+- Run `ansible-playbook` (with or without `--check`), `ansible-pull`, ad-hoc `ansible` commands against
+  hosts, `terraform`/`tofu` `init`, `plan`, `apply`, `refresh`, `import`, `state` mutations,
+  `force-unlock`, or `destroy`.
+- Decrypt vault files (`ansible-vault view` or `decrypt`), print state, or open plan files.
+- Install collections, roles, modules, or providers to inspect them; read them from the registry or
+  repository instead.
+- Change backend configuration, bucket policies, or lock tables.
+
+### Assessment domains
+
+Every domain must end with a status in the report (Pass / Finding / Not assessed / Not applicable /
+Accepted risk).
+
+#### A. Inventory and versions
+
+- Every IaC repository, control machine, CI pipeline, and managed service in scope, and what each
+  manages (servers, network gear, hypervisors, DNS, cloud accounts).
+- Tool versions vs. supported releases (ansible-core and Terraform/OpenTofu publish support windows),
+  and provider and collection versions vs. their advisories (core: triage).
+- Who can change each repository and run each pipeline.
+
+#### B. Ansible secrets: vault, inventories, and variables
+
+- Secrets in inventories, `group_vars`, `host_vars`, playbooks, or role defaults in plain text:
+  `ansible_password`, `ansible_become_password`, API tokens, database passwords, Wi-Fi keys, VPN keys.
+- Vault use: whole files encrypted, or `!vault` inline values; a split between `vars.yml` (names) and
+  `vault.yml` (values) so reviewers can see which variables exist.
+- Vault password handling: `vault_password_file` or `--vault-password-file` pointing to a plain-text file
+  (permissions? committed? synced?), a script that pulls it from a password manager or keychain (better),
+  or typed interactively. Vault IDs per environment, so a dev password doesn't open production.
+- `no_log: true` on tasks that handle secrets (user creation, API calls with tokens, template rendering
+  of secret files). Without it, secrets appear in output and callback logs.
+- `log_path` set in `ansible.cfg`, and callback plugins that ship output elsewhere (ARA, Splunk, chat),
+  combined with verbose runs: secrets in logs.
+- Templated files (`template:` tasks) that write secrets to managed hosts: destination permissions and
+  owner set explicitly.
+
+#### C. Ansible connection and privilege
+
+- How Ansible connects: SSH keys (where stored, passphrase-protected, agent forwarding off), password
+  authentication, WinRM with basic auth over HTTP (should be HTTPS with certificate validation or
+  Kerberos/NTLM per the Windows docs).
+- `host_key_checking = False` in `ansible.cfg` or `ANSIBLE_HOST_KEY_CHECKING=False`: disables SSH host
+  verification, so a spoofed host receives credentials.
+- `become`: which methods, to which users, and with what sudo rules on managed hosts. A remote user with
+  `NOPASSWD: ALL` everywhere is equivalent to root on every host for whoever holds the key. Prefer a
+  dedicated automation user per environment.
+- The automation SSH key: one key reaching every host, or separate keys per environment? Is its public
+  key restricted on targets (`from=` options, forced commands where practical)?
+- Dynamic inventory plugins and the cloud or hypervisor credentials they use (scope, storage).
+
+#### D. Ansible content supply chain
+
+- `requirements.yml`: collections and roles pinned to exact versions (or git commits), with sources
+  named. Unpinned entries install whatever is newest on each run.
+- Sources: Ansible Galaxy, Automation Hub, git repositories, tarballs. Galaxy content is community-
+  published; check publisher, repository, maintenance, and download history.
+- Signature verification: `ansible-galaxy collection install` can verify GPG signatures from a
+  distribution server with a keyring (`--keyring`, `--required-valid-signature-count`). It only applies
+  to collections from a distribution server, not git or tarballs. Check whether verification is
+  disabled (`--disable-gpg-verify` or `GALAXY_DISABLE_GPG_VERIFY`).
+- Vendored collections and roles committed to the repository: reviewed when updated?
+- Custom modules, plugins, lookups, and filters in the repository: they run on the control node with
+  full access.
+
+#### E. Terraform/OpenTofu state and plan files
+
+- Where state lives for each configuration (local, remote backend, managed service).
+- Local state or plan files committed to git, now or in history; synced to cloud drives; present on
+  shared machines; included in backups without encryption.
+- Remote state access: who and what can read the bucket, database, or HTTP backend. Read access to
+  state is read access to every secret in it.
+- Encryption at rest: S3 `encrypt` and `kms_key_id`, GCS customer-managed keys, Azure storage encryption,
+  HCP Terraform's built-in encryption. **OpenTofu client-side state and plan encryption** (an
+  `encryption` block in `terraform {}` or `TF_ENCRYPTION`, key providers such as `pbkdf2`, `aws_kms`,
+  `gcp_kms`, `azure_vault`, `openbao`, method `aes_gcm`, with `enforced = true` to refuse unencrypted
+  writes): in use where supported?
+- Versioning on state buckets (Terraform's S3 docs highly recommend it) for recovery from corruption or
+  malicious overwrite, and who can delete old versions.
+- Locking: S3 native locking (`use_lockfile`) or another backend's locking. DynamoDB-based locking for
+  the S3 backend is deprecated in current Terraform. No locking means concurrent applies can corrupt
+  state.
+- Which secrets are in state at all: generated passwords (`random_password`), private keys
+  (`tls_private_key`), database credentials, cloud access keys created by Terraform. Could they move to
+  ephemeral resources, write-only arguments, or a secrets manager?
+- Plan output: saved plans as CI artifacts, plan text posted to pull-request comments, and CI logs.
+  Sensitive values are redacted in human-readable plan output, but not in `-json` output or plan files.
+
+#### F. Provider and backend credentials
+
+- How each provider authenticates: environment variables, shared credential files (`~/.aws/credentials`
+  and similar), CLI sign-in caches, OIDC from CI, instance or workload identity, or credentials hard-coded
+  in `provider` blocks or `.tfvars` (a finding).
+- Scope of each credential versus what the configuration manages. A homelab DNS config with an
+  account-wide cloud admin key is a finding.
+- Backend credentials separate from provider credentials, and passed through environment variables, not
+  `-backend-config` files that end up in `.terraform/` and plan files.
+- `~/.terraform.d/credentials.tfrc.json` and CLI config files holding registry or HCP Terraform tokens:
+  permissions, scope, age.
+- Homelab providers (Proxmox, router, DNS, Cloudflare, Home Assistant): API tokens scoped to what the
+  configuration needs, not the root or admin account.
+
+#### G. Terraform/OpenTofu module and provider supply chain
+
+- Module sources: public registry, private registry, git (pinned with `?ref=` to a tag or, better, a
+  commit), local paths. Registry modules without a `version` constraint, or with wide ranges, pull new
+  code on `init -upgrade`.
+- Provider version constraints, and `.terraform.lock.hcl` committed (it records provider checksums;
+  missing or ignored lock files allow different binaries per run).
+- Provider and module provenance: official, partner, or community; maintenance; recent ownership
+  changes. A provider is a binary run with your cloud credentials.
+- Provider mirrors or `provider_installation` overrides in CLI config that point to unexpected sources.
+- External data sources and `local-exec`/`remote-exec` provisioners: arbitrary commands during plan or
+  apply (an `external` data source runs during plan).
+
+#### H. Pipelines and run permissions
+
+- Who can trigger an apply, and from which branches. Plans on pull requests from forks or untrusted
+  contributors run provider code and external data sources with whatever credentials the plan job has;
+  plan jobs need credentials limited to read where possible.
+- Separation between plan (read-mostly) and apply (write) credentials, and manual approval before apply.
+- Drift detection jobs and their credentials.
+- Managed services: team permissions, who can edit variables, and whether sensitive variables are marked
+  write-only in the service.
+
+#### I. Static analysis and policy
+
+- Linters and policy checks in CI (`ansible-lint`, `tflint`, `checkov`, `trivy config`, OPA/Conftest,
+  Sentinel) and whether failures block merges.
+- Results triaged, not just generated; suppressions reviewed.
+
+---
+
+## Recommend
+
+No changes are made in this mode. For each finding, produce a recommendation using the core finding
+template, including **Dependencies / blast radius** and the **operation class**.
+
+### Dependency and blast-radius check (required)
+
+- **Every host or account the IaC manages** is affected by a mistake in a remediation run. Changes to
+  inventories, become settings, or provider credentials can stop all automation or, worse, apply to the
+  wrong targets.
+- **State moves and backend changes** affect every configuration and person sharing the backend, and
+  every CI pipeline that reads it. A failed migration can leave state split or locked.
+- **Credential rotation** breaks every pipeline, workstation, and service that shares the credential.
+- **Vault re-keying** requires every user and pipeline to get the new password at the same time.
+- **Removing secrets from state** usually means changing resources (to write-only arguments or external
+  secret stores), which can recreate or update real infrastructure.
+
+### Recommendation guidance
+
+| Area | Typical recommendation | Consequences to explain |
+|---|---|---|
+| Plain-text secrets in inventories or vars | Move into Ansible Vault (vars/vault split), or look them up from a password manager or secrets store at runtime; rotate anything that was committed. | Vault password distribution; rotation breaks old copies. |
+| Vault password in a plain file | Use a vault password client script that reads from the OS keychain or a password manager. | Each user configures it once. |
+| Secret-handling tasks without `no_log` | Add `no_log: true`; avoid `-vvv` in CI. | Debugging those tasks gets harder. |
+| `host_key_checking = False` | Re-enable; distribute known host keys through inventory or a known-hosts file. | New hosts need their keys recorded first. |
+| One all-powerful automation key | Separate keys and users per environment; restrict sudo rules to what playbooks need. | Inventory and sudoers rework. |
+| Unpinned collections/roles/modules/providers | Pin exact versions or commits; commit `.terraform.lock.hcl`; update deliberately. | Manual update reviews. |
+| State or plan files in git | Rotate every secret in them; move state to an access-controlled, encrypted backend; add ignore rules; decide separately on history rewrite. | Migration effort; history rewrite affects clones. |
+| Remote state readable broadly | Restrict bucket/backend access to the IaC identities and admins; enable encryption and versioning; restrict version deletion. | Pipelines need explicit grants. |
+| No locking | Enable backend locking (`use_lockfile` for S3, or the backend's own). | Applies wait for each other; stuck locks need a documented unlock procedure. |
+| Secrets generated into state | Use ephemeral resources or write-only arguments where supported, or store the secret in a secrets manager and reference it. | Resource changes; possibly recreation. |
+| OpenTofu without state encryption | Enable state and plan encryption with a KMS or `pbkdf2` key provider and `enforced = true`. | Key management; losing the key loses the state. |
+| Hard-coded provider credentials | Use environment variables, OIDC from CI, or workload identity; scope tokens per configuration. | Every runner and workstation needs reconfiguration. |
+| Plans run on untrusted PRs with write credentials | Use read-only credentials for plan jobs; require approval for fork PRs; apply only from protected branches. | Slower contributor feedback. |
+| Plan output in PR comments or artifacts | Post summaries only; keep plan files short-lived, encrypted, and access-restricted. | Reviewers see less detail. |
+
+Group the plan: immediate containment (exposed state or plan files, committed credentials) → urgent fixes
+(over-privileged provider keys, broadly readable state, plans with write credentials on untrusted input)
+→ high-priority hardening (vault handling, host key checking, pinning, locking) → routine maintenance
+(updates, linting) → optional defense in depth (client-side state encryption, signature verification).
+Then ask for approval (core: modes and authorization).
+
+---
+
+## Remediate
+
+Apply only approved changes, one at a time, following the core rules. IaC specifics:
+
+- **Edit code, not infrastructure.** Remediation in this skill changes IaC files, backend settings, and
+  credentials. Running the changed automation against real hosts or accounts is a separate C2 step that
+  the user approves after reviewing the plan or a check-mode run, ideally run by the user.
+- **Back up state before any backend change.** Take a copy of the current state (store it as secret
+  material), confirm no one else is running, and use the tool's documented migration
+  (`terraform init -migrate-state` or the OpenTofu equivalent). Verify with a plan that shows no changes
+  before anyone applies again.
+- **Enabling OpenTofu state encryption** is C2: follow the vendor's migration path (an `unencrypted`
+  fallback during migration), store the key outside the backend, and confirm a fresh read decrypts before
+  removing the fallback. Losing the key loses the state.
+- **Vault re-keying** (`ansible-vault rekey`) is C1 for the files but C2 for the people and pipelines
+  using them; coordinate the new password's distribution before rekeying.
+- **Credential rotation:** create the new scoped credential, update the secret store or CI, run a
+  read-only check with it, then revoke the old one.
+- **Pinning:** pin to the versions currently in use first (no behavior change); update later as separate
+  reviewed changes, with a plan reviewed before any apply.
+- **Never edit state by hand** to remove a secret. Use the documented mechanisms (resource changes,
+  `state rm` only with a clear plan and a backup), and treat every state mutation as C2.
+
+After each change, follow the core "after a change" steps: confirm a plan shows no unintended changes,
+confirm pipelines still authenticate, and confirm the old credential no longer works.
+
+### Hard stops (refer to a specialist or do manually; never automate)
+
+- Running `apply`, `destroy`, or playbooks against real infrastructure as part of security remediation.
+- `terraform force-unlock` or deleting lock files or lock table entries while a run may be active.
+- Hand-editing state files, or `state rm`/`state mv`/`import` on production without a reviewed plan and
+  a state backup.
+- Deleting state buckets, old state versions, or the only copy of a vault password or encryption key.
+- Rewriting git history to remove committed state or vault passwords (rotate first; history rewrite is
+  the owner's separate decision).
+- Disabling host key checking, signature verification, or locking to get a run through.
+
+---
+
+## Respond
+
+On any P0 indicator, switch to Respond immediately. Follow the core playbook plus the IaC-specific steps
+in [incident-response.md](incident-response.md).
+
+---
+
+## Worked example (invented)
+
+### IAC-001: Terraform state with DNS provider and database credentials committed to a public repository
+
+**Confidence:** Confirmed
+**Priority:** P1. The state file holds a DNS provider API token with zone-edit rights and a generated
+database password. Anyone who finds the repository can redirect the user's domain or reach the database
+if it's exposed.
+**State:** Open
+**Component:** Terraform 1.x configuration with local state, in a public git repository
+**Evidence:** Observed 2026-10-22: `git ls-files` lists `terraform.tfstate` and
+`terraform.tfstate.backup`; `git log` shows both first committed eight months earlier. The repository is
+public. `grep` of the configuration shows `random_password` and a `provider "dns-example"` block reading
+`var.api_token`, set in `terraform.tfvars` (also tracked). Values were not printed. No `backend` block,
+so state is local.
+**Expected secure state:** state stored in an access-controlled, encrypted backend and never committed;
+secrets not stored in state where ephemeral values or write-only arguments are available (Terraform
+"Sensitive data in state" documentation).
+**Exposure and prerequisites:** anyone with internet access; the repository is indexed by code search.
+**Dependencies / blast radius:** the DNS token is also used by a certificate-renewal job on
+`192.0.2.40`; the database is used by two self-hosted apps.
+**Recommended remediation:** (1) rotate the DNS token (new token scoped to the one zone; update the
+renewal job; revoke the old token); (2) rotate the database password; (3) make the repository private
+while cleaning up; (4) move state to an encrypted, versioned, access-restricted backend with locking;
+(5) remove `terraform.tfstate*` and `terraform.tfvars` from the tree and add ignore rules; (6) let the
+owner decide on a history rewrite after rotation.
+**Operation class:** C2 (credential rotation and backend migration affect running services).
+**Approval required:** Yes.
+**Verification:** old DNS token rejected by the provider; renewal job succeeds with the new token;
+`terraform plan` against the new backend shows no changes; `git ls-files` shows no state or tfvars files.
+**Rollback:** the backend migration can be reversed from the state backup; credential rotation is not
+rolled back.
+
+---
+
+## Version history
+
+- **1.0** (2026-10-31): Initial version.

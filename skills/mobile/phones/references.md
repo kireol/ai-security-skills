@@ -1,9 +1,9 @@
-# Cell Phones: References
+# Phones and Tablets: References
 
 Always prefer current vendor documentation. Menu paths and feature names change between releases and
 makers; re-verify links and contents when updating this skill.
 
-Last verified: 2026-10-30
+Last verified: 2026-10-31
 
 ## Vendor (authoritative)
 
@@ -22,6 +22,11 @@ Last verified: 2026-10-30
 - Advanced Data Protection for iCloud (check regional availability): https://support.apple.com/108756
 - About alternative app distribution (regions, Apple's limited support): https://support.apple.com/118110
 - What to do before you sell, give away, or trade in your iPhone: https://support.apple.com/109511
+- Shared iPad overview (requires device management, organization-issued Managed Apple Accounts,
+  supervision, at least 32 GB; temporary sessions):
+  https://support.apple.com/guide/deployment/shared-ipad-overview-dep9a34c2ba2/web
+- Use Screen Time to manage your child's iPhone or iPad (Family Sharing or on the device):
+  https://support.apple.com/108806
 - Apple publishes product security support periods in its regulatory compliance statements (for example
   under the UK PSTI regime); find the statement for the model on Apple's regulatory pages.
 
@@ -40,6 +45,12 @@ Last verified: 2026-10-30
 - Google Account Security Checkup: https://myaccount.google.com/security-checkup
 - Google Advanced Protection Program (account level): https://landing.google.com/advancedprotection/
 - Family Link: https://families.google/familylink/
+- Pixel Tablet software updates (support dates for the tablet, separate from the phone page):
+  https://support.google.com/googlepixeltablet/answer/13399216
+- Delete, switch, or add users on your Pixel Tablet: https://support.google.com/googlepixeltablet/answer/13591529
+- Use or delete guests on a Pixel Tablet: https://support.google.com/googlepixeltablet/answer/13567147
+- About Google Kids Space (requires a Family Link-managed child account; multiple children on tablets
+  that support multiple users): https://support.google.com/kidsspace/answer/9990724
 
 ### Samsung
 
@@ -48,6 +59,8 @@ Last verified: 2026-10-30
 - Use Auto Blocker to protect apps and data on your Galaxy phone:
   https://www.samsung.com/us/support/answer/ANS10003636
 - Samsung Knox documentation: https://docs.samsungknox.com/
+- How do I add additional user accounts to my Galaxy tablet? (users and restricted profiles; the menu
+  is missing on some recent models): https://www.samsung.com/uk/support/mobile-devices/how-do-i-add-additional-user-accounts-to-my-galaxy-tablet/
 
 ### Cross-platform
 
@@ -87,6 +100,9 @@ the core documents.
   check against Google's current page:
   https://www.eff.org/deeplinks/2025/06/googles-advanced-protection-arrives-android-should-you-use-it
 - EFF Surveillance Self-Defense: https://ssd.eff.org/ . Plain-language guides; may lag product changes.
+- News report that Pixel Tablet Android version updates were extended to June 2028 (January 2026):
+  https://9to5google.com/2026/01/29/google-gives-pixel-tablet-another-two-years-of-android-os-updates/ ;
+  confirm on Google's Pixel Tablet updates page.
 - News reports that Stolen Device Protection is on by default from iOS 26.4 (for example
   https://9to5mac.com/2026/02/16/ios-26-4-will-activate-key-theft-prevention-feature-on-all-iphones/);
   confirm on the device.

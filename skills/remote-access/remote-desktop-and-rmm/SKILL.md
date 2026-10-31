@@ -1,0 +1,411 @@
+---
+name: remote-desktop-and-rmm
+description: >-
+  Security assessment, hardening, remediation, and incident response for self-hosted remote desktop
+  gateways and remote monitoring and management (RMM) tools: Apache Guacamole, RustDesk (clients and
+  self-hosted hbbs/hbbr servers), MeshCentral, and Tactical RMM. Also covers finding remote-access tools
+  that nobody authorized. Use when auditing one of these tools, deciding whether it is safe to expose,
+  reviewing its admin accounts, MFA, agents, stored connection credentials, script features, and API
+  keys, or when a remote-access tool may have been abused or installed by an attacker.
+license: CC-BY-4.0
+metadata:
+  version: "1.0"
+  last_reviewed: "2026-10-31"
+  applies_to: "Apache Guacamole 1.5 and later, RustDesk client and server (OSS and Pro), MeshCentral, Tactical RMM (verify the live version of each)"
+  audience: "home, work, homelab"
+  finding_prefix: "RMM"
+  modes: "discover, recommend, remediate, respond"
+---
+
+# Remote Desktop and RMM Security
+
+Act as a careful, evidence-driven endpoint-management security engineer. A remote desktop gateway or RMM
+server gives its administrators **full interactive and scripted control of every endpoint it reaches**,
+usually as SYSTEM or root, from anywhere, often while bypassing the endpoint's own login and MFA. Treat
+it like domain admin: the server, its admin accounts, its API keys, and its agent-signing keys are among
+the most valuable things on the network. Identify, explain, prioritize, remediate (only when
+authorized), and verify weaknesses, and treat **any remote-access tool nobody can account for as a
+possible incident**, because attackers install exactly these tools for persistence.
+
+## How to use this skill
+
+This skill holds only remote-desktop- and RMM-specific guidance. It builds on the shared core, which
+always applies:
+
+| Core document | Covers |
+|---|---|
+| [modes-and-authorization.md](../../../core/modes-and-authorization.md) | The four modes, transitions, operation classes (R/C1/C2/C3), standing authorization |
+| [operating-principles.md](../../../core/operating-principles.md) | Principles, capability discovery, scope, communication, untrusted data |
+| [vulnerability-triage.md](../../../core/vulnerability-triage.md) | Lifecycle, CVE/KEV validation, P0–P4 priority scale |
+| [evidence-and-reporting.md](../../../core/evidence-and-reporting.md) | Evidence labels, statuses, finding template, report format, cadence |
+| [tool-use-contract.md](../../../core/tool-use-contract.md) | Rules for commands, APIs, MCP tools, and third-party integrations |
+| [reporting-protocol.md](../../../core/reporting-protocol.md) | Optional live progress reporting to a dashboard |
+| [incident-response.md](../../../core/incident-response.md) | The generic Respond playbook |
+
+RMM-specific Respond steps are in [incident-response.md](incident-response.md). Vendor documentation and
+advisories are in [references.md](references.md).
+
+Related skills: endpoints with [windows](../../operating-systems/windows/SKILL.md),
+[macos](../../operating-systems/macos/SKILL.md), and [linux](../../operating-systems/linux/SKILL.md); the
+server's container with [docker](../../containers/docker/SKILL.md); the reverse proxy and TLS with
+[web-servers](../../web/web-servers/SKILL.md); public exposure through
+[cloudflare](../../edge/cloudflare/SKILL.md) or [tunnels](../../edge/tunnels/SKILL.md); VPN alternatives
+with [vpn-servers](../../network/vpn-servers/SKILL.md); and MFA choices with
+[mfa](../../identity/mfa/SKILL.md).
+
+## RMM-specific principles
+
+- **Admin of the tool equals admin of every endpoint.** Score findings on the server by what it controls,
+  not by what the web UI looks like. An internet-reachable RMM login with a weak or shared password is a
+  critical finding even if nothing has happened yet.
+- **The tool may bypass endpoint defenses.** Agents run as services with the highest privileges;
+  sessions may skip the endpoint's lock screen, MFA, and user consent. API keys may bypass the tool's own
+  MFA (Tactical RMM documents this for its API keys).
+- **Server keys are trust anchors.** RustDesk's server key pair and MeshCentral's server certificates
+  decide which server agents trust. Whoever has those private keys can impersonate the server, and losing
+  them can strand every agent. Protect and back them up; never print them.
+- **Stored credentials are a target.** Guacamole and similar gateways can store the username and password
+  for every RDP, SSH, and VNC connection. Whoever reads its database or admin UI can collect them all.
+- **Unknown remote tools are an incident sign.** Attackers and scammers use legitimate remote-access
+  software (CISA's advisory AA23-025A describes this). An AnyDesk, RustDesk, ScreenConnect, TeamViewer,
+  MeshAgent, or similar install that no one authorized is a P0 indicator until explained.
+- **Never open sessions or run scripts to test.** Connecting to an endpoint or running a script through
+  the tool is a real action on a real machine, often visible to its user. Discover reads configuration
+  and logs only.
+
+## Deployment variants
+
+| Variant | How to recognize it | What changes |
+|---|---|---|
+| **Apache Guacamole** (web app plus `guacd`, usually with a database) | Web UI at `/guacamole/` on Tomcat (8080) or behind a proxy; `guacd` on 4822; containers `guacamole/guacamole` and `guacamole/guacd`. | Clientless gateway: it holds the connections and often their credentials. Extensions add database auth, TOTP, SSO, LDAP, and brute-force banning. `guacd` has no authentication of its own. |
+| **RustDesk with public servers** | Client installed; ID/relay server settings empty (defaults to RustDesk's public servers). | Traffic is brokered by infrastructure the user doesn't control. Exposure depends on client settings (permanent password, unattended access, direct IP access). |
+| **RustDesk with self-hosted OSS server** | `hbbs` and `hbbr` on a server (ports 21115–21119); clients configured with the server address and public key. | The server brokers IDs and relays traffic; OSS has no user accounts or central access control. Key pair on the server is the trust anchor. |
+| **RustDesk Server Pro** | Web console and API on 21114 or behind HTTPS. | Adds accounts, 2FA, OIDC/LDAP, access control, and address books; assess those as an admin console. |
+| **MeshCentral** (standalone) | Web UI on 443 (and 80 for redirects or Let's Encrypt); Intel AMT MPS on 4433; Node.js app with `meshcentral-data`. | Multi-tenant server with device groups, agents on endpoints, remote desktop, terminal, file transfer, and Intel AMT management. |
+| **Tactical RMM** (with its bundled MeshCentral) | Three hostnames on one server (frontend, API, mesh) on 443; agents running Tactical RMM and Mesh agents. | Scripts, scheduled tasks, web terminal, and automation policies across all agents; MeshCentral provides remote desktop. The bundled MeshCentral is an admin surface too. |
+| **Container or appliance** | Official or community images, a NAS app, a VPS template. | Default credentials, key locations, and update paths follow the image; check its docs as well as the product's. |
+| **Unauthorized remote tool** | A remote-access client or agent on an endpoint that the owner didn't install or can't explain. | Go to Respond. |
+
+## Detection
+
+Hints for recognizing this product during a network inventory (used by the `full-assessment` skill).
+Defaults can be changed, so confirm with the user before relying on a match.
+
+- **Apache Guacamole:** HTTP on 8080 (Tomcat) with a login page titled "Guacamole" at `/guacamole/`;
+  `guacd` on 4822/TCP (should be reachable only from the web app).
+- **RustDesk server:** `hbbs` on 21115/TCP (NAT test), 21116/TCP and UDP (ID registration and hole
+  punching), 21118/TCP (web client WebSocket); `hbbr` on 21117/TCP (relay) and 21119/TCP (WebSocket);
+  Pro API and web console on 21114/TCP. **RustDesk client** with direct IP access enabled listens on
+  21118/TCP on the endpoint (verify for the installed version).
+- **MeshCentral:** HTTPS on 443 with a page titled "MeshCentral" (or a custom title), HTTP on 80, Intel
+  AMT MPS on 4433; the TLS certificate is self-signed with a MeshCentral name unless replaced.
+- **Tactical RMM:** HTTPS on 443 serving a Vue frontend titled "Tactical RMM" on the frontend hostname, a
+  Django API on the API hostname, and MeshCentral on the mesh hostname; MeshCentral listens internally on
+  4430.
+- **On endpoints:** services or processes named for the agent (MeshAgent, Tactical RMM Agent, RustDesk,
+  and other vendors' agents), and outbound connections to the server or vendor relays.
+- MAC address vendors don't help: these run on general-purpose servers, VMs, and containers.
+
+---
+
+## Discover
+
+All operations in this mode are class **R** (read-only). Confirm scope and access first (core: operating
+principles). Mark anything you can't inspect **Not assessed**.
+
+### Baseline commands
+
+Prefer the tool's admin UI (viewed by the user or with read-only access), configuration files read on
+the server, and endpoint inventories. These are *candidate* read-only commands, **not yet verified** for
+every version; check each exists first.
+
+```sh
+# Server side
+docker ps --format '{{.Names}}\t{{.Image}}\t{{.Ports}}'          # images and published ports
+ss -tlnup                                                         # listeners (TCP and UDP)
+curl -s -o /dev/null -w '%{http_code}\n' http://<host>:8080/guacamole/   # Guacamole answers?
+ls -l <rustdesk-data-dir>/id_ed25519*                             # key files exist; check permissions only
+ls -l <meshcentral-dir>/meshcentral-data/                         # data folder ownership and permissions
+
+# Endpoints: look for remote-access tools (examples; extend to the vendors that matter)
+# Windows (PowerShell)
+Get-Service | Where-Object { $_.DisplayName -match 'Mesh|Tactical|RustDesk|AnyDesk|TeamViewer|ScreenConnect|Splashtop|Atera|NetSupport|SimpleHelp' }
+Get-CimInstance Win32_Product | Select-Object Name, Version, InstallDate   # slow; or read the Uninstall registry keys
+# macOS / Linux
+ls /Library/LaunchDaemons /Library/LaunchAgents ~/Library/LaunchAgents 2>&1 | grep -i -E 'mesh|rustdesk|anydesk|teamviewer|screenconnect'
+systemctl list-units --type=service | grep -i -E 'mesh|rustdesk|tactical'
+```
+
+- **Config files and databases hold secrets.** Guacamole's `guacamole.properties` (database and SSO
+  secrets) and its database (connection passwords); RustDesk's private key `id_ed25519`; MeshCentral's
+  `config.json` (session keys, SMTP and Duo secrets) and the certificate private keys in
+  `meshcentral-data`; Tactical RMM's `local_settings.py` and database. Read for structure and settings;
+  never print keys or passwords.
+- **Never** during Discover: log in with default or guessed credentials; complete a first-account signup;
+  open a remote session, terminal, or file browser to any endpoint; run scripts or tasks; install,
+  uninstall, or update agents; generate install links, invite codes, or API keys; or uninstall a remote
+  tool you found (that's Respond, and evidence comes first).
+
+### Assessment domains
+
+Every domain must end with a status in the report (Pass / Finding / Not assessed / Not applicable /
+Accepted risk). Assess each tool separately; then domain I across all endpoints.
+
+#### A. Inventory, versions, and lifecycle
+
+- Which remote-access tools exist: gateways, RMM servers, and every client or agent on endpoints. Which
+  are authorized and who owns each.
+- Versions of server and agents vs. the latest release and each project's security advisories (core:
+  triage). Guacamole, MeshCentral, and Tactical RMM publish advisories through their sites or GitHub
+  security pages; RustDesk through its GitHub repositories.
+- How the server and agents update: the tool's self-update, container images, packages, or never.
+  MeshCentral and Tactical RMM can update agents from the server, which is convenient and also a
+  fleet-wide software push channel.
+- Tools nobody uses any more, and agents left on retired or sold machines.
+
+#### B. Administration and authentication
+
+- **Guacamole:** with database authentication, the vendor schema creates a default administrator
+  `guacadmin` with password `guacadmin`. Ask whether it was changed, and whether a named admin replaced it
+  and `guacadmin` was disabled or removed. Never test by logging in. Check for the TOTP extension (or
+  SSO with MFA) and, on 1.6 and later, whether TOTP is disabled for any user or group; check the
+  brute-force ban extension or a proxy rate limit.
+- **MeshCentral:** if a server has no accounts, the first account created becomes the site administrator.
+  Check that setup is complete, that `newAccounts` (self-registration) is disabled in each domain unless
+  wanted, which users are site administrators, and whether two-factor authentication is required
+  (`force2factor` or the domain's equivalent; verify option names on the installed version). Login
+  rate limiting (`maxInvalidLogin` settings).
+- **Tactical RMM:** users, roles, and who has superuser rights; TOTP for every user (the install
+  requirements list an authenticator app); SSO configuration if used; the Django admin URL setting.
+- **RustDesk Pro:** console users, 2FA, OIDC/LDAP, and access-control rules. **RustDesk OSS:** there are no
+  server-side user accounts; anyone who knows the server address and public key can register with it and
+  use its relay (verify for the installed version).
+- Shared admin accounts, admins also used for daily work, accounts of people who left.
+- Session and idle timeouts on the admin UI.
+
+#### C. Exposure and the path in
+
+- Where each server listens and who can reach it: LAN only, VPN, a reverse proxy with an auth layer, or
+  directly on the internet.
+- **Internet-exposed RMM consoles** are common (agents in other places need to reach the server). Agents
+  need the agent endpoints; the admin UI rarely needs to be public. Where the tool supports it, restrict
+  admin login by source (MeshCentral `userAllowedIP` and `agentAllowedIP`, documented by Tactical RMM's
+  Mesh integration page).
+- **Guacamole's `guacd`** (4822) must not be reachable by anything other than the Guacamole web app.
+- **RustDesk server ports:** 21115–21117 are the minimum; RustDesk documents that the WebSocket ports
+  21118 and 21119 don't validate forwarded headers, so they should be closed unless the web client is
+  used, and then reachable only from the proxy.
+- TLS: real certificates on the admin UI and agent endpoints; no `--insecure` installs (Tactical RMM warns
+  that these disable certificate validation for agent traffic).
+- Behind a proxy: whether the tool trusts forwarded client addresses correctly (Guacamole's TOTP host
+  rules and ban extension depend on the real client IP).
+
+#### D. Agents and endpoint enrollment
+
+- How agents are installed: install links, invite codes, deployment tokens, or packages with embedded
+  server details. Whether those links and tokens expire and who can create them. A non-expiring install
+  link lets anyone add a machine to the tool, or tricks a victim into joining one.
+- Agent privileges: Mesh agents, Tactical RMM agents, and RustDesk's service run as SYSTEM or root.
+- **User consent and notification:** MeshCentral device-group consent and notification settings (prompt
+  the user, show a bar during sessions); RustDesk's approve mode (password, click, or both); Tactical RMM
+  Take Control prompts. Unattended access without notice may be fine on servers and wrong on family or
+  staff machines.
+- Agents that report to a server the owner doesn't recognize (a second MeshCentral or Tactical RMM server,
+  a RustDesk ID server that isn't theirs). That's domain I.
+
+#### E. RustDesk client settings
+
+- **Permanent password** set for unattended access: unique and long, or not set at all where unattended
+  access isn't needed (one-time passwords instead).
+- Approve mode and whether connections must be accepted on screen.
+- Direct IP access enabled (listens on the endpoint) and LAN discovery.
+- Which ID/relay server the client uses and whether the server key is configured (a client pointed at a
+  self-hosted server without the key may not verify the server; verify behavior for the installed
+  version).
+- Settings locked against change by the user where the deployment requires it (Pro custom clients).
+- Whether the ID and password are written down somewhere shared (a note, a label on the machine).
+
+#### F. Stored credentials and secrets
+
+- **Guacamole:** connections with stored usernames and passwords (in the database's connection
+  parameters); whether credential pass-through (`${GUAC_USERNAME}`/`${GUAC_PASSWORD}` tokens) or prompting
+  could replace stored passwords; who can read the database; and which users can view or edit connection
+  parameters (administer or update permissions on a connection reveal them).
+- **MeshCentral:** SMTP, SMS, Duo, and other integration secrets in `config.json`; login tokens; Intel AMT
+  admin passwords stored for devices.
+- **Tactical RMM:** API keys (each inherits its user's role, and Tactical RMM documents that API keys
+  bypass 2FA), the mesh superuser token, script arguments and environment variables holding passwords,
+  global key store entries.
+- **RustDesk server:** private key file permissions; who can read the data directory and backups.
+- File permissions on data directories and backups; secrets in compose files or git.
+
+#### G. Scripts, automation, and the execution surface
+
+- **Tactical RMM:** the script library (who can add or edit scripts), scheduled tasks and automation
+  policies applied to all agents, the web terminal, and bulk actions. Community scripts imported without
+  review.
+- **MeshCentral:** run-commands features, terminal and file access per device group, plugins installed on
+  the server, and agent auto-update.
+- **Guacamole:** which connections exist and to what (an SSH connection to a hypervisor or a firewall is a
+  path to it); sharing profiles that let a user hand a live session to someone else.
+- Who can do each of these, and whether it's logged.
+
+#### H. Logging, recording, and server protection
+
+- Session logs and connection history (Guacamole connection history, MeshCentral events, Tactical RMM
+  audit log, RustDesk Pro audit) retained and, ideally, forwarded off the server
+  ([logging-and-siem](../../monitoring/logging-and-siem/SKILL.md)).
+- Session recording where required (Guacamole supports recording; consider privacy and storage).
+- Alerts on new admin users, new API keys, new agents, and logins from new locations.
+- Backups of the server: database, configuration, and **the key material agents trust** (RustDesk key
+  pair, MeshCentral `meshcentral-data` certificates). Losing them can strand every agent; leaking them
+  lets someone impersonate the server. Encrypted, off-host, access-restricted.
+- Host hardening and container privileges (assess with the OS and Docker skills); MeshCentral's vendor
+  guide recommends running it as a dedicated low-privilege user.
+
+#### I. Unauthorized or unexpected remote-access tools (fleet-wide)
+
+- On every endpoint in scope, list remote-access software: installed programs, services, launch
+  daemons/agents, scheduled tasks, browser extensions with remote control, and portable executables in
+  user folders (CISA notes portable RMM tools run without installation or admin rights).
+- For each: who installed it, when, which account or server it reports to, and whether it's on the
+  approved list.
+- Outbound connections from endpoints to remote-access vendors' relays that no approved tool explains.
+- Any unexplained tool is a **P0 indicator**: switch to Respond, preserve evidence first, and don't
+  uninstall it yet.
+
+---
+
+## Recommend
+
+No changes are made in this mode. For each finding, produce a recommendation using the core finding
+template, including **Dependencies / blast radius** and the **operation class**.
+
+### Dependency and blast-radius check (required)
+
+- **People who rely on remote access:** family members helped remotely, staff, the owner traveling. Any
+  change to exposure or MFA needs their new path ready first.
+- **Agents in other places:** restricting the server to a VPN or LAN strands agents that connect from
+  elsewhere unless agent endpoints stay reachable.
+- **Integrations:** Tactical RMM depends on its MeshCentral; scripts and dashboards use API keys;
+  Guacamole may depend on an SSO provider or LDAP.
+- **Trust anchors:** changing RustDesk keys or MeshCentral certificates requires reconfiguring or
+  reinstalling every client or agent.
+- **Endpoints' own access paths:** removing stored Guacamole credentials or an RMM agent can remove the
+  only remote path to a headless machine; confirm another exists.
+
+### Recommendation guidance
+
+| Area | Typical recommendation | Consequences to explain |
+|---|---|---|
+| Admin UI on the internet | Put it behind a VPN or an authenticating proxy with MFA; restrict admin login by source where supported; leave only agent endpoints public if needed. | Admins need the VPN or SSO first; test agents still connect. |
+| Default `guacadmin` possibly unchanged | Create and test a named admin, then disable or delete `guacadmin`; the user sets passwords. | Bookmarks and scripts using it break. |
+| No MFA on admin accounts | Enable TOTP (Guacamole extension, MeshCentral, Tactical RMM, RustDesk Pro) or SSO with MFA; store recovery codes offline. | Users enroll an authenticator; lockout risk if recovery isn't planned. |
+| MeshCentral self-registration on | Disable `newAccounts`; create users explicitly. | Nobody can sign themselves up. |
+| API keys with admin scope | Create keys for least-privilege users, rotate, record owners; remove unused ones. | Scripts using old keys must be updated. |
+| Stored connection passwords in Guacamole | Use credential pass-through or prompting where possible; limit who can edit connections; protect the database. | Users type credentials, or use their own. |
+| `guacd` or RustDesk WebSocket ports reachable | Bind `guacd` to the internal network; close 21118/21119 unless the web client is used through a proxy. | None for normal use. |
+| RustDesk permanent password weak or unneeded | Long unique password, or remove it and use one-time passwords with on-screen approval. | Unattended access needs the new password, or stops. |
+| RustDesk on public servers for a business | Self-host hbbs/hbbr (or Pro) with the key configured on clients. | Server to run; clients reconfigured. |
+| Non-expiring install links or tokens | Use expiring deployment links; revoke old ones. | New installs need a fresh link. |
+| Unattended access without consent on personal machines | Enable consent prompts and session notification for those device groups. | Helper must wait for the user to accept. |
+| Scripts editable by many users | Limit script editing to a small admin group; review imported scripts. | Fewer people can automate. |
+| No off-host logs or key backup | Forward session and audit logs; back up keys and database encrypted, off-host. | Backups are sensitive; protect them. |
+| Unused tool or stale agents | Uninstall from endpoints and remove from the server; shut down unused servers. | Lost access to those machines if still needed. |
+| Unexplained remote tool on an endpoint | Respond: preserve evidence, isolate, then remove. | See [incident-response.md](incident-response.md). |
+
+Non-standard ports and obscure hostnames are supplementary only. Never recommend them as the main fix for
+an exposed RMM console.
+
+Group the plan: immediate containment (unexplained tools, exposed consoles with default or weak
+credentials) → urgent fixes (MFA, default accounts, self-registration, admin-scope API keys) →
+high-priority hardening (exposure, consent, stored credentials, script permissions) → routine
+maintenance (updates, stale agents, logs, backups) → optional defense in depth (session recording,
+source restrictions). Then ask for approval (core: modes and authorization).
+
+---
+
+## Remediate
+
+Apply only approved changes, one at a time, following the core rules. RMM specifics:
+
+- **Back up first:** the database, configuration, and key material (RustDesk key pair, MeshCentral
+  `meshcentral-data`), encrypted and off-host, before any change or update.
+- **Keep a second way in.** Before changing exposure, MFA, or admin accounts, confirm the user can reach
+  the server another way (console, SSH, a second admin session) and can reach critical endpoints without
+  this tool.
+- **Admin accounts and MFA:** the user creates admin accounts, sets passwords, and enrolls MFA; the agent
+  guides. Test the new admin in a separate session before disabling the old one.
+- **Exposure changes are C2:** add the VPN or auth layer, confirm admins and agents work, then close the
+  public path. Watch for agents going offline.
+- **Never rotate the server's agent-trust keys** (RustDesk key pair, MeshCentral agent certificate) as a
+  routine hardening step. It's a fleet migration: plan it, and do it only when keys are known exposed.
+- **Agent removal** uses the tool's documented uninstall, one endpoint at a time; confirm another access
+  path to headless machines first.
+- **Updates:** read release notes; for Tactical RMM use the vendor's update script; for MeshCentral follow
+  the documented update method for the install type. Agent auto-update pushes to every endpoint; consider
+  a test group first.
+
+After each change, follow the core "after a change" steps: confirm admins can log in with MFA, agents
+report, the closed path is closed (test from outside), consent prompts appear where configured, and
+record before and after.
+
+### Hard stops (refer to a specialist or do manually; never automate)
+
+- Logging in with default or guessed credentials, or completing first-account setup.
+- Opening remote sessions, terminals, or file transfers to endpoints, or running scripts or tasks through
+  the tool, as part of an assessment.
+- Mass-uninstalling agents or pushing agent updates fleet-wide without a tested rollout.
+- Rotating or replacing server trust keys or certificates without a planned migration.
+- Removing an unexplained remote tool before evidence is preserved (see Respond).
+- Editing the tool's database directly to change users, permissions, or stored credentials.
+
+---
+
+## Respond
+
+On any P0 indicator, including an unexplained remote-access tool on any endpoint, switch to Respond
+immediately. Follow the core playbook plus the RMM-specific steps in
+[incident-response.md](incident-response.md).
+
+---
+
+## Worked example (invented)
+
+### RMM-001: Guacamole login reachable from the internet without MFA, holding stored admin credentials for every server
+
+**Confidence:** Confirmed
+**Priority:** P1. One guessed or phished password gives an internet attacker interactive sessions on the
+hypervisor, the firewall, and four servers, using credentials stored in Guacamole; there is no second
+factor and no brute-force protection.
+**State:** Open
+**Component:** Apache Guacamole (version as shown on the login page) in containers with database
+authentication, published through a reverse proxy at `remote.example.com`
+**Evidence:** Observed 2026-05-20: the proxy routes `remote.example.com` to the Guacamole container with no
+auth middleware; with approval, a request from `203.0.113.40` returned the Guacamole login page (HTTP 200).
+The extensions directory contains only the database extension (no TOTP, no SSO, no ban extension). The
+user reported that six connections (SSH to the hypervisor and firewall, RDP to four servers) store admin
+usernames and passwords. Guacamole documentation describes the TOTP extension and brute-force blocking
+(vendor-documented).
+**Expected secure state:** reachable only via VPN or through an authenticating proxy with MFA; TOTP
+enforced for every user; brute-force blocking on; no stored admin passwords, or the minimum needed.
+**Exposure and prerequisites:** anyone on the internet with one valid Guacamole username and password.
+**Dependencies / blast radius:** the owner uses it from a work laptop where a VPN client isn't allowed;
+two family members use one RDP connection.
+**Recommended remediation:** add the existing SSO forward-auth with MFA in front of the route (or move it
+behind the VPN), install the TOTP and ban extensions, replace stored passwords on the hypervisor and
+firewall connections with prompting, and rotate those six passwords at the targets.
+**Operation class:** C1 per step for the proxy and extension changes (container restart); C2 for password
+rotation on the hypervisor and firewall.
+**Approval required:** Yes.
+**Verification:** an external request is redirected to SSO; after SSO, Guacamole asks for a TOTP code;
+repeated bad logins are banned; the hypervisor connection prompts for credentials; old passwords are
+rejected at each target.
+**Rollback:** restore the captured proxy route and extensions directory (not recommended; keep MFA even if
+other steps are rolled back).
+
+---
+
+## Version history
+
+- **1.0** (2026-10-31): Initial version.

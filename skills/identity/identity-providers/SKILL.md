@@ -1,0 +1,478 @@
+---
+name: identity-providers
+description: >-
+  Security assessment, hardening, remediation, and incident response for self-hosted single sign-on and
+  identity providers in homelabs and small offices: Authentik, Authelia, and Keycloak. Use when reviewing
+  admin console exposure, bootstrap and admin accounts, outposts and forward-auth integration with
+  reverse proxies (Traefik, nginx, Caddy, Nginx Proxy Manager), access-control rules, OIDC and SAML
+  clients (client secrets, redirect URI validation, PKCE), session and 2FA policy, password reset and
+  enrollment flows, LDAP or Active Directory sources, secrets and signing keys, backups, and updates, or
+  when an identity provider or the apps behind it may have been compromised.
+license: CC-BY-4.0
+metadata:
+  version: "1.0"
+  last_reviewed: "2026-10-31"
+  applies_to: "Authentik (supported release lines), Authelia 4.x, and Keycloak (current releases, Quarkus-based distribution), self-hosted in containers, VMs, or Kubernetes; configuration keys, defaults, and admin UI layouts change between releases, so verify on the live system and the version's documentation"
+  audience: "homelab, work, web"
+  finding_prefix: "IDP"
+  modes: "discover, recommend, remediate, respond"
+---
+
+# Self-Hosted Identity Provider Security
+
+Act as a careful identity and access engineer. A self-hosted identity provider (IdP) decides who gets into
+every application behind it, so it is the highest-value target in a homelab: one weak admin account,
+permissive access rule, open enrollment flow, leaked signing key, or bypassable forward-auth route opens
+every protected app at once, and an outage locks everyone out of all of them. Identify, explain,
+prioritize, remediate (only when authorized), and verify weaknesses in the IdP's administration, exposure,
+reverse-proxy integration, clients, policies, and recovery, without locking out the people and services
+that depend on it.
+
+## How to use this skill
+
+This skill holds only identity-provider-specific guidance. It builds on the shared core, which always
+applies:
+
+| Core document | Covers |
+|---|---|
+| [modes-and-authorization.md](../../../core/modes-and-authorization.md) | The four modes, transitions, operation classes (R/C1/C2/C3), standing authorization |
+| [operating-principles.md](../../../core/operating-principles.md) | Principles, capability discovery, scope, communication, untrusted data |
+| [vulnerability-triage.md](../../../core/vulnerability-triage.md) | Lifecycle, CVE/KEV validation, P0–P4 priority scale |
+| [evidence-and-reporting.md](../../../core/evidence-and-reporting.md) | Evidence labels, statuses, finding template, report format, cadence |
+| [tool-use-contract.md](../../../core/tool-use-contract.md) | Rules for commands, APIs, MCP tools, and third-party integrations |
+| [reporting-protocol.md](../../../core/reporting-protocol.md) | Optional live progress reporting to a dashboard |
+| [incident-response.md](../../../core/incident-response.md) | The generic Respond playbook |
+
+IdP-specific Respond steps are in [incident-response.md](incident-response.md). Vendor documentation and
+advisories are in [references.md](references.md).
+
+Related skills: the reverse proxy that enforces forward-auth in
+[web-servers](../../web/web-servers/SKILL.md); the apps behind it in
+[self-hosted-web-apps](../../web-apps/self-hosted-web-apps/SKILL.md); the container platform in
+[docker](../../containers/docker/SKILL.md); Cloudflare Access as an alternative or outer layer in
+[cloudflare](../../edge/cloudflare/SKILL.md); factor choice (WebAuthn, TOTP, Duo, push) in
+[mfa](../mfa/SKILL.md); SSO into a self-hosted vault in
+[password-managers](../password-managers/SKILL.md); cloud identity (Google Workspace, Microsoft 365) as an
+upstream source in [productivity-suites](../../cloud/productivity-suites/SKILL.md).
+
+## IdP-specific principles
+
+- **The IdP is tier zero.** Anyone who is an IdP administrator, can read its database or secrets, can
+  write its configuration files, or controls the host or the Docker socket it uses, can sign in as any
+  user to every connected app. Treat all of those as admin access, and assess them first.
+- **Forward-auth only protects what the proxy sends through it.** With forward-auth (Authelia, Authentik
+  proxy outposts, oauth2-proxy), the reverse proxy asks the IdP before forwarding each request. A route
+  without the middleware, a second published port that reaches the app directly, a path or host the rule
+  doesn't match, or an app that trusts identity headers from anyone, bypasses the IdP entirely. Always
+  check the app is unreachable except through the proxy.
+- **Never trust identity headers from the client.** Apps that read `Remote-User`, `X-authentik-username`,
+  or similar headers must only receive them from the proxy, and the proxy must strip any client-supplied
+  copies. An app reachable directly, or a proxy that passes through client headers, lets anyone claim to be
+  any user.
+- **Redirect URIs are part of authentication.** An OIDC or SAML client with a wildcard, prefix, or
+  attacker-controllable redirect URI lets a phishing link deliver authorization codes or tokens to the
+  wrong place. Exact-match redirect URIs, PKCE, and confidential clients with protected secrets are the
+  baseline.
+- **Secrets here sign everyone's sessions.** Authentik's secret key, Authelia's session, storage
+  encryption, and identity-validation secrets, Keycloak's realm signing keys, and OIDC client secrets let
+  whoever holds them forge or decrypt sessions and tokens. Record that they exist and how they're stored;
+  never print their values.
+- **Availability is security.** If the IdP is down, every app behind it is down, including, often, the
+  admin tools needed to fix it. Keep a documented break-glass path (console access, a local admin, a
+  bootstrap or recovery command) that doesn't depend on the IdP itself.
+- **Flows and policies are code.** Authentik flows and stages, Authelia access-control rules (first match
+  wins), and Keycloak authentication flows and required actions decide who gets in. A small edit to a
+  default flow can disable MFA, enable self-registration, or skip password checks for everyone. Read
+  them as carefully as firewall rules.
+- **Don't test with real users' credentials.** Use a dedicated test account created for the assessment,
+  with the user's approval, and remove it afterward.
+
+## Deployment variants
+
+| Variant | How to recognize it | What changes |
+|---|---|---|
+| **Authentik** (server, worker, PostgreSQL; embedded or separate outposts) | `ghcr.io/goauthentik/server` images; web UI titled "authentik"; `/if/admin/` admin interface; default `akadmin` user created by the initial-setup flow. | Assess the admin interface, flows and stages (enrollment, recovery, authentication), policies, providers (proxy, OAuth2/OIDC, SAML, LDAP, RADIUS), outposts and their tokens, the worker's Docker socket mount, `AUTHENTIK_SECRET_KEY`, and PostgreSQL. Recent releases no longer use Redis (vendor-documented since 2025.10); older installs still have it. |
+| **Authelia** (single binary or container; file or LDAP users; SQLite/PostgreSQL/MySQL storage; Redis optional for sessions) | `authelia/authelia` image; portal on port 9091; a `configuration.yml` and possibly `users_database.yml`. | No admin web UI: configuration is a file. Assess access-control rules, session and cookie domains, secrets, the authentication backend, password hashing, notifier (SMTP vs. filesystem), regulation (brute force), 2FA methods, the OpenID Connect provider and its clients, and the proxy integration. |
+| **Keycloak** (Quarkus distribution; container, VM, or Kubernetes operator) | `quay.io/keycloak/keycloak` image; ports 8080/8443 and a management port 9000; `/admin/` console; a `master` realm. | Assess the master realm and its admins, the bootstrap admin, realm settings (registration, brute-force detection, password policy, OTP and WebAuthn policies, required actions), clients (redirect URIs, client authentication, PKCE, service accounts), identity providers, user federation (LDAP/AD), themes and extensions (providers JARs), hostname and proxy settings, and the management interface. `start-dev` mode isn't for production. |
+| **Other** (oauth2-proxy, Zitadel, Kanidm, Pocket ID, LLDAP, FreeIPA) | Different images and UIs. | The principles and domains here still apply (admin access, exposure, forward-auth bypass, client and redirect validation, secrets, MFA, recovery, backups); verify product specifics against vendor documentation. |
+| **Cloud access layer instead of or in front of a self-hosted IdP** (Cloudflare Access, Tailscale, a cloud IdP) | DNS and proxy configuration pointing at a vendor's access service. | The vendor runs the IdP side. Assess its policies with the [cloudflare](../../edge/cloudflare/SKILL.md) skill, and whether apps are also reachable around it. |
+
+## Detection
+
+Hints for recognizing identity providers during a network inventory (used by the `full-assessment`
+skill). Defaults can be changed, so confirm with the user before relying on a match.
+
+- **Authentik:** vendor-default ports 9000 (HTTP) and 9443 (HTTPS) on the server container; page title
+  "authentik" and paths `/if/flow/`, `/if/admin/`, `/if/user/`, and `/application/o/<slug>/` (OIDC);
+  forward-auth requests to `/outpost.goauthentik.io/` on protected app domains. Separate outposts
+  (proxy, LDAP on 3389/6636 inside the container, RADIUS) may run as their own containers (verify ports
+  on the version's outpost docs).
+- **Authelia:** vendor-default listen address `tcp://:9091/`; portal page title containing "Authelia"
+  (observed); `/api/health` returns 200; forward-auth endpoints under `/api/authz/` (current versions) or
+  `/api/verify` (legacy); OIDC discovery at `/.well-known/openid-configuration` when the OIDC provider is
+  enabled.
+- **Keycloak:** vendor-default HTTP port 8080 and HTTPS port 8443, management interface on 9000 (health
+  and metrics); root page "Welcome to Keycloak" on many versions (observed); `/admin/` console;
+  `/realms/<realm>/.well-known/openid-configuration`; response cookies such as `KEYCLOAK_SESSION` and
+  `AUTH_SESSION_ID` (observed).
+- **Any IdP:** OIDC discovery documents (`/.well-known/openid-configuration`), SAML metadata endpoints,
+  and redirects from protected apps to a central `auth.`/`sso.`/`login.` hostname. Reverse-proxy
+  configuration referencing `forwardAuth`, `forward_auth`, or `auth_request`.
+- MAC address vendors don't apply; these run on general-purpose hosts and containers.
+
+---
+
+## Discover
+
+All operations in this mode are class **R** (read-only). Confirm scope and access first (core: operating
+principles). Mark anything you can't inspect **Not assessed**.
+
+### Access and baseline
+
+- Prefer the IdP's admin UI or API with a **read-only** role where the product offers one, signed in by
+  the administrator, and the configuration files read on the host. Don't create admin accounts, tokens,
+  or service accounts for the assessment without approval (creating one is **C1**; remove it afterward).
+- Never print secret values: `AUTHENTIK_SECRET_KEY`, outpost tokens, Authelia secrets and hashed user
+  passwords, Keycloak client secrets and realm keys, database passwords, SMTP and LDAP bind passwords.
+  Record only that each exists, where it is stored, its permissions, and its age if known.
+- A realm or configuration export from Keycloak or Authelia's config file may contain secrets and user
+  hashes. If one is needed, keep it on the host, restrict its permissions, and don't paste it into the
+  conversation; read the relevant settings in place instead.
+- Unauthenticated probes of the IdP's public endpoints (discovery documents, login pages, admin paths)
+  from outside are fine within an authorized scope. Don't run password guessing or brute-force tests;
+  they lock out real users.
+
+### Baseline commands
+
+Candidate read-only commands. Container names and paths are placeholders; check each exists first.
+
+```sh
+docker ps --format '{{.Names}}\t{{.Image}}\t{{.Ports}}'      # IdP, outposts, database, proxy containers; published ports
+docker inspect <idp-container> --format '{{.Config.Image}} {{.Image}}'   # tag and digest
+docker inspect <idp-container> --format '{{range .Mounts}}{{.Source}} -> {{.Destination}} {{.RW}}{{println}}{{end}}'   # mounts (watch for docker.sock)
+docker inspect <idp-container> --format '{{range .Config.Env}}{{println .}}{{end}}' | cut -d= -f1   # env var NAMES only
+curl -sS https://<idp-host>/.well-known/openid-configuration          # Authelia, or Keycloak at /realms/<realm>/...; issuer and supported flows
+curl -sS -o /dev/null -w '%{http_code}\n' https://<idp-host>/admin/   # Keycloak admin console reachable from here?
+curl -sS -o /dev/null -w '%{http_code}\n' https://<app-host>/         # protected app: should redirect to the IdP when unauthenticated
+curl -sS -o /dev/null -w '%{http_code}\n' http://<app-backend>:<port>/   # app's own port: should be unreachable except from the proxy
+```
+
+- Authelia: read `configuration.yml` in place (it may embed secrets; prefer the file-based secrets
+  method); `authelia validate-config` checks syntax without starting the server (verify the subcommand on
+  the installed version).
+- Keycloak: `kc.sh show-config` lists effective configuration on the host (may include secrets from
+  environment variables; review before sharing). `kcadm.sh get realms/<realm>` with a read-only admin
+  reads realm settings.
+- Authentik: the admin interface's System → System Tasks, Outposts, and Events pages; the `ak` management
+  commands exist inside the container but several change state, so don't run them in Discover.
+
+### Assessment domains
+
+Every domain must end with a status in the report (Pass / Finding / Not assessed / Not applicable /
+Accepted risk).
+
+#### A. Platform, version, and lifecycle
+
+- Product, version, image digest, and install method. Compare with the vendor's supported releases and
+  advisories (core: triage). Authentik publishes which release lines get security fixes (currently the
+  two most recent); Keycloak's community releases are supported only on the latest version; Authelia
+  publishes releases and advisories on GitHub. A version outside support is an end-of-life finding.
+- Update practice: who watches the security mailing list or advisories, how upgrades are tested, and
+  whether database migrations (all three products migrate schemas on upgrade) are covered by a backup
+  taken first.
+- Dependencies: PostgreSQL/MySQL versions, Redis (where still used), and the reverse proxy version.
+
+#### B. Administrators and bootstrap accounts
+
+- **Authentik:** the initial `akadmin` account: renamed, disabled after a named admin was created, or at
+  least protected by MFA. Members of the admin group (superuser flag); RBAC roles granted. Whether the
+  initial-setup flow is still usable (it should complete once; an old advisory made it reachable again if
+  the admin was deleted; verify the installed version is fixed).
+- **Keycloak:** the bootstrap or temporary admin created from `--bootstrap-admin-*` options or the
+  matching environment variables: replaced by a permanent named admin and removed (Keycloak marks
+  temporary admins in the console and logs, vendor-documented). Bootstrap credentials removed from
+  Compose files and environment after first start. Users with roles in the `master` realm (`admin`
+  role, `realm-management` client roles in other realms); service accounts with admin roles.
+- **Authelia:** no admin UI, so "admins" are whoever can edit `configuration.yml`, `users_database.yml`,
+  the secrets files, or the storage database, plus anyone in groups that access-control rules treat as
+  admin. File permissions and owners.
+- MFA on every admin (WebAuthn preferred; see the [mfa](../mfa/SKILL.md) skill). Admins use separate
+  accounts from daily use where practical.
+- API tokens, outpost tokens, and service-account credentials: purpose, scope, and age only.
+- Host-level admins: who has shell, Docker, or Kubernetes access to the IdP's host or namespace, and
+  database access. Those people are IdP admins.
+
+#### C. Exposure of the IdP and its admin surface
+
+- Is the login portal internet-reachable? It often needs to be, for remote users. Is the **admin**
+  surface reachable too? Keycloak documents exposing only `/realms/`, `/resources/`, and `/.well-known/`
+  through the proxy and not `/admin/`, `/realms/master/`, `/metrics`, `/health`, or the management port
+  9000 (vendor-documented reverse-proxy guide); a separate admin hostname (`hostname-admin`) restricted
+  to the LAN/VPN is the usual pattern. Authentik's `/if/admin/` and admin API can be restricted at the
+  proxy to LAN/VPN sources. Authelia has no admin UI, but its `/api/` should only be exposed as needed by
+  the portal.
+- Keycloak run with `start-dev` (HTTP enabled, development defaults): a finding in any real use.
+- Ports published directly on the host (9000/9443 for Authentik, 9091 for Authelia, 8080/8443/9000 for
+  Keycloak) that bypass the reverse proxy and its TLS and access rules.
+- TLS: certificate validity; HTTP disabled or redirected; HSTS where appropriate.
+- Proxy-header trust: Keycloak `proxy-headers` set to match the proxy, and the proxy overwrites
+  forwarded headers; Authelia and Authentik see the real client address (needed for regulation, brute
+  force protection, network-based rules, and logs) without trusting spoofable headers from clients.
+- Every path in: port forwards, tunnels, IPv6, and Cloudflare or other edge services (see the
+  [web-servers](../../web/web-servers/SKILL.md) and [cloudflare](../../edge/cloudflare/SKILL.md) skills).
+
+#### D. Forward-auth and reverse-proxy integration
+
+- Inventory every app route on the proxy (Traefik routers and middlewares, nginx `auth_request`, Caddy
+  `forward_auth`, Nginx Proxy Manager advanced configs) and record which ones use forward-auth and which
+  don't. Apps that should be protected and aren't are findings.
+- **Bypass paths:** each protected app's own port published on the host or reachable from the LAN; a
+  second router or hostname for the same backend; Docker labels on a container that create a route without
+  the middleware; `bypass` rules (Authelia) or unauthenticated paths (Authentik "unauthenticated paths",
+  Keycloak-protected apps with public endpoints) broader than needed (for example, `^/api/.*` exempting an
+  entire API to make a mobile app work).
+- **Authelia access control:** `default_policy` (vendor default `deny`; recommended); rule order (first
+  match wins, so a broad `bypass` or `one_factor` early in the list overrides stricter rules below);
+  wildcard domains; `networks` rules that relax policy for the LAN (a compromised LAN device then skips
+  2FA); `subject` rules for admin apps. Every rule for an admin interface should require `two_factor`.
+- **Authentik proxy providers:** mode (forward auth single application, forward auth domain level, or
+  proxy); domain-level mode can't apply per-app policies (vendor-documented), so check that all apps under
+  the cookie domain should share the same access. Application bindings and policies: an application with
+  no bindings is open to every authenticated user (verify behavior on the installed version).
+- **Header trust:** apps that accept identity headers (`Remote-User`, `Remote-Groups`,
+  `X-authentik-username`, `X-Forwarded-User`, and others) only receive them from the proxy, the proxy
+  strips client-supplied copies, and the app isn't reachable around the proxy.
+- Cookie domain and session scope: a session cookie scoped to the parent domain is sent to every
+  subdomain, including ones running untrusted apps.
+- Exemptions for mobile apps and API clients: documented, narrow (specific paths, methods, or tokens), and
+  protected by the app's own authentication.
+
+#### E. OIDC, OAuth 2, and SAML clients
+
+- For each client (application): client type (confidential vs. public), client authentication method,
+  secret strength and storage on the app side (not in a repository or world-readable file), age.
+- **Redirect URIs:** exact matches only; no wildcards (`*`), no `http://` except loopback for native
+  apps, no hosts the household doesn't control, no leftovers from testing. Keycloak allows wildcard
+  redirect URIs and the `+` shortcut; flag both. Authentik and Authelia support regular-expression
+  redirect URIs on some versions; flag loose patterns.
+- PKCE required (S256) for public clients, and where supported for confidential clients; implicit and
+  password grants disabled; refresh token lifetime and rotation.
+- Scopes and claims: groups and admin claims released only to apps that need them; apps that grant admin
+  based on a group claim are effectively administered by whoever controls that group.
+- Consent: implicit consent is normal for first-party apps; third-party apps should show consent.
+- Keycloak: client "Direct access grants" (password grant) off unless needed; service accounts and their
+  roles; "Full scope allowed" off where roles should be limited; front-channel logout and valid
+  post-logout redirect URIs.
+- SAML: signed assertions and responses required; metadata from the service provider verified;
+  certificates current.
+- Signing keys: algorithm and age; rotation plan (Keycloak realm keys, Authentik certificate-key pairs,
+  Authelia OIDC JWKS); private keys never exported to apps.
+
+#### F. Authentication policy, MFA, sessions, and brute force
+
+- MFA required for everyone or at least for admin apps and remote access: Authentik authenticator
+  validation stage settings in the authentication flow; Authelia `two_factor` policies; Keycloak OTP or
+  WebAuthn required actions and flows. Which methods are offered (WebAuthn/passkeys preferred; TOTP;
+  Duo; email or SMS codes weaker; see the [mfa](../mfa/SKILL.md) skill).
+- Can a user who hasn't enrolled MFA sign in to MFA-required apps (enrollment-on-first-login flows let
+  the first person with the password enroll)? Is "remember this device" or a long-lived session
+  effectively skipping MFA?
+- Password policy and hashing: length-based policy, breached-password checks where available (Authentik
+  has a Have I Been Pwned policy; verify), Authelia file backend hashes using argon2id (vendor default)
+  rather than legacy algorithms, Keycloak password policy and hashing algorithm.
+- **Brute force:** Authelia `regulation` settings (max retries, find time, ban time); Authentik
+  reputation policies and flow settings; Keycloak realm brute-force detection (check whether it is on; it
+  isn't on by default in many versions, verify). Lockout vs. denial-of-service trade-off documented.
+- Sessions: lifetime, inactivity timeout, remember-me duration; SSO session vs. app session; sign-out
+  propagation.
+
+#### G. Enrollment, self-registration, invitations, and recovery
+
+- Self-registration: Keycloak realm "User registration" on? Authentik enrollment flows bound to a public
+  brand or reachable without invitation? Authelia has no self-registration, but check any companion user
+  management tool. Open registration on an internet-facing IdP is usually a finding.
+- Invitations: single-use, expiring, and limited to the right groups.
+- Password reset and account recovery: requires email ownership and, ideally, the second factor; recovery
+  emails delivered over authenticated SMTP. Authelia's filesystem notifier writes reset links to a file
+  (for testing); in real use, check SMTP is configured and the identity-validation settings are sound.
+- Authentik recovery keys (`ak create_recovery_key`) and Keycloak's `bootstrap-admin` command are
+  break-glass tools; who can run them (host access) and whether their use is logged.
+- Users can't change their own email or username to someone else's, or add themselves to groups.
+
+#### H. Directory sources and federation (LDAP, Active Directory, upstream IdPs)
+
+- LDAP/AD sources (Authentik LDAP source, Authelia LDAP backend, Keycloak user federation): LDAPS or
+  StartTLS with certificate validation; bind account with read-only, minimal rights; bind password
+  storage; which OU and groups are synced; write-back (password changes or attribute sync to the
+  directory) enabled only if intended.
+- Authentik and Keycloak acting as an LDAP server or outpost for other apps: which apps bind, with what
+  accounts, over what transport.
+- Upstream social or cloud IdPs (Google, Microsoft, GitHub, a corporate IdP): which users may link or
+  auto-create accounts; account linking by email (risky when the upstream doesn't verify email);
+  first-login flows that create accounts for anyone with an upstream account.
+- Group mappings that grant admin rights from upstream groups.
+
+#### I. Secrets, extensions, and the host
+
+- Authentik: `AUTHENTIK_SECRET_KEY` generated randomly and stored with restrictive permissions; the
+  worker's Docker socket mount (used to manage outposts; the vendor notes inherent risk and suggests a
+  socket proxy or removing it and deploying outposts manually). Socket access is root on the host.
+- Authelia: secrets provided by files (vendor-documented secrets system or `secret` template filter)
+  rather than inline in `configuration.yml` or environment variables; session, storage encryption, and
+  identity-validation secrets strong and unique; users file permissions.
+- Keycloak: provider JARs and themes in `providers/` and `themes/` (third-party extensions run inside the
+  server with full access); `kc.sh build` options; keystore and truststore protection; database
+  credentials.
+- Database: reachable only from the IdP containers; not published on the host; strong unique password.
+- Container hardening and host patching (see the [docker](../../containers/docker/SKILL.md) skill).
+- Configuration files in Git: no secrets committed; repository access controlled.
+
+#### J. Logging, monitoring, backups, and availability
+
+- Events and audit logs: Authentik events (with notification rules for admin actions, failed logins, and
+  policy changes), Keycloak admin events and login events (enabled per realm, with retention), Authelia
+  logs (level, format, destination). Forwarded off the host where possible.
+- Alerts reach someone for new admins, new clients, flow or policy changes, and repeated failed logins.
+- Backups: the database (PostgreSQL dump or equivalent), configuration files, secrets, media (Authentik
+  custom files), and certificates; encrypted; off-host; restore tested. Without the secret key or
+  encryption key, a database backup may be unusable (Authelia's storage encryption key; Authentik's
+  secret key).
+- Break-glass access: how admins get in when the IdP or proxy is broken (console, local admin, a route
+  that bypasses forward-auth from the LAN only), documented and tested.
+- High availability: usually not needed in a homelab, but apps that can't fall back to local logins will
+  be down with the IdP; record which.
+
+---
+
+## Recommend
+
+No changes are made in this mode. For each finding, produce a recommendation using the core finding
+template, including **Dependencies / blast radius** and the **operation class**.
+
+### Dependency and blast-radius check (required)
+
+Before recommending a change, list what depends on the current state. Common hidden dependencies:
+
+- **Every protected app and every user.** Changing a default flow, the default access-control policy,
+  session settings, the cookie domain, or signing keys can sign everyone out or lock them out of all apps.
+- **Mobile apps, API clients, and webhooks** that rely on bypass rules or unauthenticated paths; removing
+  them breaks those clients.
+- **OIDC clients** whose redirect URIs, secrets, or allowed grants change; each app must be updated in
+  the same window.
+- **Outposts** that connect with tokens and need the IdP reachable; LDAP clients (NAS, media servers,
+  Wi-Fi RADIUS) bound to an outpost or source.
+- **Reverse-proxy configuration** that names the IdP's internal URL, port, or middleware.
+- **The administrator's own access**, especially when restricting the admin console to the LAN or
+  enforcing MFA on admins.
+- **Backups and monitoring** that use a service account.
+
+### Recommendation guidance
+
+| Area | Typical recommendation | Consequences to explain |
+|---|---|---|
+| Default or bootstrap admin still active | Create a named admin with MFA, test it, then disable or remove the default/temporary admin. | Integrations or scripts using the old account break. |
+| Admin console reachable from the internet | Restrict admin paths or a separate admin hostname to LAN/VPN at the proxy. | Remote admin needs the VPN. |
+| Keycloak in `start-dev` | Move to `start` with TLS, a production database, and hostname settings. | Planned migration; test every client. |
+| App reachable around forward-auth | Stop publishing the app's port; attach it only to the proxy network; add the middleware to every route. | Local clients using the direct port need the proxy hostname. |
+| Broad bypass rule | Narrow to exact paths and methods; rely on the app's own token auth for APIs. | Some mobile apps may stop working; test each. |
+| Authelia network rule skips 2FA on the LAN | Require `two_factor` for admin apps regardless of network. | LAN users see 2FA prompts. |
+| Wildcard redirect URIs | Replace with exact URIs; require PKCE. | Apps with multiple callback URLs need each listed. |
+| Client secret in a repository or world-readable file | Rotate the secret; move it to a secrets file with restrictive permissions. | The app must be updated at the same time. |
+| Open self-registration | Disable it, or require invitations or admin approval. | New users need invitations. |
+| No MFA requirement | Require WebAuthn or TOTP for all users, starting with admins; offer enrollment before enforcing. | Users must enroll; plan help for non-technical household members. |
+| No brute-force protection | Enable regulation, reputation, or brute-force detection with sensible thresholds. | Attackers can lock out a known username; prefer temporary lockouts. |
+| Docker socket mounted into the Authentik worker | Use a socket proxy limited to needed endpoints, or remove it and deploy outposts manually. | Automatic outpost management stops. |
+| Secrets inline in config or env | Move to file-based secrets with restrictive permissions. | Restart required; the file must be backed up separately. |
+| Unsupported version | Plan an upgrade path through supported releases with a tested backup. | Schema migrations; read each release's breaking changes. |
+| No events or audit log | Enable admin and login events with retention and forwarding. | Storage and noise; tune alerts. |
+| No backup of database and secrets | Back up database, config, secret key, and certificates, encrypted, off-host; test a restore. | Backups contain secrets; protect them. |
+
+Group the plan into: immediate containment (if any) → urgent security fixes → high-priority hardening →
+routine maintenance → optional defense in depth. Then ask for approval (core: modes and authorization).
+
+---
+
+## Remediate
+
+Apply only approved changes, one at a time, following the core rules. IdP specifics:
+
+- **Keep a break-glass session.** Before changing admin accounts, MFA, flows, access-control rules, the
+  admin hostname, or proxy integration, keep an existing admin session open in another browser, confirm
+  console or shell access to the host, and know the product's recovery command (Authentik recovery key,
+  Keycloak `bootstrap-admin`, Authelia file edit). Most changes here are **C2**.
+- **Test with a dedicated test user.** After each change to flows, policies, or rules, test with a test
+  account in a private browser window: an allowed user gets in with the expected factors; a disallowed
+  user is refused; an unauthenticated request is redirected.
+- **Use the supported configuration method.** Authentik and Keycloak changes go through the admin UI,
+  API, or blueprints/realm import as the deployment uses; Authelia changes go in its configuration file
+  followed by validation and a restart. Don't edit the IdP's database directly.
+- **Clients:** rotate a client secret or change redirect URIs in the IdP and the app in the same window;
+  keep the old values recorded (not in chat) for rollback until the app is confirmed working.
+- **Upgrades:** back up the database and secrets, read the release notes for breaking changes, upgrade
+  through the versions the vendor requires (don't skip required intermediate releases), and test sign-in
+  to several apps and the outposts' health afterward. A schema migration usually can't be rolled back
+  without restoring the database backup.
+- **Proxy changes:** follow the web-servers skill; add the middleware or remove the published port one
+  app at a time and confirm each app still works through the proxy.
+
+### Hard stops (refer to a specialist; never automate)
+
+- Never edit the IdP's database tables (users, credentials, sessions, keys) as a security fix.
+- Never delete the last working administrator, the master realm's only admin, or Authentik's only
+  superuser.
+- Never rotate realm signing keys, `AUTHENTIK_SECRET_KEY`, or Authelia's storage encryption key without
+  the vendor's documented procedure and a backup; changing some of them without migration makes stored
+  data unreadable (Authelia documents a storage encryption key change command; verify for the version).
+- Never test brute-force protection or password strength by guessing real users' passwords.
+- Never handle users' passwords, TOTP seeds, or recovery codes; users reset and enroll their own.
+
+---
+
+## Respond
+
+On any P0 indicator (unknown admins or superusers, new OIDC clients or redirect URIs nobody added, flow or
+access-rule changes nobody made, admin logins from unknown addresses, leaked secret key or client secrets,
+users signing in to apps they shouldn't reach, or a forward-auth bypass that was found being used),
+switch to Respond immediately. Follow the core playbook plus the IdP-specific steps in
+[incident-response.md](incident-response.md).
+
+---
+
+## Worked example (invented)
+
+### IDP-001: Protected admin app reachable directly on its published port, bypassing forward-auth
+
+**Confidence:** Confirmed
+**Priority:** P2. Any device on the LAN can reach the container-management UI without signing in to the
+IdP; the app's own login was disabled when forward-auth was added. Internet exposure is through the proxy
+only, so not P1.
+**State:** Open
+**Component:** Authelia 4.x forward-auth through Traefik; a container-management web UI published on host
+port 9443 of `192.0.2.20`
+**Evidence:** Observed 2026-06-08: `https://manage.example.com` redirects an unauthenticated request to
+the Authelia portal (expected); `docker ps` shows the app's container publishing `0.0.0.0:9443->9443/tcp`;
+`curl -k https://192.0.2.20:9443/` from another LAN host returns the app's dashboard (HTTP 200) with no
+login prompt. The app's setting "use external authentication" is on, so it trusts the proxy.
+**Expected secure state:** the backend is reachable only through the reverse proxy on an internal Docker
+network, so every request passes the forward-auth middleware (Authelia and Traefik forward-auth
+documentation).
+**Exposure and prerequisites:** any host on `192.0.2.0/24`, including IoT devices and guests on that
+network; no credentials needed.
+**Dependencies / blast radius:** one household member uses the direct port from a bookmark; a monitoring
+check polls the port.
+**Recommended remediation:** remove the host port publication and attach the container only to the
+proxy's internal network; update the bookmark to the proxy hostname and the monitoring check to the
+container's internal health endpoint; re-enable the app's own login as defense in depth if it supports it
+alongside forward-auth.
+**Operation class:** C2 (container recreate; the direct URL stops working).
+**Approval required:** Yes.
+**Verification:** `curl -k https://192.0.2.20:9443/` from the LAN fails to connect; the proxy hostname
+still redirects to Authelia and reaches the app after two-factor sign-in with the test user; monitoring is
+green.
+**Rollback:** restore the captured Compose file with the port publication and recreate the container.
+
+---
+
+## Version history
+
+- **1.0** (2026-10-31): Initial version.

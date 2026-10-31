@@ -1,0 +1,92 @@
+# XCP-ng: Respond (Incident Response)
+
+Use with the core playbook, [incident-response.md](../../../core/incident-response.md), which always
+applies. This file adds only XCP-ng and Xen Orchestra-specific steps.
+
+A compromised pool member is a compromise of the whole pool: members share one `root` password and the
+pool secret, and any of them can act on every VM. A compromised Xen Orchestra is a compromise of every
+pool it manages and of the backups it controls, because it stores their credentials. If the host or XO
+may be compromised, **don't rely on it, or on any VM it runs, to contain the incident**.
+
+## Triage and containment
+
+- **Indicators on hosts:** tasks nobody started (`xe task-list`, XO's task and audit views): VM exports,
+  snapshot or VDI deletion, new VMs, console sessions; new SSH keys in `/root/.ssh/authorized_keys`; new
+  cron jobs, systemd units, or XAPI plugins in `/etc/xapi.d/plugins/`; new yum repositories or packages;
+  the `root` password changed; logins in `/var/log/secure` or XAPI logs from unexpected addresses; unusual
+  outbound connections from dom0.
+- **Indicators in Xen Orchestra:** new admin users, changed ACLs, new authentication tokens, new or changed
+  server (pool) connections, new remotes, backup jobs deleted, retention reduced, or backups removed; the
+  audit log disabled; logins from unexpected addresses.
+- **If a host may be compromised:** contain upstream. Disconnect the pool's uplinks at the switch, or
+  disable the hosts' switch ports, and work from the physical console or BMC. Treat every pool member as
+  affected. If the site's firewall runs on this pool, the internet connection goes down with it; plan
+  that with the user. Don't power hosts off unless destruction is ongoing.
+- **If only XO may be compromised:** with approval, shut down or isolate the XO VM from the host side, and
+  change the pool `root` password from the console (XO held it). Then update every other pool XO managed.
+- **If one guest is compromised and the pool is trusted:** with approval, unplug the VM's VIF or move it to
+  an isolated network, and snapshot it before changing anything inside it. Don't destroy it.
+- **If the BMC may be compromised:** the user disconnects the BMC's network port or management VLAN.
+- **Protect backups first:** cut XO's and the hosts' access to backup remotes (change the remote's
+  credentials on the storage side, or disconnect it) and confirm untouched copies exist.
+
+## Evidence to preserve (XCP-ng-specific)
+
+Collect from the console or a clean admin workstation, before changing anything:
+
+- Host state: `/etc/xensource-inventory`, `xe host-list`, `xe pool-list params=all`, `xe vm-list`,
+  `xe sr-list`, `xe pif-list`, `xe task-list`, and a pool metadata backup or `xe pool-dump-database` written
+  off the pool (it contains secrets; treat as secret material).
+- Logs from every host: `/var/log/xensource.log` (XAPI), `/var/log/secure`, `/var/log/audit.log` (XAPI
+  audit, if present; verify on the version), `/var/log/messages`, and the remote syslog server's copy.
+  Export them off the host. A host status report (`xen-bugtool`; verify the name on the version) collects
+  most of this.
+- Persistence surfaces: crontabs, `/etc/systemd/system/`, `/etc/xapi.d/plugins/`, `/etc/xapi.conf.d/`,
+  `/root`, `/usr/local/bin`, `authorized_keys` comments and fingerprints, `yum repolist`, and recent
+  package installs (`rpm -qa --last`).
+- Xen Orchestra: an XO config backup (users, ACLs, servers, remotes, jobs), the audit log export, XO
+  server logs, and for XO from sources the VM's own system logs and shell history. Snapshot the XO VM
+  before changing it.
+- Backup state: listings of every remote with dates, and the storage server's own logs of deletions.
+- Guests of interest: snapshots and exported copies written to storage the pool can't later alter.
+
+## Scope checks specific to XCP-ng
+
+- **Every VM on the pool**, especially firewalls, NAS, DNS, directory servers, and password managers:
+  treat their secrets as exposed.
+- **Every pool XO managed**, every XO Proxy, and any other system that used the same `root` password.
+- **Backup remotes and storage SRs:** NFS, SMB, S3, and iSCSI credentials were stored on the hosts or in
+  XO.
+- **XO authentication providers:** LDAP bind accounts, SAML or OIDC client secrets, and XO tokens used by
+  Terraform, scripts, or monitoring.
+- **Admin workstations** used to log in to XO or the hosts.
+- **The BMC** and anything sharing its management network.
+
+## Eradication and recovery
+
+- If host integrity is in doubt, **reinstall hosts from verified installation media** (check the published
+  checksum), then restore pool metadata from a backup taken before the earliest plausible compromise and
+  re-check it.
+- Rebuild Xen Orchestra (fresh XOA, or a fresh VM for XO from sources) rather than cleaning it; restore its
+  configuration only from a pre-compromise config backup, then review every user, token, server, and
+  remote.
+- Restore VMs from backups taken before the compromise, onto an isolated network first, and check each for
+  the attacker's changes before reconnecting.
+- **Rotate secrets:** pool `root` password; SSH keys; XO admin passwords, OTP enrollments, and tokens;
+  remote and SR credentials; directory and SSO secrets used by XO; backup encryption keys (new backups
+  with a new key; keep the old key to read old backups); BMC credentials. Secrets inside guests whose disks
+  or memory the attacker could read.
+- Before reconnecting: supported release with current updates, management reachable only from the
+  management network, no unknown keys, repositories, plugins, users, or tokens, XO default admin gone,
+  backups with an independent copy working, and remote logging in place.
+
+## Quick checklist tailored for XCP-ng
+
+Start with the core quick checklist, plus:
+
+- [ ] Treat the whole pool as affected; isolate it at the switch and keep console or BMC access.
+- [ ] If XO may be compromised, isolate the XO VM and change the pool `root` password from the console.
+- [ ] Cut XO's and the hosts' access to backup remotes; confirm untouched copies exist.
+- [ ] Export XAPI logs, XO's config backup and audit log, and persistence surfaces before rebooting.
+- [ ] Reinstall from verified media, rebuild XO, restore from pre-compromise backups to an isolated
+      network, and rotate every secret the pool and XO held.

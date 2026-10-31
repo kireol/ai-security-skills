@@ -2,22 +2,23 @@
 name: dns-filtering
 description: >-
   Security assessment, hardening, remediation, and incident response for network-wide DNS filtering
-  servers: AdGuard Home and Pi-hole (v6 and later), on bare metal, in containers, or in LXC containers and
-  VMs. Use when auditing a DNS filtering server's admin UI and API access, listening interfaces and
-  open-resolver exposure, upstream and encrypted DNS, DNSSEC, blocklist sources, local DNS records and
-  rewrites, client bypass and firewall enforcement, redundancy, query logs, or updates, or when a DNS
-  filtering server may have been compromised or is redirecting names.
+  servers: AdGuard Home, Pi-hole (v6 and later), and Technitium DNS Server, on bare metal, in
+  containers, or in LXC containers and VMs. Use when auditing a DNS filtering server's admin UI and API
+  access (including API tokens and clustering), listening interfaces and open-resolver or recursion
+  exposure, hosted zones and zone transfers, upstream and encrypted DNS, DNSSEC, blocklist sources, local
+  DNS records and rewrites, client bypass and firewall enforcement, redundancy, query logs, or updates,
+  or when a DNS filtering server may have been compromised or is redirecting names.
 license: CC-BY-4.0
 metadata:
-  version: "1.0"
-  last_reviewed: "2026-10-30"
-  applies_to: "AdGuard Home v0.107.x stable (v0.108 is in beta) and Pi-hole v6.x (Core, FTL, Web); verify the live versions"
+  version: "1.1"
+  last_reviewed: "2026-10-31"
+  applies_to: "AdGuard Home v0.107.x stable (v0.108 is in beta), Pi-hole v6.x (Core, FTL, Web), and Technitium DNS Server v15.x; verify the live versions"
   audience: "home, work, homelab"
   finding_prefix: "DNS"
   modes: "discover, recommend, remediate, respond"
 ---
 
-# DNS Filtering Server Security (AdGuard Home and Pi-hole)
+# DNS Filtering Server Security (AdGuard Home, Pi-hole, and Technitium DNS Server)
 
 Act as a careful, evidence-driven network security engineer. A DNS filtering server answers every name
 lookup on the network, so whoever controls it decides where every device connects: a single malicious
@@ -43,6 +44,11 @@ This skill holds only DNS-filtering-specific guidance. It builds on the shared c
 DNS-filtering-specific Respond steps are in [incident-response.md](incident-response.md). Vendor
 documentation and advisories are in [references.md](references.md).
 
+Technitium DNS Server is both a filtering resolver and a full authoritative DNS server (primary,
+secondary, and forwarder zones, DNSSEC signing, zone transfers, dynamic updates, a DHCP server, and
+installable DNS apps). This skill covers it as a network DNS filter and resolver; if it also hosts
+public authoritative zones, the zone-transfer and recursion checks below carry more weight.
+
 If the DNS filter runs as a plugin or service on a firewall (for example, Unbound blocklists or an
 AdGuard Home plugin on OPNsense), also use the firewall's skill: the firewall's own trust boundary and
 plugin-repository rules apply there.
@@ -60,7 +66,9 @@ plugin-repository rules apply there.
   automatically, usually on a schedule. In AdGuard Home, a list can contain more than blocks: a
   hosts-style line with a non-blocking address *answers* with that address, and the vendor documents that
   `$dnsrewrite` rules work in all rules in AdGuard Home (they are filtered out only of lists in AdGuard's
-  curated registry). Treat list subscriptions as a supply-chain input.
+  curated registry). Treat list subscriptions as a supply-chain input. Technitium DNS apps go further:
+  each app is a .NET plugin that runs inside the DNS server process and can answer, rewrite, or log
+  queries, so an app is code with the server's privileges.
 - **Filtering is advisory unless the firewall enforces it.** Devices with hard-coded resolvers, browsers
   and apps with their own DNS over HTTPS (DoH), and VPN clients skip the filter entirely. DNS filtering
   is a convenience and privacy control, not a security boundary, unless outbound DNS to anywhere else is
@@ -68,17 +76,26 @@ plugin-repository rules apply there.
 - **The admin credential is the whole server.** AdGuard Home has a single privilege level: its API uses
   HTTP Basic authentication with the web user's own credentials, so every integration holds full admin
   rights. Pi-hole v6 has a main password, an optional app password (which by default can't change
-  settings, unless `webserver.api.app_sudo` is enabled), and a CLI password file.
+  settings, unless `webserver.api.app_sudo` is enabled), and a CLI password file. Technitium DNS Server
+  has real multi-user, role-based access (users, groups, per-section and per-zone permissions, TOTP,
+  optional LDAP or OpenID Connect sign-in), but its built-in `admin` account ships with the documented
+  default password `admin`, and its API tokens never expire and carry the full rights of the user that
+  created them.
 - **Configuration and backups are secrets.** `AdGuardHome.yaml` holds the web users' bcrypt hashes and may
   hold a TLS private key or its path. `pihole.toml` holds the password hash, app-password hash, and TOTP
-  secret. Pi-hole Teleporter exports bundle the configuration and databases. Never print, paste, or upload
-  one whole; read only the keys you need and redact them.
+  secret. Pi-hole Teleporter exports bundle the configuration and databases. Technitium's config folder
+  (`/etc/dns` in the vendor's Docker image; verify the path on other installs) and its settings backup
+  zip hold users, password hashes, API tokens, TSIG keys, DNSSEC private keys, TLS certificates, and
+  zones. Never print, paste, or upload one whole; read only the keys you need and redact them.
 - **Query logs are sensitive personal data and evidence at the same time.** They show every site every
   household or office member visits. Handle them under core privacy rules, and never flush them during
   an investigation.
 - **The vendor files own the configuration.** AdGuard Home overwrites `AdGuardHome.yaml` while running
   (stop it before hand-editing). Pi-hole v6 settings set through `FTLCONF_` environment variables become
   read-only and override the file and the web UI, so in containers check the environment, not just the UI.
+  Technitium's `DNS_SERVER_*` Docker variables are read only on first start, when no config file exists
+  yet; afterwards the web console and API own the settings, so a compose file can show a password or
+  recursion policy that is no longer in effect.
 
 ## Deployment variants
 
@@ -89,10 +106,14 @@ plugin-repository rules apply there.
 | **AdGuard Home, bare metal or VM** | `AdGuardHome` binary, `AdGuardHome.yaml`, service installed with `-s install`. | Can self-update from the web UI (the previous binary and config are kept in a `backup` directory). The vendor says the install directory and binary should be owned by root and writable only by root. |
 | **AdGuard Home in Docker** (`adguard/adguardhome`) | Volumes mapped to `/opt/adguardhome/work` and `/opt/adguardhome/conf`. | Self-update is disabled; update the image. DHCP needs host networking (Linux only). The documented port list includes a debug-profiling port (6060); don't publish it. |
 | **Snap or Home Assistant add-on** (AdGuard Home) | Snap package or add-on panel. | The vendor disables self-update; updates come from the packaging channel, which may lag the vendor release. |
+| **Technitium DNS Server, Linux or Raspberry Pi** | `dns-server` systemd service (v15 runs it as a non-root `dns-server` user per the vendor; verify), .NET runtime, web console on 5380. | Installed and updated with the vendor's install script; v15 needs the .NET 10 runtime first. The web console has a built-in check for updates but doesn't self-update (verify on the installed version). After the non-root change, certificate files must be readable by the service user. |
+| **Technitium DNS Server, Windows** | Windows service and tray app from the vendor installer. | Updated by running the new installer. Windows host hardening and the Windows skill apply. |
+| **Technitium DNS Server in Docker** (`technitium/dns-server`) | Volume mounted at `/etc/dns`; `DNS_SERVER_*` variables. | Update by pulling the image and recreating the container. The vendor compose file publishes only 5380/TCP and 53 by default; HTTPS console, DoT/DoQ, DoH, and DHCP are commented out. With the default bridge network and Docker's userland proxy, the server may see the bridge address for every client, which can make outside clients look like a private network (see domain C). |
+| **Technitium cluster** (v14 and later) | Cluster settings in the web console: one primary and one or more secondary nodes. | Users, groups, permissions, API tokens created on the primary, Allowed and Blocked entries, DNS apps and their config, and common settings replicate to every node; sessions, logs, and node-specific settings don't (vendor blog). A compromise of the primary or of any Administrators-group account reaches every node. Node-to-node traffic runs over each node's HTTPS web service. |
 | **LXC container** (any hypervisor) | Unprivileged or privileged container on a hypervisor host. | The hypervisor host is part of the trust boundary. Check whether the container is privileged, and protect the host's admin interface. Snapshots are a useful pre-change rollback and evidence tool. |
 | **On a router or firewall** (plugin or package) | Installed as a firewall plugin, often from a third-party repository. | Plugin-repository supply-chain risk and the firewall's admin model apply; use the firewall's skill too. |
 | **Redundant pair** | Two servers handed out by DHCP; a sync tool between them. | Sync tools hold admin credentials for both servers and replicate changes (including malicious ones). Assess both nodes and the sync tool. |
-| **Also the DHCP server** | Pi-hole `dhcp.active` true, or AdGuard Home DHCP enabled. | Lease data, static leases, and DHCP options (gateway and DNS pushed to clients) join the attack surface and the outage blast radius. |
+| **Also the DHCP server** | Pi-hole `dhcp.active` true, AdGuard Home DHCP enabled, or Technitium DHCP scopes enabled (not clustered as of v15). | Lease data, static leases, and DHCP options (gateway and DNS pushed to clients) join the attack surface and the outage blast radius. |
 
 ## Detection
 
@@ -109,10 +130,16 @@ Defaults can be changed, so confirm with the user before relying on a match.
   after setup the web UI is usually on 80 (and 443 with encryption enabled), with an AdGuard Home login
   page and an API under `/control/`. With encryption enabled it may also answer DNS over TLS on 853/TCP,
   DNS over QUIC on 853/UDP, DoH on 443 at `/dns-query`, and DNSCrypt on 5443.
-- Either may answer DHCP on 67/UDP if it is the DHCP server.
-- No vendor mDNS or SSDP announcement is documented for either product; don't rely on discovery
+- **Technitium DNS Server:** web console on HTTP 5380 by default (title "Technitium DNS Server", API
+  under `/api/`); the HTTPS console, when enabled, is commonly on 53443 (the vendor's sample settings and
+  compose file use it; verify the configured port). When the optional encrypted services are enabled it
+  answers DoT on 853/TCP, DoQ on 853/UDP, DoH on 443/TCP at `/dns-query` (HTTP/3 over 443/UDP possible),
+  and optional plain DNS-over-HTTP on 80 for use behind a reverse proxy (the vendor compose file also
+  lists 8053; verify which is in use). A cluster node always has its HTTPS web service on.
+- Any of them may answer DHCP on 67/UDP if it is the DHCP server.
+- No vendor mDNS or SSDP announcement is documented for these products; don't rely on discovery
   protocols.
-- MAC vendor (OUI): often a single-board-computer maker (both products are popular on Raspberry Pi
+- MAC vendor (OUI): often a single-board-computer maker (all three are popular on Raspberry Pi
   boards), but just as often a hypervisor or container bridge vendor, or the host's NIC. The MAC rarely
   identifies these products.
 
@@ -149,10 +176,25 @@ AdGuard Home:
 #   /control/rewrite/list  /control/querylog_info  /control/clients
 ```
 
+Technitium DNS Server (web console, or the HTTP API with a token or session the user creates; read-only
+GET calls from the vendor API documentation, check paths per version):
+
+```sh
+#   /api/settings/get        settings: recursion, ACLs, listeners, ports, blocking, forwarders, TLS
+#   /api/user/profile/get    the caller's profile and active sessions
+#   /api/admin/users/list  /api/admin/groups/list  /api/admin/permissions/list
+#   /api/admin/sessions/list all sessions and API tokens (admin only)
+#   /api/admin/cluster/state cluster role, nodes, and sync state
+#   /api/zones/list          hosted zones (primary, secondary, forwarder, stub)
+#   /api/allowed/list  /api/blocked/list   manual allow and block entries
+#   /api/apps/list           installed DNS apps and their versions
+systemctl status dns-server            # service state and user on Linux (not yet verified)
+```
+
 Any host or container (generic tools):
 
 ```sh
-ss -tulpn                              # what listens on 53, 80, 443, 853, 3000, 5443, 123, 67
+ss -tulpn                              # what listens on 53, 80, 443, 853, 3000, 5380, 5443, 53443, 123, 67
 docker ps --format '{{.Names}} {{.Image}} {{.Ports}}'   # published ports and host addresses
 dig @<dns-host> example.com            # resolution works from a given client
 dig @<dns-host> example.com +dnssec    # AD flag present when DNSSEC validation is in effect
@@ -163,6 +205,9 @@ dig @<dns-host> example.com +dnssec    # AD flag present when DNSSEC validation 
   `pihole debug` with upload (the debug log contains configuration and network details); `AdGuardHome
   --update` or `-s stop|restart|uninstall`; any POST, PUT, PATCH, or DELETE API call (Pi-hole
   `webserver.api.allow_destructive` is on by default, so some API calls restart DNS or flush logs).
+  For Technitium, never call `/api/settings/backup` or create tokens without approval (the backup is a
+  bundle of secrets, and `createToken` creates a non-expiring credential), and never re-run the install
+  script (it upgrades in place).
 - **Never** print whole `AdGuardHome.yaml`, `pihole.toml`, the Pi-hole CLI password file under
   `/etc/pihole`, or a Teleporter export. Read single keys and redact hashes, secrets, and key material.
 - **Never complete an AdGuard Home setup wizard** you find open; report it (domain B) and let the owner
@@ -187,6 +232,10 @@ Accepted risk).
   Non-release channels on a production DNS server are a finding.
 - Automatic image updaters (for example Watchtower) or AdGuard Home self-update: who decides when DNS
   restarts, and is there a rollback?
+- Technitium DNS Server: the version and changelog are in the web console (About) and the vendor's
+  `CHANGELOG.md`. The vendor ships frequent point releases, many fixing authenticated privilege and
+  denial-of-service flaws, so check the changelog live. Note the .NET runtime version too (v15 moved to
+  .NET 10) and that the runtime itself gets patched (OS packages or the vendor's runtime installer).
 - Pi-hole only: a v5 installation is end-of-life for practical purposes (v6 is a one-way upgrade);
   confirm against vendor sources before rating it.
 - The underlying OS, container host, or hypervisor: patched, and with its own admin access hardened.
@@ -198,8 +247,15 @@ Accepted risk).
   UI is reachable from more than the admin's own host.
 - **AdGuard Home setup wizard still open** on TCP 3000: anyone who reaches it can set the admin
   credentials. Report it immediately; don't complete it.
+- **Technitium default password:** the built-in `admin` user's documented default password is `admin`
+  unless `DNS_SERVER_ADMIN_PASSWORD` was set on first start. Ask the owner whether it was changed; don't
+  try to log in with it. An unchanged default on a console reachable by others is a P1 (P0 if logs show
+  logins nobody can explain).
 - Password quality is the user's to confirm; never guess or test passwords.
-- **Second factor:** Pi-hole v6 supports TOTP (`webserver.api.totp_secret` set). AdGuard Home has no
+- **Second factor:** Pi-hole v6 supports TOTP (`webserver.api.totp_secret` set). Technitium supports
+  per-user TOTP and, from v15, OpenID Connect single sign-on (plus LDAP); check that every Administrators
+  member has TOTP or comes through an SSO provider that enforces MFA, and that SSO and LDAP sign-up
+  (`allow signup`) is limited to mapped groups. AdGuard Home has no
   built-in second factor as of this review (verify on the installed version), so its UI should be
   reachable only from a management network or through an authenticating proxy.
 - **Brute-force protection:** AdGuard Home `auth_attempts` and `block_auth_min` (0 disables blocking).
@@ -220,11 +276,20 @@ Accepted risk).
     has shell access.
   - Pi-hole `webserver.api.localAPIauth`: whether localhost API calls skip authentication (verify the
     default on the installed version).
-- **HTTPS for the UI:** AdGuard Home's Basic authentication and Pi-hole's session ID both cross the
-  network on every request. Plain HTTP from anywhere but the local host is a finding. Check the
+  - Technitium: list users, groups, and permissions (Administration section). Integrations should use a
+    dedicated, least-privilege user, because an API token has exactly that user's rights and **never
+    expires**. List every token (they appear among the sessions), who it belongs to, and where it is
+    stored; tokens nobody can account for are a Respond trigger. Session timeout (default 30 minutes)
+    applies to logins, not tokens. In a cluster, tokens created on the primary work on every node.
+  - Technitium LDAP: the bind account and password, StartTLS or LDAPS rather than plain LDAP, and
+    certificate validation not disabled (`ignore SSL errors` is for testing only, per the vendor).
+- **HTTPS for the UI:** AdGuard Home's Basic authentication, Pi-hole's session ID, and Technitium's
+  session or API token all cross the network on every request. Plain HTTP from anywhere but the local host is a finding. Check the
   certificate, AdGuard Home `force_https`, and that HTTP is redirected.
 - **Reverse proxy in front:** AdGuard Home `trusted_proxies` contains only the proxy; Pi-hole
-  `webserver.paths.prefix` and the proxy's own access controls. A proxy that publishes the admin UI to
+  `webserver.paths.prefix` and the proxy's own access controls; Technitium's reverse-proxy address list
+  (`DNS_SERVER_WEB_SERVICE_REVERSE_PROXY_ADDRESSES` on first start, then the web service settings) should
+  name only the proxy. The vendor says not to terminate a cluster node's TLS at an HTTPS reverse proxy. A proxy that publishes the admin UI to
   the internet is a P1 regardless of the login.
 - Pi-hole `webserver.serve_all` should be `false` (otherwise every file in the webroot is served).
 - AdGuard Home `http.pprof.enabled` should be `false` (profiling handler), and its port never published.
@@ -239,16 +304,32 @@ Accepted risk).
   address; and Docker published ports (`0.0.0.0:53`). Docker inserts its own forwarding rules, which can
   bypass host firewall front-ends such as ufw. Test from outside only with explicit authorization, with a
   single benign query for a name you control or `example.com`.
+- **Technitium recursion policy** (`recursion`): `Deny`, `Allow`, `AllowOnlyForPrivateNetworks`, or
+  `UseSpecifiedNetworkACL` (the vendor's sample settings show `AllowOnlyForPrivateNetworks`; verify the
+  default on the installed version). `Allow` on an internet-reachable server is an open resolver.
+  `AllowOnlyForPrivateNetworks` relies on the client's source address, so in Docker bridge mode (where
+  outside clients can appear as the bridge's private address), behind a NAT that rewrites sources, or on
+  a host with a public address, it may not mean what it says; prefer `UseSpecifiedNetworkACL` naming the
+  real client subnets. Also check `dnsServerLocalEndPoints` (default listens on all addresses) and
+  `webServiceLocalAddresses`.
+- **Technitium hosted zones:** a server can be authoritative for public zones and still recurse for the
+  LAN; if it is reachable from the internet for its zones, recursion must still be denied to outside
+  clients. Check zone transfer settings (`zoneTransferAllowedNetworks` lets listed networks transfer
+  zones without TSIG; per-zone transfer and notify settings; TSIG keys), dynamic updates (allowed only
+  with TSIG or from named addresses), and that internal-only zones aren't served to the internet.
 - **An open resolver** (answers anyone on the internet) gets abused for reflection and amplification
   attacks, and the ISP or hosting provider may cut the line. AdGuard Home `allowed_clients` (allowlist
   mode, recommended by the vendor for public instances, ideally by ClientID), `disallowed_clients`,
   `refuse_any`, and `ratelimit` (default 20/s per subnet). Pi-hole `dns.rateLimit` (default 1000 queries
-  per 60 s per client).
+  per 60 s per client). Technitium has its own QPS limits per client subnet in its settings (verify
+  the setting names and defaults on the installed version).
 - **Which internal segments** (guest, IoT, cameras, VPN) can reach the admin UI, as opposed to just DNS.
   Clients need port 53 (and 853/443 for encrypted DNS); only admins need the UI ports. Pi-hole
   `webserver.acl` (empty allows all) and `webserver.port`; AdGuard Home `http.address`.
 - Other listeners: Pi-hole's NTP server (enabled by default; disable if unused or limit by firewall),
-  DHCP on 67/UDP, AdGuard Home DNSCrypt, DoQ, and the profiling port.
+  DHCP on 67/UDP, AdGuard Home DNSCrypt, DoQ, and the profiling port; Technitium's optional DoT, DoQ,
+  DoH (and HTTP/3), plain DNS-over-HTTP for reverse proxies (which must not be reachable by clients
+  directly), the HTTPS console, and the cluster's use of the HTTPS web service.
 - AdGuard Home `serve_plain_dns`: on a public encrypted-only instance, plain DNS can be turned off once
   encrypted DNS is enabled.
 
@@ -266,13 +347,19 @@ Accepted risk).
     cloudflared guide now warns that cloudflared's proxy-dns feature is deprecated and that cloudflared
     updated after 2026-02-02 no longer works as the guide describes, so a cloudflared-based setup may
     silently break on update.
+  - Technitium: the forwarder list and forwarder protocol (`Udp`, `Tcp`, `Tls`, `Https`, `Quic`), or no
+    forwarders (full recursion from the root servers, which sends nothing to a single provider but is
+    plain text). Conditional forwarder zones send one domain to a chosen server: review each like
+    AdGuard Home per-domain upstreams. Check proxy settings (an upstream SOCKS or HTTP proxy) too.
 - **Local helper resolvers** (Unbound, cloudflared, dnscrypt-proxy): they should listen on loopback only
   (the vendor's Unbound guide uses `127.0.0.1#5335`) and be patched like any other service.
 - **Encrypted DNS served to clients** (AdGuard Home DoH/DoT/DoQ): valid certificate, `strict_sni_check`
   as appropriate, `http.doh.insecure_enabled` (`allow_unencrypted_doh` before v0.107.74) only when a
   trusted TLS-terminating proxy sits in front.
 - **DNSSEC:** Pi-hole `dns.dnssec` (default `false`) makes Pi-hole validate. AdGuard Home `enable_dnssec`
-  sets the DO bit and relies on the upstream to validate (verify on the installed version). Note whether
+  sets the DO bit and relies on the upstream to validate (verify on the installed version). Technitium
+  validates DNSSEC itself for recursion, forwarders, and conditional forwarders when DNSSEC validation is
+  on in its settings. Note whether
   validation happens anywhere in the chain; `dig +dnssec` on a signed name should show the AD flag.
 - ECS (EDNS Client Subnet): AdGuard Home `edns_client_subnet`; sending client subnets upstream is a
   privacy leak.
@@ -290,6 +377,12 @@ Accepted risk).
   later); check it isn't widened to writable directories.
 - **Pi-hole:** subscribed allowlists (allow-type subscriptions) unblock whatever their maintainer adds;
   confirm each one is intended. Check the domain counts after each gravity run for sudden jumps or drops.
+- **Technitium:** `blockListUrls` (downloaded every `blockListUpdateIntervalHours`, default 24), the
+  manual Blocked and Allowed sections, the blocking type (NX domain, any address, or a custom address:
+  a custom blocking address is itself a redirect), and DNS apps such as Advanced Blocking with their own
+  per-group list URLs and allow rules. Apps come from the vendor's app store or from an uploaded zip;
+  record each installed app, its source, version, and config, because an app runs as code inside the
+  server. In a cluster, lists, apps, and Allowed/Blocked entries replicate to every node.
 - Allowlist and custom rules (AdGuard Home `user_rules` and allowlists; Pi-hole allow, deny, and regex
   entries): rules nobody remembers adding.
 - Lists from paid or community "mega-lists": prefer fewer, maintained lists over many unknown ones.
@@ -303,6 +396,11 @@ Accepted risk).
   forwarding, and, if `misc.etc_dnsmasq_d` is enabled, every file in `/etc/dnsmasq.d/` (custom dnsmasq
   directives, including `address=` and `server=` lines, are a hidden redirection and persistence
   surface).
+- **Technitium:** every primary and forwarder zone (a primary zone for `example.com` on this server
+  answers for the whole domain), conditional forwarder zones, stub zones, records added to zones, APP
+  records that hand a name to a DNS app (for example split-horizon or geo apps), and the custom blocking
+  address. Check per-zone permissions: who can edit which zone (the vendor fixed a subdomain-zone
+  permission boundary bug in v15.6.2).
 - For each record: the name, the answer, who owns the target, and whether it is still needed. Flag any
   record for an external domain (a bank, a software-update host, a cloud login) pointing at an internal
   or unknown address. That is a Respond trigger until explained.
@@ -327,7 +425,10 @@ Accepted risk).
 - How many DNS filtering servers do clients get? With one, a crash, update, power loss, or SD-card
   failure takes out name resolution for the whole network.
 - If there are two, are they independent (different hosts, power, storage)? Does the sync tool hold
-  admin credentials, and how is it secured?
+  admin credentials, and how is it secured? A Technitium cluster replaces the sync tool but keeps the
+  trade-off: configuration changes can be made only while the primary is online, a secondary can be
+  promoted if the primary is lost, and a bad change on the primary reaches every node. Nodes need static
+  addresses and a valid certificate (the vendor recommends one rather than the self-signed default).
 - Fallback design: a public resolver as the second DHCP DNS server restores availability but bypasses
   filtering. Document the trade-off rather than hiding it.
 - Storage health on single-board computers (SD cards wear out under logging), disk-usage warnings
@@ -338,7 +439,10 @@ Accepted risk).
 
 - What is logged and for how long: Pi-hole `dns.queryLogging` (default on), `database.maxDBdays` (default
   91), `misc.privacylevel` (default 0, nothing hidden); AdGuard Home `querylog.enabled`,
-  `querylog.interval`, `querylog.file_enabled`, `statistics.interval`, and `dns.anonymize_client_ip`.
+  `querylog.interval`, `querylog.file_enabled`, `statistics.interval`, and `dns.anonymize_client_ip`;
+  Technitium log retention (`DNS_SERVER_LOG_MAX_LOG_FILE_DAYS`, 0 keeps forever), stats retention,
+  whether query logging is on in its settings, and any query-log app (for example a SQLite or database
+  logging app) and where it stores data. Technitium logs are per node in a cluster.
 - Who can read the logs: every admin, every integration, the host's backups, and anyone with shell
   access. Logs sent elsewhere (syslog, a dashboard) carry the same sensitivity.
 - Whether logging is set to what the household or organization has agreed to. In a work setting,
@@ -350,11 +454,15 @@ Accepted risk).
 #### J. Host, container, and backups
 
 - Host OS: SSH keys-only, who has shell or `sudo`, other services sharing the host.
+- Technitium: runs as the non-root service user on v15 Linux and Windows installs (older installs ran as
+  root; a reinstall may be needed to change it, per the vendor), config folder readable only by that
+  user, and the .NET runtime patched.
 - AdGuard Home file ownership (vendor: root-owned, writable only by root) and whether it runs as root or
   as an unprivileged user with `CAP_NET_BIND_SERVICE`.
 - Containers: image source (official image), privileged mode, host networking, mounted volumes, and the
   Docker socket (never mounted into this container).
-- Backups of configuration (AdGuard Home `AdGuardHome.yaml`; Pi-hole Teleporter or `/etc/pihole`):
+- Backups of configuration (AdGuard Home `AdGuardHome.yaml`; Pi-hole Teleporter or `/etc/pihole`;
+  Technitium settings backup zip or the config folder):
   where they go, whether encrypted, and whether a restore has been tested. They contain secrets.
 
 ---
@@ -389,6 +497,11 @@ change:
 | Admin UI over plain HTTP | Enable HTTPS with a trusted or internal-CA certificate; redirect HTTP. | Bookmarks and integrations need the new URL; self-signed certificates prompt warnings. |
 | No second factor (Pi-hole) | Enable TOTP; move integrations to the app password. | Admins need an authenticator app; scripts using the main password break. |
 | No second factor possible (AdGuard Home) | Keep the UI on a management network or behind an authenticating proxy. | Remote admin needs a VPN. |
+| Technitium default `admin` password or no TOTP | The owner changes the password and enables TOTP (or SSO with MFA) for every Administrators member. | Integrations using the admin login break; they should move to a dedicated user's token. |
+| Technitium tokens with admin rights or unknown owners | Create a least-privilege user per integration, issue its token, and delete the old token. | Each integration must be reconfigured; tokens never expire, so deleting is the only revocation. |
+| Technitium recursion `Allow` or relying on "private networks" in Docker bridge mode | `UseSpecifiedNetworkACL` naming the real client subnets; use host networking or publish only on the LAN address. | Clients outside the named subnets lose recursion; test each segment. |
+| Zone transfers without TSIG or open dynamic updates | Restrict transfers and updates to named secondaries with TSIG keys. | Secondaries need the TSIG key configured. |
+| Unknown DNS apps or app-store apps nobody uses | Remove them (after evidence capture if unexplained). | Features the app provided (advanced blocking, split horizon) stop. |
 | Integrations hold the main password | Pi-hole: app password with `app_sudo` off. AdGuard Home: a separate web user per integration. | Each integration must be reconfigured. |
 | DNS reachable from the internet | Remove the port forward or bind/publish only on the LAN address; if public by design, allowlist clients and rate-limit. | Remote users lose DNS unless they use the VPN. |
 | `listeningMode` `ALL` / bind all on a multi-homed host | Pi-hole `LOCAL`; AdGuard Home specific `bind_hosts`. In Docker bridge mode, publish only on the LAN address instead. | Clients on non-local subnets (routed VLANs, VPN) may need explicit allowance; test from each. |
@@ -422,8 +535,13 @@ Apply only approved changes, one at a time, following the core rules. DNS-filter
   short outage, and make sure the agent's own session doesn't depend on the server being changed. Change
   the secondary first in a pair.
 - **Use the supported method.** Web UI, documented API, `pihole-FTL --config`, or (AdGuard Home) the YAML
-  file with the service stopped. In Docker Pi-hole, change the `FTLCONF_*` variable and recreate the
+  file with the service stopped. For Technitium use the web console or API; changing `DNS_SERVER_*`
+  variables after first start does nothing. In a Technitium cluster, make common-setting changes on the
+  primary, and expect them to reach every node. In Docker Pi-hole, change the `FTLCONF_*` variable and recreate the
   container; a setting from the environment can't be changed in the UI.
+- **Token changes (Technitium):** the agent never sees or stores a new token value; the owner creates
+  it and puts it in the integration. Delete the old token only after the integration works with the new
+  one.
 - **Password and TOTP changes are done by the owner.** The agent never sets, sees, or stores the new
   password or TOTP secret. Update integrations immediately afterward.
 - **Listening and binding changes** can cut off clients on routed subnets or VPNs. Test resolution from
@@ -435,7 +553,10 @@ Apply only approved changes, one at a time, following the core rules. DNS-filter
   client or segment.
 - **Updates:** read the release notes of every component (Pi-hole Core, Web, FTL). Self-update or `pihole
   -up` on bare metal, or pull the new image and recreate the container. Verify GPG signatures on AdGuard
-  Home release builds where practical.
+  Home release builds where practical. Technitium: take a settings backup first (secret), read the
+  changelog, install any new .NET runtime it needs, then re-run the vendor install script, run the new
+  Windows installer, or pull and recreate the container. Update cluster secondaries one at a time and
+  check that config sync still works (the vendor fixes cluster-sync bugs in point releases).
 
 After each change, follow the core "after a change" steps: re-read the setting, resolve a public and a
 local name from at least two segments, confirm blocking still works, check the admin UI, and record
@@ -450,7 +571,11 @@ before and after.
 - Hand-editing `AdGuardHome.yaml` while the service runs, or editing `pihole.toml` when the same key is
   set by an `FTLCONF_` variable.
 - Uploading a `pihole debug` log or a Teleporter export anywhere.
-- Completing an AdGuard Home setup wizard or setting credentials on the owner's behalf.
+- Completing an AdGuard Home setup wizard or setting credentials on the owner's behalf, including
+  logging in to Technitium with the default `admin` password to "check" it.
+- Deleting or re-creating a Technitium cluster, promoting a secondary, or removing a node, and deleting
+  hosted zones or DNSSEC keys (zone deletion loses records and signing keys).
+- Downloading a Technitium settings backup to anywhere but the owner's chosen secure storage.
 - Disabling filtering network-wide (`pihole disable`, AdGuard Home protection off) as a troubleshooting
   step without the user present.
 
@@ -497,3 +622,8 @@ legitimate record was removed by mistake.
 ## Version history
 
 - **1.0** (2026-10-30): Initial version.
+- **1.1** (2026-10-31): Added Technitium DNS Server: deployment variants (Linux, Windows, Docker,
+  clusters), detection (web console 5380/53443, DoT/DoQ/DoH), the default `admin` password, users and
+  roles, TOTP/SSO/LDAP, non-expiring API tokens, recursion policy and open-resolver risk (including
+  Docker bridge source addresses), hosted zones, zone transfers and dynamic updates, blocklists and DNS
+  apps, cluster replication, logs, updates, and matching Respond steps.

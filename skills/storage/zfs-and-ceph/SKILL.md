@@ -1,0 +1,430 @@
+---
+name: zfs-and-ceph
+description: >-
+  Security assessment, hardening, remediation, and incident response for the security side of OpenZFS
+  (Linux, FreeBSD, TrueNAS, Proxmox VE) and small Ceph clusters. Covers ZFS native encryption and key
+  handling, snapshots and holds as ransomware protection, zfs allow delegation, send/receive replication
+  trust, sharenfs/sharesmb properties, Ceph cephx authentication and capabilities, and Ceph dashboard
+  and network exposure. Use when auditing ZFS datasets or a Ceph cluster for security, or when snapshots,
+  replicas, or keys may have been tampered with. Not for pool or cluster repair.
+license: CC-BY-4.0
+metadata:
+  version: "1.0"
+  last_reviewed: "2026-10-31"
+  applies_to: "OpenZFS 2.x on Linux and FreeBSD, including TrueNAS and Proxmox VE; Ceph active releases, small clusters including Proxmox-managed Ceph (verify the live versions)"
+  audience: "homelab, work"
+  finding_prefix: "ZFS"
+  modes: "discover, recommend, remediate, respond"
+---
+
+# ZFS and Ceph Security
+
+Act as a careful, evidence-driven storage security engineer. Identify, explain, prioritize, remediate
+(only when authorized), and verify weaknesses in how ZFS datasets and Ceph clusters are protected:
+who can read, delete, or replace data, snapshots, replicas, and encryption keys, and which networks and
+credentials reach the storage layer. This skill is about **security configuration**. It is not a storage
+repair guide and never authorizes repair or recovery work (see the hard stops).
+
+## How to use this skill
+
+This skill holds only ZFS- and Ceph-specific guidance. It builds on the shared core, which always applies:
+
+| Core document | Covers |
+|---|---|
+| [modes-and-authorization.md](../../../core/modes-and-authorization.md) | The four modes, transitions, operation classes (R/C1/C2/C3), standing authorization |
+| [operating-principles.md](../../../core/operating-principles.md) | Principles, capability discovery, scope, communication, untrusted data |
+| [vulnerability-triage.md](../../../core/vulnerability-triage.md) | Lifecycle, CVE/KEV validation, P0–P4 priority scale |
+| [evidence-and-reporting.md](../../../core/evidence-and-reporting.md) | Evidence labels, statuses, finding template, report format, cadence |
+| [tool-use-contract.md](../../../core/tool-use-contract.md) | Rules for commands, APIs, MCP tools, and third-party integrations |
+| [reporting-protocol.md](../../../core/reporting-protocol.md) | Optional live progress reporting to a dashboard |
+| [incident-response.md](../../../core/incident-response.md) | The generic Respond playbook |
+
+ZFS- and Ceph-specific Respond steps are in [incident-response.md](incident-response.md). Vendor
+documentation and advisories are in [references.md](references.md).
+
+Related skills: appliances that wrap ZFS ([truenas](../truenas/SKILL.md),
+[proxmox-ve](../../virtualization/proxmox-ve/SKILL.md), which also manages Ceph and Proxmox Backup
+Server), the host OS ([linux](../../operating-systems/linux/SKILL.md)), Ceph's S3 gateway
+([object-storage](../object-storage/SKILL.md)), and backup tooling
+([backup-tools](../backup-tools/SKILL.md)). On an appliance, prefer that appliance's UI and skill for
+changes; use this skill for the ZFS/Ceph layer underneath.
+
+## ZFS- and Ceph-specific principles
+
+- **Security work never touches pool or cluster health.** Reading `zpool status` or `ceph health detail` is
+  fine. Acting on what they show (clearing errors, replacing disks, importing, scrubbing to "fix",
+  marking OSDs, repairing placement groups) is storage repair and belongs to vendor documentation and a
+  qualified person. If storage is degraded, stop security changes that add load or risk.
+- **Root on the host beats every ZFS control.** Snapshots, holds, `readonly`, and delegation all yield to
+  root on the system that owns the pool. Ransomware protection therefore means **a copy outside the
+  source host's administrative boundary**: a replica the source can't destroy (pull-based replication to
+  a separately administered system), plus an offline or immutable copy.
+- **Holds stop accidents, not attackers.** A user hold makes `zfs destroy` fail with EBUSY, which protects
+  against careless scripts and retention bugs. Anyone with `release` permission or root can remove it.
+- **ZFS encryption is data-at-rest protection.** It protects a stolen disk or a raw send to an untrusted
+  target; it doesn't protect data on a running system with keys loaded. Dataset and snapshot names,
+  properties, the dataset hierarchy, file sizes, and dedup tables are **not** encrypted (OpenZFS
+  documentation).
+- **Losing a ZFS key or passphrase means losing the data.** There is no vendor recovery. Key custody is a
+  core finding area, not an afterthought.
+- **cephx keys are bearer secrets in plaintext keyrings.** `client.admin` has full control of the cluster.
+  Several `ceph auth` commands print keys; redact before recording anything.
+
+## Deployment variants
+
+Identify the variant in Discover. It changes which rules apply.
+
+| Variant | How to recognize it | What changes |
+|---|---|---|
+| **OpenZFS on a general-purpose Linux or FreeBSD host** | `zfs version` / `zpool version`; pools managed by hand or by scripts. | All guidance applies; changes use `zfs`/`zpool` directly. Snapshot tooling (sanoid/syncoid, zrepl, zfs-auto-snapshot, cron scripts) defines retention and replication. |
+| **TrueNAS (CORE or SCALE / Community Edition)** | TrueNAS UI and middleware; datasets created through it. | Make changes through the TrueNAS UI or API, not raw `zfs set`, or the middleware may revert or conflict. See [truenas](../truenas/SKILL.md). |
+| **Proxmox VE with ZFS** | `zfspool` storages in Proxmox; root on ZFS possible. | Guest disks are zvols or datasets; the host's root account and Proxmox API tokens control them. See [proxmox-ve](../../virtualization/proxmox-ve/SKILL.md). |
+| **Ceph, small cluster (3–5 nodes), cephadm-managed** | `cephadm`, orchestrator (`ceph orch`), containers per daemon. | Dashboard, monitoring stack, and RGW often deployed by default; check each. |
+| **Ceph managed by Proxmox VE** | Ceph panel in Proxmox; `pveceph` commands. | Proxmox's cluster network and root account are part of Ceph's trust boundary; Proxmox stores Ceph client keyrings for its storages. |
+| **Single-node or test Ceph** | One host running MON, MGR, and OSDs. | Reduced redundancy is an availability issue, not a security finding by itself; the same authentication and exposure checks apply. |
+
+## Detection
+
+Hints for recognizing this product during a network inventory (used by the `full-assessment` skill).
+Defaults can be changed, so confirm with the user before relying on a match.
+
+- **ZFS** has no network listener of its own. It shows up through what's built on it: NFS (2049),
+  SMB (445), iSCSI (3260), replication over SSH (22), or an appliance UI (TrueNAS, Proxmox VE). Identify
+  it from the host, not the network.
+- **Ceph monitors:** TCP 3300 (msgr2) and 6789 (legacy msgr1).
+- **Ceph OSDs, MGRs, and MDSs:** a range of TCP ports, by default from 6800 upward (verify the configured
+  range on the live cluster).
+- **Ceph dashboard (MGR module):** HTTPS on 8443 by default (8080 if SSL is disabled); binds to all
+  addresses unless configured. Page title mentions Ceph.
+- **Ceph monitoring stack** (often deployed by cephadm): Prometheus 9090, the MGR Prometheus exporter
+  9283, node exporter 9100, Alertmanager 9093, Grafana (commonly 3000; verify).
+- **Ceph RGW (S3):** see the [object-storage](../object-storage/SKILL.md) skill.
+- No vendor MAC address: Ceph and ZFS run on general-purpose hardware or VMs.
+
+---
+
+## Discover
+
+All operations in this mode are class **R** (read-only). Confirm scope and access first (core: operating
+principles). Mark anything you can't inspect **Not assessed**.
+
+### Baseline commands
+
+These are vendor-documented OpenZFS and Ceph commands; options vary by version, so check `--help` first.
+Reading pool and cluster health is allowed; **acting on it is not** (hard stops). On appliances, prefer the
+appliance's UI or read-only API.
+
+ZFS (read-only):
+
+```sh
+zfs version
+zpool list
+zpool status -x                    # health summary only; record, never act on it here
+zpool get all <pool> | grep feature@     # feature flags, e.g. encryption
+zfs list -o name,used,mountpoint,encryption,keystatus,keylocation,keyformat,readonly
+zfs get -s local,received all <dataset>  # properties set explicitly
+zfs get sharenfs,sharesmb -r <pool>
+zfs get snapdir,canmount,mountpoint -r <pool>
+zfs list -t snapshot -o name,creation,used -s creation <dataset>
+zfs holds -r <dataset>@<snapshot>
+zfs allow <dataset>                # delegated permissions
+zpool history <pool> | tail -n 200 # recent administrative commands (long output)
+```
+
+- `zpool history` reveals dataset names and command lines; treat it as sensitive evidence.
+- Don't read key files to "check" them. Record the `keylocation` value's type (prompt, file, URL) and the
+  file's ownership and mode with `ls -l`, never its contents.
+
+Ceph (read-only; run where an admin keyring is available, with the user's agreement):
+
+```sh
+ceph versions
+ceph -s
+ceph health detail                 # record warnings; never act on storage warnings here
+ceph mon dump                      # monitor addresses and protocols
+ceph config dump                   # may include sensitive values; redact before recording
+ceph mgr services                  # dashboard and Prometheus URLs
+ceph mgr module ls
+ceph auth ls -f json | jq '[.auth_dump[] | {entity, caps}]'   # entities and caps WITHOUT keys
+ceph config get mon auth_allow_insecure_global_id_reclaim
+ceph config get mgr mgr/dashboard/server_addr
+ceph dashboard ac-user-show        # dashboard users and roles (verify output on your version)
+ceph orch ps                       # cephadm: running daemons and hosts
+```
+
+- Plain `ceph auth ls`, `ceph auth get`, `ceph auth export`, and `ceph auth print-key` print secret keys.
+  Never record their raw output; filter to entity and caps as above, or redact.
+- `jq` may not be installed; check first. If it isn't, don't fall back to raw `ceph auth ls` in evidence.
+
+### Assessment domains
+
+Every domain must end with a status in the report (Pass / Finding / Not assessed / Not applicable /
+Accepted risk).
+
+#### A. Platform, versions, and lifecycle
+
+- OpenZFS version (userland and kernel module should match), OS, and whether the platform (TrueNAS,
+  Proxmox) manages it. Pool feature flags relevant to security (`encryption`).
+- Ceph release name and version on every daemon (`ceph versions`); whether that release is still an
+  active release receiving security fixes (Ceph applies security updates only to active releases).
+- Known vulnerabilities for the exact versions (core: triage), including OpenZFS advisories that affect
+  encryption or send/receive, and Ceph advisories (RGW, CephFS, dashboard, cephx).
+- Health state recorded (not acted on): degraded pools or `HEALTH_WARN`/`HEALTH_ERR` mean security changes
+  should wait.
+
+#### B. ZFS native encryption and key handling
+
+- Which datasets are encrypted (`encryption`, `encryptionroot`) and which sensitive data sits in
+  unencrypted datasets. Encryption can't be added to an existing dataset; it needs a new dataset and a
+  data copy.
+- `keyformat` (passphrase, hex, raw) and `keylocation`: `prompt`, `file://<path>`, or an `https://` URL.
+  For file keys: is the key file on the same pool or boot disk it unlocks (protects nothing against disk
+  theft of the whole machine), who can read it, and is it backed up somewhere safe?
+- For URL keys: is the key server authenticated, reachable only from the host, and protected by TLS?
+- Where passphrases and key backups are stored (password manager, offline copy). Is there a tested way to
+  unlock after a reboot or on replacement hardware?
+- Auto-unlock at boot vs. manual unlock: a trade-off between availability and theft protection. Record
+  which, and whether the user chose it deliberately.
+- Key rotation history: `zfs change-key` changes the wrapping key only; the master key is unchanged and an
+  old wrapped key may remain recoverable on disk (OpenZFS documentation). After a suspected key
+  compromise, `change-key` alone isn't enough.
+- Dedup on encrypted datasets leaks which blocks are equal; note it for sensitive data.
+
+#### C. Snapshots, holds, and retention
+
+- Snapshot schedules and retention per important dataset, the tool that manages them, and whether retention
+  matches recovery objectives (how far back can you go after a slow-moving ransomware infection?).
+- Holds on key snapshots (`zfs holds`), who placed them, and who can release them.
+- Who can destroy snapshots: root, delegated users with `destroy`/`release`, automation accounts,
+  appliance admin users, API tokens. Record every path.
+- `snapdir` visibility (`hidden` by default, `visible` exposes `.zfs/snapshot` to share users): useful for
+  self-service restores, but snapshots exposed over a share are readable by every share user.
+- Signs of tampering: gaps in snapshot sequences, recent destroys in `zpool history`, retention tools
+  configured with very short retention.
+
+#### D. Delegation (`zfs allow`)
+
+- Every delegation on every dataset (`zfs allow <dataset>`), including inherited (descendent) ones and
+  permission sets (`@name`).
+- Risky delegations: `destroy`, `release`, `rollback`, `receive` (implies forced receive with `-F`, which
+  can overwrite or roll back the target), `promote`, `change-key`/`load-key`, `userprop` for properties
+  used by automation.
+- Replication users on the **receiving** side: ideally `receive:append` (no forced receive) or a
+  dedicated receive-only dataset, not `receive` on the pool root.
+- Replication users on the **sending** side: `send:raw` or `send:encrypted` where data is encrypted, so
+  a stolen replication credential can't pull plaintext.
+- On Linux, `mount`-related permissions can't be delegated; note when delegation workarounds use sudo
+  rules instead, and assess those sudo rules ([linux](../../operating-systems/linux/SKILL.md)).
+
+#### E. Replication (send/receive) trust
+
+- Direction: **push** (the source holds credentials to the target) or **pull** (the target logs in to the
+  source). With push, a compromised source can usually destroy or overwrite the replicas; pull keeps the
+  replica outside the source's control.
+- Credentials: SSH keys used for replication, their `authorized_keys` restrictions (forced command, no
+  port forwarding, source address), and whether the account is root.
+- Raw sends (`zfs send -w`) for encrypted datasets: the target stores ciphertext and never needs the key.
+  Is the target trusted with keys at all? Should it be?
+- Transport: SSH with host-key verification, or unauthenticated `nc`/`mbuffer` over the network (anyone on
+  the path can read or inject the stream).
+- Received properties: a forced receive can bring `mountpoint`, `sharenfs`, or `sharesmb` from the
+  source and expose data on the target. Check what the target mounts and shares after receive
+  (`zfs get -s received`).
+- Replica retention on the target independent of the source (so source-side pruning or deletion doesn't
+  propagate).
+
+#### F. Share properties (`sharenfs`, `sharesmb`) and dataset exposure
+
+- Every dataset with `sharenfs` or `sharesmb` not `off`, including inherited values (children inherit
+  sharing). `sharenfs=on` uses default read-write options with no client list, which on common
+  platforms means any client that can reach the host (verify the live export table with `exportfs -v` on
+  Linux or `showmount -e`); `sharesmb=on` creates a share whose default ACL grants
+  Everyone full control (authenticated users only, no guest).
+- NFS options: client lists, `root_squash`/`no_root_squash` (Linux) or `maproot` (FreeBSD), `sec=sys`
+  vs. Kerberos.
+- On appliances (TrueNAS, Proxmox), shares are usually defined in the appliance, not the ZFS properties;
+  check both, because a forgotten property can share data outside the appliance's view.
+- zvols exported over iSCSI: initiator restrictions and CHAP.
+
+#### G. Ceph authentication (cephx) and capabilities
+
+- cephx enabled for cluster, service, and client (`auth_cluster_required`, `auth_service_required`,
+  `auth_client_required` all `cephx`).
+- Every entity and its caps (from the key-free listing). Look for `allow *` on clients other than
+  `client.admin`, clients with `mon 'allow *'`, and stale clients for removed hosts or services.
+- Prefer profiles (`profile rbd`, `profile rbd-read-only`, `profile fs-client` style caps where
+  available) scoped to specific pools or namespaces.
+- `client.admin` keyring location and spread: every host that has `/etc/ceph/ceph.client.admin.keyring`
+  is a cluster admin. Keyring file ownership and mode.
+- Keys stored by consumers: Proxmox storage definitions, Kubernetes CSI secrets, CephFS client mounts,
+  backup jobs. Record existence and scope, never values.
+- `auth_allow_insecure_global_id_reclaim` should be `false` once all clients are updated (Ceph raises a
+  health warning while it is allowed).
+
+#### H. Ceph network exposure, dashboard, and encryption in transit
+
+- Public network vs. cluster network: are both non-routed and reachable only by cluster nodes and
+  intended clients? Is either reachable from user VLANs, IoT, or the internet?
+- Monitor addresses and protocols (`ceph mon dump`): msgr2 available on 3300?
+- On-the-wire encryption: msgr2 `secure` mode encrypts traffic; the default for daemon and client traffic
+  prefers `crc` (authenticated, integrity-checked, **not encrypted**). Record `ms_cluster_mode`,
+  `ms_service_mode`, and `ms_client_mode`. Whether encryption is needed depends on whether untrusted
+  hosts share the network.
+- Dashboard: enabled? bound to which address (all addresses by default)? SSL on? Certificate? Users and
+  roles; default or shared administrator accounts; account lockout and password policy (enabled by
+  default; check they weren't turned off); SSO configuration; audit logging of API changes (off by
+  default).
+- Monitoring stack: Prometheus, Grafana, and Alertmanager reachable beyond the admin network? Grafana
+  anonymous access is commonly enabled for dashboard embedding; check what it exposes.
+- RGW and CephFS clients: which networks reach them? RGW is assessed with
+  [object-storage](../object-storage/SKILL.md).
+
+#### I. Monitoring, logging, and change history
+
+- ZFS: event monitoring (ZED or the appliance's alerts) for pool faults, and alerts for snapshot or
+  replication failures. Are snapshot destroys and property changes logged anywhere besides
+  `zpool history` on the same pool?
+- Ceph: cluster log and audit channel, dashboard audit log, alerting (Alertmanager or the platform's
+  notifications) for auth changes, new entities, dashboard user changes, and health changes.
+- Logs forwarded off the hosts; correct time on every node (Ceph monitors are sensitive to clock skew).
+
+---
+
+## Recommend
+
+No changes are made in this mode. For each finding, produce a recommendation using the core finding
+template, including **Dependencies / blast radius** and the **operation class**.
+
+### Dependency and blast-radius check (required)
+
+Before recommending a change, list what depends on the current state. Common hidden dependencies are:
+
+- **Replication and snapshot tools** (sanoid/syncoid, zrepl, appliance replication tasks) that rely on
+  current delegations, SSH keys, retention, and dataset names.
+- **NFS/SMB/iSCSI clients** (hypervisors, media servers, backup jobs) that mount datasets shared through
+  ZFS properties or the appliance.
+- **Boot-time unlock**: services and VMs that expect encrypted datasets to be unlocked automatically.
+  Moving to a prompted passphrase means nothing starts after a reboot until someone unlocks it.
+- **Ceph clients** (Proxmox storages, Kubernetes CSI, CephFS mounts, RGW) using a given cephx entity.
+  Tightening caps or rotating keys stops them until updated.
+- **Network changes** to Ceph public or cluster networks affect every daemon and client; mistakes take the
+  cluster down.
+- **Monitoring** that scrapes Prometheus endpoints or embeds Grafana in the dashboard.
+
+### Recommendation guidance
+
+| Area | Typical recommendation | Consequences to explain |
+|---|---|---|
+| No copy outside the source's admin boundary | Add pull-based replication to a separately administered system, plus an offline or immutable copy. | New hardware or storage; replication must be monitored. |
+| Push replication with root on the target | Switch to pull, or use a non-root receive user with `receive:append` on a dedicated dataset and a restricted SSH key. | Replication tools need reconfiguration and testing. |
+| Delegated `destroy`/`release`/`receive` to automation | Narrow to the minimum (`snapshot`, `send`, `hold`; `receive:append` on targets). | Retention pruning must then run from a more trusted account. |
+| Key file stored next to the data it unlocks | Store keys separately (another device, a protected key server, or prompted passphrase); back up keys offline. | Unattended boot may stop working; document the unlock procedure. |
+| No key backup | Export and store the passphrase or key offline in two places; test unlocking on a spare system. | None beyond effort; skipping it risks total data loss. |
+| `sharenfs=on` / `sharesmb=on` defaults | Set explicit client restrictions or move sharing to the appliance's managed shares; set `off` on datasets that shouldn't be shared. | Clients that relied on broad access need to be listed and tested. |
+| Snapshots visible over shares | Keep `snapdir=hidden` unless self-service restore is needed; restrict share access. | Users lose self-service restore if hidden. |
+| Over-broad cephx caps | Replace `allow *` client caps with scoped profiles per pool or namespace. | Each client must be tested; a wrong cap stops I/O. |
+| `client.admin` keyring on many hosts | Keep it on admin hosts only; give other hosts scoped entities. | Tools that assumed admin access need their own keys. |
+| Insecure global_id reclaim allowed | Update all clients, then disallow it. | Old clients lose access until updated. |
+| Dashboard reachable from user networks | Bind it to a management network; require a VPN; keep SSL, lockout, and password policy on; add SSO with MFA where practical. | Admins need the new path first. |
+| Unencrypted Ceph traffic on shared networks | Prefer isolating the networks; where untrusted hosts share them, move to `secure` msgr2 mode per vendor docs. | CPU cost; all daemons and clients must support msgr2. |
+| Unsupported Ceph release | Plan an upgrade to an active release per vendor upgrade docs. | Upgrades are multi-step and must follow the vendor order; schedule a window. |
+
+Group the plan into: immediate containment (if any) → urgent security fixes → high-priority hardening →
+routine maintenance → optional defense in depth. Then ask for approval (core: modes and authorization).
+
+---
+
+## Remediate
+
+Apply only approved changes, one at a time, following the core rules. ZFS and Ceph specifics:
+
+- **On appliances, use the appliance.** TrueNAS and Proxmox VE manage datasets, shares, replication, and
+  Ceph through their own UI, API, and config stores; raw `zfs set` or `ceph config set` can be reverted or
+  conflict. Use raw commands only on hand-managed hosts.
+- **Capture before change.** Record `zfs get` values, `zfs allow` output, and the key-free cephx caps
+  listing before each change, so rollback is a known command.
+- **Property changes** (`sharenfs`, `sharesmb`, `snapdir`, `readonly`) are C1 if nothing depends on them,
+  C2 when clients mount the dataset. Remember inheritance: changing a parent affects every child.
+- **Delegation changes** (`zfs allow`, `zfs unallow`) are C1 to C2 depending on which automation uses them;
+  run the dependent replication or snapshot job right after to confirm.
+- **Holds:** adding a hold is C1. Releasing one makes the snapshot destroyable (treat as C3 if retention
+  would then remove it).
+- **Encryption keys:** `zfs change-key` (C2) must be followed by updating every place the key is stored and
+  testing an unlock; never change a key without a verified backup of the new one. Moving data into a new
+  encrypted dataset is a data migration (C2), and destroying the old unencrypted dataset afterwards is C3.
+- **cephx:** create the new entity or caps and test the client before removing the old ones. Never remove
+  or alter `client.admin` caps (the vendor warns that a wrong `ceph auth caps client.admin` call strips
+  required capabilities). Key rotation for a client is C2.
+- **Dashboard and monitoring:** binding address, SSL, and module changes restart the MGR module (C2);
+  keep a CLI session open on an admin host as the fallback path.
+- **Network and msgr2 mode changes** affect the whole cluster (C2); follow vendor docs exactly and do them
+  in a maintenance window with the cluster healthy.
+
+After each change, follow the core "after a change" steps, re-read the changed properties or caps, and
+confirm that replication, snapshots, clients, and cluster health are unchanged.
+
+### Hard stops (refer to a specialist; never automate)
+
+If a pool is degraded, faulted, suspended, or reporting checksum or I/O errors, or a Ceph cluster is in
+`HEALTH_ERR`, has down or out OSDs, inactive or inconsistent placement groups, or lost monitor quorum,
+**stop all security changes**, preserve evidence, and refer to vendor documentation and a qualified
+storage person. Never, as security remediation:
+
+- Run any ZFS repair or recovery operation: clearing errors, replacing, detaching, onlining, or
+  offlining devices, forced or rewind imports, scrub-and-fix workflows, resilver management, or
+  rollback of a pool or dataset to "undo" an attack.
+- Run any Ceph repair or recovery operation: PG repair, marking OSDs out/lost, OSD removal, monitor map
+  edits, `ceph-objectstore-tool` or `ceph-bluestore-tool` work, or changing CRUSH rules or pool size
+  during an incident.
+- Destroy datasets, snapshots, pools, Ceph pools, or images, or release holds, to free space or "clean
+  up".
+- Copy recovery commands from forums, other versions, or other platforms.
+- Upgrade OpenZFS (and run `zpool upgrade`) or Ceph on unhealthy storage.
+
+---
+
+## Respond
+
+On any P0 indicator (snapshots destroyed outside retention, unknown delegations or SSH keys on replication
+accounts, encryption keys changed by nobody known, unknown cephx entities or dashboard admins, ransom
+notes on shares), switch to Respond immediately. Follow the core playbook plus the ZFS- and Ceph-specific
+steps in [incident-response.md](incident-response.md).
+
+---
+
+## Worked example (invented)
+
+### ZFS-001: Push replication lets the source host destroy every replica
+
+**Confidence:** Confirmed
+**Priority:** P2. An attacker with root on the file server can delete all replicas and snapshots, leaving
+no recovery point outside the compromised host.
+**State:** Open
+**Component:** OpenZFS 2.x on a Linux file server and a backup host, replicated with a cron script
+**Evidence:** Observed 2026-10-22. On the source, the replication script logs in to the backup host
+(`192.0.2.60`) as `root` with an SSH key that has no `authorized_keys` restrictions, and runs
+`zfs receive -F`. On the backup host, `zfs allow` shows no delegations (root is used), and `zfs holds -r`
+on the replica shows none. Retention on the replica is pruned by the same script from the source.
+**Expected secure state:** replicas kept outside the source's administrative control: pull-based
+replication, or a non-root receive user limited to `receive:append` on a dedicated dataset, with retention
+managed on the backup host (OpenZFS `zfs-allow` documentation).
+**Exposure and prerequisites:** root on the source (for example, through a compromised service) gives the
+attacker the SSH key, which grants root on the backup host.
+**Dependencies / blast radius:** the nightly replication job; two other hosts restore from the backup host.
+**Recommended remediation:** move to pull replication run from the backup host using a non-root account on
+the source with `send` (`send:raw` for encrypted datasets) and `snapshot`/`hold` delegated; move retention
+to the backup host; remove the root SSH key from the backup host. Alternative: keep push, but use a
+non-root receive user with `receive:append` on a dedicated dataset and a forced-command SSH key.
+**Operation class:** C2 (replication is reconfigured; a failed job leaves a gap until fixed).
+**Approval required:** Yes. Changes replication and access on both hosts.
+**Verification:** the next replication run succeeds; from the source, an attempt to log in to the backup
+host as root fails; a test snapshot destroy on the replica from the source's account is refused; a test
+restore from the replica succeeds.
+**Rollback:** restore the captured script and the root key on the backup host (kept disabled until
+verification is complete).
+
+---
+
+## Version history
+
+- **1.0** (2026-10-31): Initial version.

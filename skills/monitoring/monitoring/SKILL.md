@@ -1,0 +1,427 @@
+---
+name: monitoring
+description: >-
+  Security assessment, hardening, remediation, and incident response for infrastructure monitoring
+  systems: Prometheus and its exporters, Alertmanager, and Pushgateway; Netdata agents, parents, and
+  Netdata Cloud; Zabbix server, proxies, frontend, and agents; and Checkmk sites and agents. Use when
+  auditing a monitoring server or its agents, deciding what monitoring may expose, reviewing
+  authentication, agent encryption, remote-command features, stored credentials, and alerting, or when a
+  monitoring system may have been compromised or used to run commands.
+license: CC-BY-4.0
+metadata:
+  version: "1.0"
+  last_reviewed: "2026-10-31"
+  applies_to: "Prometheus 2.x/3.x and exporters, Netdata Agent, Zabbix 6.0 LTS and later, Checkmk 2.x (verify the live version of each)"
+  audience: "home, work, homelab"
+  finding_prefix: "MON"
+  modes: "discover, recommend, remediate, respond"
+---
+
+# Infrastructure Monitoring Security
+
+Act as a careful, evidence-driven monitoring and infrastructure security engineer. A monitoring system is
+a **map of the network**: it lists every host, address, service, version, and often the credentials used
+to reach them. Some monitoring systems also **run commands** on every agent they talk to. Identify,
+explain, prioritize, remediate (only when authorized), and verify weaknesses that would let someone read
+that map, harvest the credentials it holds, push false data, silence alerts, or turn the monitoring
+server into a way to execute code across the fleet.
+
+## How to use this skill
+
+This skill holds only monitoring-specific guidance. It builds on the shared core, which always applies:
+
+| Core document | Covers |
+|---|---|
+| [modes-and-authorization.md](../../../core/modes-and-authorization.md) | The four modes, transitions, operation classes (R/C1/C2/C3), standing authorization |
+| [operating-principles.md](../../../core/operating-principles.md) | Principles, capability discovery, scope, communication, untrusted data |
+| [vulnerability-triage.md](../../../core/vulnerability-triage.md) | Lifecycle, CVE/KEV validation, P0–P4 priority scale |
+| [evidence-and-reporting.md](../../../core/evidence-and-reporting.md) | Evidence labels, statuses, finding template, report format, cadence |
+| [tool-use-contract.md](../../../core/tool-use-contract.md) | Rules for commands, APIs, MCP tools, and third-party integrations |
+| [reporting-protocol.md](../../../core/reporting-protocol.md) | Optional live progress reporting to a dashboard |
+| [incident-response.md](../../../core/incident-response.md) | The generic Respond playbook |
+
+Monitoring-specific Respond steps are in [incident-response.md](incident-response.md). Vendor
+documentation and advisories are in [references.md](references.md).
+
+Related skills: assess the host the monitoring runs on with
+[linux](../../operating-systems/linux/SKILL.md) or [windows](../../operating-systems/windows/SKILL.md);
+containers with [docker](../../containers/docker/SKILL.md); the reverse proxy and TLS in front of web UIs
+with [web-servers](../../web/web-servers/SKILL.md); and dashboards and uptime checkers (Grafana, Uptime
+Kuma, Glances) with [self-hosted-web-apps](../../web-apps/self-hosted-web-apps/SKILL.md). Log collection
+and SIEM tools are covered by [logging-and-siem](../logging-and-siem/SKILL.md).
+
+## Monitoring-specific principles
+
+- **Read access is reconnaissance.** Even "read-only" metrics reveal hostnames, internal addresses,
+  software versions, mounted filesystems, running processes, users logged in, and network topology.
+  Treat an unauthenticated metrics endpoint reachable from an untrusted segment as a finding, not as
+  harmless telemetry.
+- **Write access is worse than it looks.** Anyone who can push metrics (Pushgateway, a remote-write
+  receiver, a Zabbix trapper, a Netdata streaming key) can create false data, hide real problems, or fill
+  storage. Anyone who can manage silences or maintenance windows can blind the system before an attack.
+- **Some monitoring is remote execution by design.** Zabbix remote commands and global scripts, Checkmk
+  agent plugins and local checks, and active checks that run shell commands mean the monitoring server's
+  admins can run code on agents. Assess the monitoring server's admin access as you would a domain admin.
+- **Monitoring stores credentials for everything.** SNMP communities, IPMI and BMC passwords, database
+  logins, HTTP basic-auth secrets, cloud API keys, SSH keys for agentless checks, and notification
+  tokens live in its configuration or database. Read only the names and scopes, never the values.
+- **Defaults vary by product and version.** Prometheus components have no authentication unless a web
+  configuration file is supplied; Zabbix and Checkmk have logins but ship with known or printed initial
+  credentials; Netdata's local dashboard is open unless restricted. Verify every default against the
+  installed version's documentation before stating it.
+- **Don't generate load or alerts.** Never trigger checks, scripts, test notifications, or rediscovery
+  to "see what happens". Those can run commands on agents and page people.
+
+## Deployment variants
+
+| Variant | How to recognize it | What changes |
+|---|---|---|
+| **Prometheus stack** (Prometheus, exporters, Alertmanager, Pushgateway, often Grafana) | Ports 9090, 9093, 9091, 9100 and other exporter ports; a `prometheus.yml` scrape configuration. | Pull model: the server scrapes exporters. Each exporter is its own exposed HTTP service. Authentication and TLS exist only if a web configuration file is passed to each component. Long-term storage may be a remote-write target (another Prometheus, Mimir, Thanos, VictoriaMetrics, a cloud service). |
+| **Netdata agent only** | Port 19999 on each host; no central server. | Each agent is a separate dashboard. Exposure is per host. |
+| **Netdata with parents and/or Netdata Cloud** | A `stream.conf` with destinations and API keys; agents "claimed" to a Cloud space. | Streaming keys authorize children to send data to parents. Cloud claiming adds an outbound connection and a Cloud account that can see every claimed node; that account's security becomes part of the boundary. |
+| **Zabbix** (server, frontend, database, optional proxies, agents or agent 2) | Frontend on HTTP/HTTPS (often under `/zabbix`); server/trapper on 10051; agents on 10050. | Central server with a database holding all credentials and host data. Agents may be passive (server connects to 10050), active (agent connects to 10051), or both. Remote commands and scripts can run on agents. |
+| **Checkmk** (one or more OMD sites, agents) | Web UI under `/<site>/check_mk/`; agent port 6556; agent receiver port (8000 for the first site by default). | Each site is a separate instance with its own users. Agents use the agent controller with TLS registration (2.1 and later) or a legacy plain-text mode. Agent plugins and local checks run as root by default on Linux. |
+| **Container or appliance** | Official images, a NAS app, Proxmox helper scripts, or a vendor virtual appliance. | Bind addresses, default credentials, and update paths follow the image or appliance; check its docs as well as the product's. |
+| **Hosted or SaaS backend** | Grafana Cloud, Netdata Cloud, Checkmk or Zabbix cloud offerings, a remote-write endpoint in the cloud. | Metrics and host inventory leave the network. Assess the account (MFA, members, API tokens) and what data is sent. |
+
+## Detection
+
+Hints for recognizing this product during a network inventory (used by the `full-assessment` skill).
+Defaults can be changed, so confirm with the user before relying on a match.
+
+- **Prometheus** on 9090, with a web UI titled "Prometheus" and endpoints `/metrics`, `/api/v1/status/buildinfo`,
+  and `/-/healthy`. **Alertmanager** on 9093 (9094 for cluster gossip), **Pushgateway** on 9091.
+  **node_exporter** on 9100 serving plain-text `node_` metrics at `/metrics`. Other exporters use their
+  own documented ports (the Prometheus project keeps a default port allocation list on its GitHub wiki).
+- **Netdata** on 19999, page title containing "Netdata", with an API under `/api/v1/` or `/api/v2/`
+  (`/api/v1/info` returns agent details).
+- **Zabbix** agent on 10050 and server or proxy trapper on 10051 (TCP); frontend on 80/443 with a login
+  page titled "Zabbix", commonly at `/zabbix/`.
+- **Checkmk** web UI at `/<site>/check_mk/` on 80/443 (the site Apache listens on 5000 and up behind the
+  system Apache); agent on 6556 (plain-text output from a legacy or unregistered agent starts with
+  `<<<check_mk>>>`); agent receiver on 8000 for the first site, counting up for further sites.
+- A host making regular connections to many other hosts on the same exporter or agent port is a
+  monitoring server.
+- MAC address vendors don't help: these run on general-purpose servers, VMs, and containers.
+
+---
+
+## Discover
+
+All operations in this mode are class **R** (read-only). Confirm scope and access first (core: operating
+principles). Mark anything you can't inspect **Not assessed**.
+
+### Baseline commands
+
+Prefer the product's UI, its documented read-only APIs, and configuration files read on the host. These
+are *candidate* read-only commands, **not yet verified** for every version; check each exists first.
+
+```sh
+# Prometheus and exporters (vendor-documented endpoints)
+curl -s http://<host>:9090/api/v1/status/buildinfo          # version
+curl -s http://<host>:9090/api/v1/status/flags               # startup flags (admin API, lifecycle, remote write receiver)
+curl -s http://<host>:9090/api/v1/targets?state=active | head -c 2000   # what it scrapes (a network map)
+curl -s -o /dev/null -w '%{http_code}\n' http://<host>:9100/metrics     # 200 = exporter open without auth
+curl -s http://<host>:9093/api/v2/status                     # Alertmanager version and cluster status
+
+# Netdata (vendor-documented)
+curl -s http://<host>:19999/api/v1/info | head -c 2000       # agent version, whether it answers without auth
+
+# Zabbix (on the hosts)
+zabbix_server -V; zabbix_agentd -V; zabbix_agent2 -V          # versions (whichever exist)
+grep -E '^(Server|ServerActive|ListenIP|AllowKey|DenyKey|EnableRemoteCommands|TLS[A-Za-z]+)=' /etc/zabbix/zabbix_agent*.conf
+
+# Checkmk (on the server, as the site user)
+omd versions; omd sites; omd config show                       # versions and site settings (APACHE_TCP_ADDR, AGENT_RECEIVER_PORT)
+cmk-agent-ctl status                                           # on an agent host: registration and TLS state
+
+# Any host
+ss -tlnp                                                       # which monitoring ports listen, on which addresses
+```
+
+- **Configuration files hold secrets.** `prometheus.yml` (basic-auth passwords, bearer tokens), web
+  configuration files (bcrypt hashes), `stream.conf` (API keys), Zabbix `zabbix_server.conf` (database
+  password) and agent PSK files, and Checkmk's password store all contain credentials. Read them for
+  structure and settings; show only redacted excerpts.
+- The Prometheus targets API and Zabbix or Checkmk host lists are a full network inventory. Summarize
+  (counts, segments, which credentials are used); don't paste them whole into a report that will be
+  shared.
+- **Never** during Discover: log in with default or guessed credentials; call admin or lifecycle
+  endpoints (`/-/reload`, `/-/quit`, `/api/*/admin/`); push metrics or alerts; create, edit, or expire
+  silences or maintenance windows; run Zabbix scripts or Checkmk "reschedule" or service discovery on
+  hosts; register or deregister agents; or send test notifications.
+
+### Assessment domains
+
+Every domain must end with a status in the report (Pass / Finding / Not assessed / Not applicable /
+Accepted risk). Where several monitoring products run, assess each separately.
+
+#### A. Inventory, versions, and lifecycle
+
+- Which monitoring products, components, and agents exist; where each runs; who maintains it.
+- Versions of the server, proxies, frontend, exporters, and agents, compared with the vendor's
+  supported releases (Zabbix publishes a life-cycle policy with LTS and standard releases; Checkmk
+  supports several stable branches; Prometheus components each release independently). Agents are
+  often years older than the server; check them too.
+- Vendor security advisories for each installed version (core: triage).
+- How updates arrive: OS packages, images, the vendor repository, or never.
+- Forgotten monitoring: old Nagios, Cacti, or LibreNMS boxes, a trial Zabbix, exporters left on hosts
+  after the server was retired. Unused monitoring is a map with no owner.
+
+#### B. Authentication and administration of the server and UIs
+
+- **Prometheus, Alertmanager, Pushgateway, exporters:** is a web configuration file in use
+  (`--web.config.file`) with TLS and basic auth, or is an authenticating reverse proxy in front? Without
+  either, anyone who reaches the port can query everything.
+- **Prometheus admin and lifecycle flags:** `--web.enable-admin-api` (delete series, snapshots) and
+  `--web.enable-lifecycle` (`/-/reload`, `/-/quit`) are off by default. If on, who can reach them?
+- **Netdata:** whether the local dashboard is open, restricted by `allow connections from` / `allow
+  dashboard from`, bound to a specific address, disabled (`mode = none`), or protected with bearer-token
+  protection tied to Netdata Cloud sign-in. Verify the option names for the installed version.
+- **Zabbix frontend:** the documented default login is `Admin` / `zabbix`. Ask the user whether it was
+  changed and whether `Admin` was renamed or disabled after a named Super admin was created; check the
+  user list for `Admin` and `guest` status. Never test it by logging in.
+- **Zabbix users and roles:** Super admin count, user groups with frontend access, API tokens (names,
+  owners, expiry), and whether MFA (TOTP or Duo, available in 7.0 and later; verify for the installed
+  version) or SSO (LDAP, SAML) is used.
+- **Checkmk:** `cmkadmin` is the initial site admin; current releases generate a random password at site
+  creation and print it, older ones set it differently (verify for the installed version). Check whether
+  `cmkadmin` is still the shared daily account, how many users have the admin role, whether two-factor
+  authentication is enforced, and LDAP or SAML connections.
+- **Automation and API users:** Checkmk automation users, Zabbix API tokens, Prometheus bearer tokens,
+  and Grafana service accounts. Each is a credential that bypasses interactive login and usually MFA.
+  Record existence, owner, role, and age only.
+- Brute-force protection on login pages (Zabbix documents a short block after repeated failures) and
+  whether the proxy in front adds rate limiting.
+
+#### C. Network exposure
+
+- Where each component listens and who can reach it: same host, a management segment, the whole LAN,
+  IoT or guest segments, VPN users, the internet.
+- Exporters and agents on every monitored host: node_exporter on 9100 or a Netdata agent on 19999
+  reachable from untrusted segments exposes that host's details. Agents should accept connections only
+  from the monitoring server (host firewall, `Server=` in Zabbix agent config, Checkmk `only_from` or
+  agent controller settings).
+- Anything on the internet: port forwards, reverse-proxy routes, tunnels
+  ([tunnels](../../edge/tunnels/SKILL.md), [cloudflare](../../edge/cloudflare/SKILL.md)). Monitoring UIs
+  rarely need to be public; a public status page is a different, read-only product.
+- Alertmanager's API answers cross-origin requests when unauthenticated (the Prometheus security model
+  documents this), so even a LAN-only Alertmanager can be reached from a browser on the LAN visiting a
+  malicious site.
+- **SNMP and Blackbox exporters** take targets from URL parameters; anyone who can reach them can make
+  them probe arbitrary hosts and may leak the credentials they're configured with.
+
+#### D. Agent-to-server trust and encryption
+
+- **Zabbix:** whether agent, proxy, and server connections use PSK or certificate encryption
+  (`TLSConnect`, `TLSAccept`) or are unencrypted. Unique PSKs per host (or per proxy), PSK file
+  permissions, and whether unencrypted connections are still accepted.
+- **Zabbix agent `Server` and `ServerActive`:** limited to the real server or proxy addresses, not a
+  whole subnet.
+- **Checkmk:** whether agents are registered with the agent controller and talking TLS, or still in
+  legacy plain-text pull mode. Vendor documentation warns that agent packages open 6556 right after
+  installation and serve unencrypted data to anyone until registered. Check for hosts reported as
+  "registered for TLS but not using it" and for the `allow-legacy-pull` marker on agents.
+- **Checkmk push mode** (commercial editions) and registration: who can register agents (a user with
+  the registration permission), and whether auto-registration is enabled and scoped.
+- **Netdata streaming:** API keys in `stream.conf` on parents and children; whether each key is limited
+  by `allow from`; whether streaming uses TLS; and whether one key is shared by every child.
+- **Prometheus scraping:** whether scrapes to exporters use TLS and authentication, and whether
+  `insecure_skip_verify` is set.
+
+#### E. Remote commands, scripts, and plugins (execution surface)
+
+- **Zabbix remote commands:** on agents, `system.run` is controlled by `AllowKey`/`DenyKey` (the old
+  `EnableRemoteCommands` parameter is deprecated and unsupported in agent 2). Record which hosts allow
+  `system.run[*]` or specific commands.
+- **Zabbix global scripts** (Alerts → Scripts in recent versions): which scripts exist, whether they
+  run on the agent, proxy, or server, which user groups and host groups may run them, and whether they
+  need confirmation. Scripts run on the server execute as the Zabbix server user.
+- **Zabbix actions** that execute remote commands automatically on triggers.
+- **Checkmk:** agent plugins and local checks on hosts (they run as root by default on Linux), MKPs
+  (extension packages) installed on the site, and rule-based agent bakery configuration (commercial
+  editions) that can push plugins to every agent. Who can edit rules that deploy plugins?
+- **Netdata:** collectors and alert notification scripts that run commands; "functions" that let the
+  dashboard or Cloud request process lists and other live data from agents. Verify which functions are
+  enabled on the installed version.
+- **Prometheus:** exporters such as script or command exporters that run commands on request.
+- The rule to apply: whoever can edit these, or administer the server, can run code on every host the
+  feature reaches.
+
+#### F. Stored credentials and secrets
+
+- What the monitoring holds: SNMP communities and v3 users, IPMI and BMC passwords, database logins,
+  hypervisor and NAS API keys, SSH keys for agentless checks, cloud credentials, HTTP auth for checks,
+  notification tokens (chat bots, email, SMS, webhook URLs).
+- Scope of each: read-only monitoring accounts versus admin credentials reused for monitoring. SNMP
+  should be v3 with authentication and privacy, or v2c read-only with a non-default community limited
+  to the monitoring server.
+- Where they live: Prometheus files, Zabbix macros (secret macros, or a vault integration), the Checkmk
+  password store, Netdata collector configs. File permissions on those files and on the database.
+- Configuration under version control: whether secrets were ever committed.
+
+#### G. Data integrity, alerting, and silencing
+
+- Who can create silences (Alertmanager), maintenance windows (Zabbix, Checkmk), or acknowledge and
+  disable alerts. An attacker who can do this can blind the operator.
+- Pushgateway and remote-write receivers (`--web.enable-remote-write-receiver` or the equivalent
+  feature flag on older versions): who can push data.
+- Alert routing: are security-relevant alerts (host down, agent stopped, disk full, unexpected reboot)
+  delivered to someone who reads them? Is the alert path itself monitored (a dead-man's-switch or
+  watchdog alert)?
+- Notification secrets in Alertmanager or Zabbix media types, and template features that could let an
+  alert sender redirect notifications.
+
+#### H. Host and container of the monitoring server
+
+- Run-as user (Prometheus and exporters should not run as root unless an exporter needs it;
+  node_exporter's textfile collector directory should not be writable by others).
+- Containers: published ports, host networking, Docker socket mounts (some exporters and Netdata
+  mount it), `privileged`, host `/proc` and `/sys` mounts. Assess with
+  [docker](../../containers/docker/SKILL.md).
+- Database security for Zabbix (database user scope, network exposure) and Checkmk site file
+  permissions.
+
+#### I. Backups, retention, and recovery
+
+- Backups of the Zabbix database, Checkmk sites (`omd backup` or the built-in backup), and Prometheus
+  configuration (and data, if history matters). Backups contain every stored credential; protect them
+  accordingly.
+- Retention: metrics retention period and capacity.
+- Whether the user can rebuild monitoring after loss, and whether anyone would notice it stopped.
+
+---
+
+## Recommend
+
+No changes are made in this mode. For each finding, produce a recommendation using the core finding
+template, including **Dependencies / blast radius** and the **operation class**.
+
+### Dependency and blast-radius check (required)
+
+- **Dashboards and consumers:** Grafana data sources, Home Assistant integrations, scripts, and status
+  pages that query Prometheus, Zabbix, or Checkmk APIs. Adding authentication breaks them until each is
+  given a credential.
+- **Scrapers and agents:** adding TLS or authentication to exporters, changing Zabbix PSKs, or forcing
+  Checkmk TLS registration breaks data collection for every host not updated at the same time.
+- **Federation and remote write:** other Prometheus servers, Thanos or Mimir, or a cloud backend that
+  pull from or receive from this one.
+- **Alert delivery:** changes to Alertmanager or media types can stop paging silently. Plan a test.
+- **Automations that use admin accounts:** scripts and integrations logged in as `Admin`, `cmkadmin`, or
+  a shared API token stop working when that account is disabled or its password changes.
+
+### Recommendation guidance
+
+| Area | Typical recommendation | Consequences to explain |
+|---|---|---|
+| Unauthenticated Prometheus, Alertmanager, Pushgateway | Restrict to the monitoring host or management segment; add a web configuration file with TLS and basic auth, or an authenticating proxy. | Grafana and other consumers need credentials; federation targets need updating. |
+| Exporters reachable from untrusted segments | Host-firewall each exporter to the Prometheus server only; add TLS and auth where supported. | Ad-hoc access from other hosts stops. |
+| Admin API or lifecycle endpoint enabled | Disable unless needed; if needed, restrict to localhost or put auth in front. | Config reload automation must use another path (signal or restart). |
+| Netdata dashboard open on the LAN or internet | Bind to localhost or a management address, restrict with access lists, enable bearer-token protection, or disable the local dashboard and use parents or Cloud. | Users who open `:19999` directly lose access or must sign in. |
+| Netdata streaming key shared by all children | One key per child or group, limited by `allow from`; TLS for streaming. | Every child's `stream.conf` changes. |
+| Zabbix default `Admin` possibly unchanged | Create and test a named Super admin, change the `Admin` password, then disable or rename `Admin`. | Integrations using `Admin` break; find them first. |
+| Zabbix unencrypted agents | Enable PSK (unique per host or proxy) or certificates; then stop accepting unencrypted connections. | Each host's agent config and frontend host settings change; roll out in batches. |
+| Zabbix `system.run[*]` allowed broadly | Deny `system.run` except named commands on hosts that need them; restrict global scripts to admin groups with confirmation. | Remediation scripts and actions stop working where removed. |
+| Checkmk agents in legacy plain-text mode | Register each agent with the agent controller (TLS); remove the legacy-pull marker; block 6556 except from the server. | Hosts not registered stop reporting until done. |
+| Checkmk `cmkadmin` as daily account | Named admin users with 2FA; keep `cmkadmin` as break-glass with a stored password. | Bookmarked logins change. |
+| Automation users and API tokens with admin scope | Scope to the minimum role, set expiry where supported, rotate, and record the owner. | Each script using the token must be updated. |
+| Admin credentials reused for monitoring checks | Create read-only monitoring accounts at each target (SNMPv3 read-only, read-only DB user, read-only API key). | Some checks may need specific read permissions. |
+| Monitoring UI exposed to the internet | Remove the public route; use a VPN or an authenticated proxy with MFA. | Remote viewers need the VPN or SSO first. |
+| No watchdog for the alert path | Add a dead-man's-switch alert to an external receiver. | Small cost; may need an external service. |
+| No backup of monitoring config | Back up the database or site config, encrypted, off-host. | Backups contain credentials; protect them. |
+
+Changing ports and relying on "nobody knows the exporter is there" are supplementary only. Never recommend
+them as the main fix.
+
+Group the plan: immediate containment (if any) → urgent fixes (internet-exposed UIs or exporters,
+default admin credentials, broad remote-command permission) → high-priority hardening (agent
+encryption, authentication on Prometheus components, scoped credentials) → routine maintenance (updates,
+backups, retiring stale agents) → optional defense in depth. Then ask for approval (core: modes and
+authorization).
+
+---
+
+## Remediate
+
+Apply only approved changes, one at a time, following the core rules. Monitoring specifics:
+
+- **Back up first:** the Zabbix database, the Checkmk site (`omd backup`), Prometheus and Alertmanager
+  configuration, and Netdata configuration directories, before any change.
+- **Validate configuration before reloading:** use `promtool check config` and `promtool check
+  web-config`, `amtool check-config`, and the product's own validators. A broken Prometheus or
+  Alertmanager configuration can stop monitoring and alerting silently. Reloads and restarts are C1 for
+  a single component, C2 if other systems depend on it.
+- **Add authentication in stages:** enable TLS and auth on the server, update each consumer (Grafana,
+  federation, scripts) and confirm it works, then close the unauthenticated path.
+- **Agent encryption in batches:** configure PSK or certificates on a few hosts, confirm data flows, then
+  continue; only then stop accepting unencrypted connections. This is C2 because a mistake drops
+  monitoring for every affected host.
+- **Admin accounts:** never disable `Admin` or `cmkadmin` before a replacement admin is tested in a
+  separate session. The user sets and stores new passwords.
+- **Remote command restrictions:** confirm with the user which scripts and actions they rely on before
+  removing `AllowKey` entries or script permissions.
+- **Credential rotation:** create the new limited-scope credential at the target, update the monitoring
+  configuration, confirm the check works, then revoke the old one.
+- **Updates:** read release notes, especially for major versions (Zabbix and Checkmk database or site
+  migrations cannot always be rolled back). Keep the backup until the new version is confirmed working.
+
+After each change, follow the core "after a change" steps: confirm data still arrives from affected
+hosts, alerts still route, the closed path is closed (test from an untrusted segment), and record
+before and after.
+
+### Hard stops (refer to a specialist or do manually; never automate)
+
+- Logging in with default or guessed credentials, even to confirm a finding.
+- Running Zabbix scripts, Checkmk actions, or any remote command on agents as a test.
+- Creating, editing, or deleting silences, maintenance windows, or alert rules outside an approved change.
+- Deleting Prometheus series or snapshots, or running the admin API's delete functions.
+- Editing the Zabbix or Checkmk database directly to change users or settings.
+- Deregistering or reinstalling agents across the fleet without a tested rollout.
+
+---
+
+## Respond
+
+On any P0 indicator, switch to Respond immediately. Follow the core playbook plus the
+monitoring-specific steps in [incident-response.md](incident-response.md).
+
+---
+
+## Worked example (invented)
+
+### MON-001: Zabbix agents allow any remote command and accept unencrypted connections from the whole LAN
+
+**Confidence:** Confirmed
+**Priority:** P2. Anyone who controls the Zabbix server or can impersonate it on the LAN can run
+arbitrary commands on every monitored host as the agent's user; agent traffic is readable on the LAN.
+**State:** Open
+**Component:** Zabbix agent 2 on 14 Linux hosts; Zabbix server 7.0 LTS (minor version as reported by
+the frontend)
+**Evidence:** Observed 2026-03-11 in `/etc/zabbix/zabbix_agent2.conf` on three sampled hosts:
+`Server=192.0.2.0/24`, `AllowKey=system.run[*]`, no `TLSConnect` or `TLSAccept` set (defaults to
+unencrypted). The frontend host list shows all 14 hosts with encryption "None". Two global scripts are
+available to the "All users" user group. Zabbix documentation describes `AllowKey`/`DenyKey` for
+restricting `system.run` and PSK or certificate encryption for agent connections (vendor-documented).
+**Expected secure state:** `Server` limited to the Zabbix server address; `system.run` denied except
+named commands on hosts that need them; PSK or certificate encryption required; scripts restricted to an
+admin group.
+**Exposure and prerequisites:** any host on `192.0.2.0/24` can query the passive agent; a Zabbix user in
+"All users" can run the two global scripts on any host they can see.
+**Dependencies / blast radius:** one Zabbix action restarts a web service via remote command on two
+hosts; the user wants to keep that.
+**Recommended remediation:** set `Server=192.0.2.10` on every agent; replace `AllowKey=system.run[*]`
+with `DenyKey=system.run[*]`, plus a specific `AllowKey` for the restart command on the two hosts that
+need it; configure a unique PSK per host and set the host's encryption in the frontend; move the global
+scripts to an admin-only user group with confirmation required.
+**Operation class:** C2 (agent restarts; a mistake drops monitoring for the host).
+**Approval required:** Yes.
+**Verification:** each host shows encryption "PSK" in the frontend and reports data; a connection to
+port 10050 from another LAN host is refused; the restart action still works on its two hosts; a
+non-admin user no longer sees the scripts.
+**Rollback:** restore the captured agent configuration files and frontend host settings.
+
+---
+
+## Version history
+
+- **1.0** (2026-10-31): Initial version.

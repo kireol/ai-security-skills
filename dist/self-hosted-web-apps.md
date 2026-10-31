@@ -3,15 +3,16 @@ name: self-hosted-web-apps
 description: >-
   Security assessment, hardening, remediation, and incident response for small self-hosted web apps and
   dashboards that have no dedicated skill: start pages and dashboards (Homepage, Heimdall, Homarr),
-  network scanners (WatchYourLAN, NetAlertX), monitoring tools (Glances, Uptime Kuma, Grafana), file and
-  3D-print libraries, wikis, and similar. Use when auditing one of these apps, deciding whether it is
-  safe to expose, reviewing its authentication, secrets, container privileges, maintenance status,
-  updates, and backups, or when one may have been compromised.
+  network scanners (WatchYourLAN, NetAlertX), monitoring tools (Glances, Uptime Kuma, Grafana),
+  push-notification servers (ntfy, Gotify), homelab app platforms (CasaOS), file and 3D-print libraries,
+  wikis, and similar. Use when auditing one of these apps, deciding whether it is safe to expose,
+  reviewing its authentication, topic and token access, secrets, container privileges, maintenance
+  status, updates, and backups, or when one may have been compromised.
 license: CC-BY-4.0
 metadata:
-  version: "1.0"
-  last_reviewed: "2026-10-30"
-  applies_to: "Small self-hosted web apps without a dedicated skill, usually run as containers (verify the live version of each app)"
+  version: "1.1"
+  last_reviewed: "2026-10-31"
+  applies_to: "Small self-hosted web apps without a dedicated skill, usually run as containers, including ntfy, Gotify, and CasaOS (verify the live version of each app)"
   audience: "home, homelab"
   finding_prefix: "APP"
   modes: "discover, recommend, remediate, respond"
@@ -71,6 +72,13 @@ skill; this skill decides *which* apps need that protection.
   only the fields you need and redact.
 - **Don't add load or noise.** Scanners and monitors already generate traffic; never trigger scans,
   checks, notifications, or scripts from the app to "test" it.
+- **Notification servers carry more than notifications.** ntfy and Gotify messages often include alert
+  text, hostnames, one-time codes, links, or attachments, and anyone who can publish can send convincing
+  fake alerts ("click here to re-authenticate") to every subscribed phone. Treat read access as data
+  exposure and write access as a phishing channel.
+- **A homelab platform is the host.** CasaOS installs with `sudo`, manages Docker for every app it
+  installs, and offers a file manager and a web terminal. Whoever controls its dashboard controls the
+  host and every app on it; assess it like a server admin console, not like a start page.
 - **Protect at the edge when the app can't protect itself.** For apps without solid authentication, the
   fix is a VPN, an internal-only listener, or an auth proxy in front (Authelia, Authentik, oauth2-proxy,
   Cloudflare Access), not a hidden URL or a non-standard port.
@@ -86,6 +94,8 @@ skill; this skill decides *which* apps need that protection.
 | **On a NAS or appliance app store** | Installed from the NAS or router's package center. | Updates and isolation depend on the platform; assess the platform with its own skill. |
 | **Behind a reverse proxy or tunnel** | Reached through a hostname on the proxy. | Exposure is decided by the proxy and tunnel routes; the app may still be reachable directly on its own port. |
 | **Kubernetes or a homelab platform** (k3s, CasaOS, Unraid, TrueNAS apps) | Platform-managed. | Ingress rules and the platform's own templates decide exposure and mounts; check both. |
+| **CasaOS itself** (the platform, not an app on it) | Installed with the `get.casaos.io` script on Debian, Ubuntu, or Raspberry Pi OS; `casaos-*` systemd services; a gateway serving the dashboard. | The dashboard is a host admin console (Docker control, file manager, web terminal). Assess the dashboard under domains B, C, and E, and each app it installed as its own app. The underlying OS is assessed with the `linux` skill. |
+| **Self-hosted notification server** (ntfy, Gotify) | Native package or container; phones and scripts subscribe to or publish through it. | Access control is per topic (ntfy) or per token (Gotify), not just "logged in or not". Mobile apps and scripts hold its credentials. |
 
 ## Detection
 
@@ -100,7 +110,15 @@ Defaults can be changed, so confirm with the user before relying on a match.
 - Vendor-default ports seen in project documentation (always confirm, since they're easily changed):
   Homepage on port 3000 in its examples; Grafana on 3000 (login page titled "Grafana"); Uptime Kuma on
   3001; WatchYourLAN on 8840; NetAlertX on 20211; Glances web mode on 61208; Heimdall and Homarr on
-  whatever the image maps (commonly 80/443 inside the container).
+  whatever the image maps (commonly 80/443 inside the container). ntfy listens on port 80 by default
+  (`listen-http`), and its official image is usually mapped to another host port; Gotify defaults to
+  port 80 (`GOTIFY_SERVER_PORT`) and 443 when its own TLS is on; the CasaOS gateway serves its
+  dashboard on port 80, or the first free port in 81–89 and then 8080–8089 if 80 is taken (recorded in
+  `/etc/casaos/gateway.ini`; verify on the installed version).
+- Product hints: ntfy answers `/v1/health` with a small JSON health object and serves a web app titled
+  "ntfy"; Gotify serves a web UI titled "Gotify" and a `/version` endpoint that returns its version as
+  JSON without login; CasaOS shows a "CasaOS" page title and, before setup, a create-account page
+  (verify each on the installed version).
 - Page titles and assets: the project name in `<title>`, a project favicon, or a JavaScript bundle path
   that names the framework. A JSON API under `/api/` that answers without credentials is a strong hint
   the app has no authentication enabled.
@@ -130,6 +148,20 @@ ss -tlnp                                                                # host l
 curl -sI http://<host>:<port>/                                          # does it answer, and with what headers?
 curl -s -o /dev/null -w '%{http_code}\n' http://<host>:<port>/          # 302/401 = login; 200 = open?
 ```
+
+App-specific candidates (read-only; run on the server, or in the container with `docker exec`):
+
+```sh
+ntfy user list                      # ntfy users and roles (also prints each user's ACL entries)
+ntfy access                         # ntfy ACL, including entries for everyone / *
+ntfy token list                     # ntfy tokens; shows labels and expiry; don't paste values into the report
+grep -E '^(auth-file|auth-default-access|enable-signup|enable-login|behind-proxy|listen-http)' /etc/ntfy/server.yml
+systemctl list-units 'casaos*'      # CasaOS services present and running
+cat /etc/casaos/gateway.ini         # CasaOS dashboard port (verify the path on the installed version)
+```
+
+For Gotify, read the settings from the compose file or `config.yml` (redacting the password fields), and
+list users, clients, applications, and plugins in the web UI with the user.
 
 - **`docker inspect` without a format string prints environment variables, which often contain API keys
   and passwords.** Use the format strings above, or redact `Config.Env` before showing anything. The same
@@ -164,6 +196,13 @@ capabilities, secrets held, maintained, backed up) keeps the report readable.
   "unmaintained" notice is a finding (core triage, end-of-life). Note when a project has been renamed or
   forked (for example NetAlertX continuing from Pi.Alert); the original may be dead while the fork lives.
 - Project security advisories (GitHub Security Advisories for the repository) for the installed version.
+- **CasaOS:** its security policy says support is limited before v1.0, and the vendor's development
+  attention has shifted to ZimaOS (its NAS operating system). Check the CasaOS releases page for the date
+  of the latest stable release; a core that has gone a long time without a release, while it manages
+  Docker as root, is at least a P3 maintenance finding, and higher if the dashboard is reachable from
+  untrusted networks. Its advisory page has included a critical weak-JWT-secret issue in the past, so
+  check advisories against the installed version. The app store is maintained separately from the core;
+  check both. ntfy and Gotify are actively released; still check each one's releases and advisories.
 - Apps nobody uses any more. Every unused app is attack surface with no benefit.
 
 #### B. Authentication and first-user setup
@@ -188,12 +227,57 @@ capabilities, secrets held, maintained, backed up) keeps the report readable.
 - **Anonymous or public access modes:** Grafana's documentation warns that anonymous access lets any
   visitor query every configured data source as a Viewer. Public dashboards, share links, and guest
   modes in other apps are similar.
+- **CasaOS first-run account:** the first visitor to the dashboard after install creates the account
+  that owns the platform. An unclaimed CasaOS dashboard reachable by anyone else is a P1 (it gives Docker
+  and a terminal on the host). Report it; never complete it.
+- **Gotify default admin:** Gotify creates its first user from `GOTIFY_DEFAULTUSER_NAME` and
+  `GOTIFY_DEFAULTUSER_PASS`, which default to `admin` / `admin` and apply only when the database is
+  first created. Ask whether the password was changed in the web UI afterwards, and whether the compose
+  file or `config.yml` still holds the initial password (setting them later has no effect on an
+  existing database). `GOTIFY_REGISTRATION` defaults to `false`; check it wasn't turned on.
 - Accounts: who has admin; accounts nobody recognizes; shared accounts.
 - MFA or SSO (OIDC) support and whether it's used. For OIDC, check that the identity provider restricts
   which users may sign in (Homepage's documentation notes it accepts any identity the provider
   authorizes for the client).
 - Brute-force protection: many small apps have none (Homepage documents that it applies no
   application-level rate limiting to password attempts). If so, the proxy must provide it.
+
+#### B2. Notification servers: topic and token access (ntfy, Gotify)
+
+- **ntfy is open by default.** With no `auth-file` (or `database-url`), anyone who can reach the server
+  can publish to and subscribe to any topic, and the topic name is the only secret. Even with auth
+  enabled, `auth-default-access` defaults to `read-write`, so topics without an ACL entry stay open to
+  anonymous users. For a private server the vendor recommends `deny-all`. Record the value, and list the
+  ACL entries (`ntfy access`, or `auth-access` in the config) for `everyone` / `*`, which mean anonymous
+  users.
+- **Topics on a public ntfy server** (ntfy.sh or any instance that allows anonymous access) are readable
+  by anyone who knows or guesses the name. Check which scripts and services publish there, whether topic
+  names are short or guessable, and whether messages carry anything sensitive. A guessable topic
+  carrying alerts with hostnames or links is a finding; one carrying codes or credentials is P2.
+- **ntfy wildcard grants:** an ACL like `ntfy access '*' 'up*' write-only` (documented for UnifiedPush)
+  lets anyone publish to every matching topic. Check that wildcard patterns match only what's intended.
+- **ntfy users, roles, and tokens:** `admin` users can read and write every topic. Access tokens
+  (`tk_…`) can do almost everything the account can, except change the password or delete the account;
+  list them with `ntfy token list` (shows labels and expiry; don't print token values) and look for tokens
+  with no expiry, no label, or no known owner. `enable-signup` (default `false`) lets anyone create an
+  account; check it's off unless wanted. Users and tokens provisioned in the config file (`auth-users`,
+  `auth-tokens`) are secrets in that file.
+- **ntfy admin socket:** the CLI manages users through a local socket (default
+  `/run/ntfy/admin.sock`) that needs no password; socket access is the authorization. Check its
+  permissions and who is in the ntfy group.
+- **ntfy behind a proxy:** without `behind-proxy`, every visitor looks like the proxy's address, so rate
+  limits apply to everyone together (and brute-force limits don't work per client). Check it's set when
+  a proxy is used, with the trusted proxy configured.
+- **Gotify token types:** an *application* token can only send messages; a *client* token receives
+  messages and manages clients, applications, and messages. A leaked client token exposes every message
+  for that user; a leaked application token allows fake notifications. List applications and clients
+  per user in the UI and look for ones nobody recognizes. Tokens in scripts, monitoring tools, and home
+  automation are stored secrets (domain D).
+- **Gotify plugins:** plugins are compiled Go plugins loaded by the server, so a plugin is code running
+  with the server's rights. List installed plugins and where they came from.
+- **Transport:** ntfy Basic Auth and tokens, and Gotify tokens and logins, travel with every request.
+  On anything beyond one trusted segment they need TLS (Gotify's `GOTIFY_SERVER_SECURECOOKIE` should be
+  on when served over HTTPS).
 
 #### C. Binding, exposure, and the path in
 
@@ -207,6 +291,10 @@ capabilities, secrets held, maintained, backed up) keeps the report readable.
   protects its API proxy; setting it to `*` disables the check. Glances recommends
   `xmlrpc_allowed_hosts` for non-loopback deployments against DNS rebinding). These are not
   authentication, but missing ones make LAN-only apps attackable from a browser on the LAN.
+- **CasaOS and the apps it installs:** the gateway listens on all interfaces by default, and app-store
+  apps usually publish their ports on all host addresses too. List every port CasaOS apps publish, and
+  check that the dashboard itself is never port-forwarded or tunneled to the internet; it's a host
+  admin console. Check CasaOS's own instructions before putting it behind a reverse proxy.
 - TLS: plain HTTP is common inside the LAN. Note it where the app carries passwords or session cookies
   across untrusted segments; the fix is usually TLS at the reverse proxy (assessed with `web-servers`).
 
@@ -223,7 +311,13 @@ capabilities, secrets held, maintained, backed up) keeps the report readable.
 - Where secrets are stored: plain configuration files, `.env` files, environment variables in compose
   files committed to git, or a secrets mechanism. File permissions on those files and on the app's data
   volume.
-- Notification credentials (SMTP passwords, chat-bot tokens, webhook URLs) stored in monitoring tools.
+- Notification credentials (SMTP passwords, chat-bot tokens, webhook URLs, ntfy tokens or passwords,
+  Gotify application tokens) stored in monitoring tools, scripts, and home automation.
+- ntfy's config file can hold provisioned password hashes and tokens, the Web Push private key
+  (`web-push-private-key`), SMTP credentials, and S3 keys for attachments; Gotify's `config.yml` or
+  environment can hold the initial admin password and database credentials. Check file permissions
+  (Gotify's documentation says to restrict `config.yml`), and prefer the `_FILE` variants Gotify
+  supports for secrets.
 - Configuration in a git repository: check whether keys were ever committed (history keeps them).
 
 #### E. Container privileges and capabilities (blast radius)
@@ -237,6 +331,11 @@ capabilities, secrets held, maintained, backed up) keeps the report readable.
   (NetAlertX documents them; WatchYourLAN requires host networking). They let the app sniff, spoof, and
   send arbitrary packets on the LAN. Acceptable for a scanner the user wants, but the app then needs
   strong access control.
+- **CasaOS:** installed with `sudo`, it controls Docker for every app it installs and has a file manager
+  and a web terminal, so its dashboard login is effectively root on the host. Check the apps it
+  installed for `privileged`, host networking, and wide host mounts (app-store templates sometimes ask
+  for them), and check for third-party app-store sources added beyond the official one: those are
+  templates from strangers that decide containers' privileges.
 - `privileged: true`, mapped devices, and host paths mounted read-write (especially `/`, `/etc`, home
   directories, or the whole media library).
 - **Command and script execution:** apps that run commands, scripts, or plugins (scanner plugins,
@@ -257,6 +356,9 @@ capabilities, secrets held, maintained, backed up) keeps the report readable.
 - Major-version migrations pending (for example a project that moved to a new major version and stopped
   fixing the old one).
 - Updater tools themselves often mount the Docker socket; assess them under domain E.
+- **CasaOS** updates from Settings in its UI or with the vendor's update script; the project says to run
+  the terminal update over SSH or a local console, not through the CasaOS web terminal. Updating CasaOS
+  doesn't update the apps it installed or the OS underneath; each needs its own process.
 
 #### G. Backups of app data
 
@@ -265,6 +367,9 @@ capabilities, secrets held, maintained, backed up) keeps the report readable.
 - Whether the backup is consistent (SQLite and other databases copied while the app runs can be corrupt;
   check the app's documented backup method).
 - Whether backups contain secrets (they usually do) and who can read them.
+- ntfy: the auth database (`auth-file`, for example `user.db`), the message cache, and the attachment
+  directory (ntfy deletes files there it doesn't recognize, so it must not be shared with other data).
+  Gotify: its database (SQLite `data/gotify.db` by default) and plugin directory.
 - For apps that are just configuration (start pages), whether the configuration is in version control
   instead, without secrets.
 - Whether a restore has ever been tested.
@@ -318,6 +423,12 @@ template, including **Dependencies / blast radius** and the **operation class**.
 | Abandoned project | Replace with a maintained alternative or a maintained fork, or retire the app. | Migration effort; data may not transfer. |
 | Floating `latest` tag, no update process | Pin a version and set a regular update routine (or an update notifier) with release-note review. | Updates become a deliberate task. |
 | No backup of app data | Back up the data volume with the app's documented method; keep it off-host and protected. | Backups hold secrets; protect them like the app. |
+| ntfy open by default (no auth, or `auth-default-access` `read-write`) | Enable auth and set `auth-default-access: deny-all`; grant per-user or per-token ACLs to the topics each client needs. | Every publisher and subscriber (scripts, phones, monitors) needs a token or login first, or it stops working. |
+| Sensitive alerts on a public ntfy server or guessable topic | Move them to a self-hosted server with auth, or use access-protected topics and long random names; strip secrets from message bodies. | Phone subscriptions and scripts must be re-pointed. |
+| Gotify admin password may still be the initial default | User changes it in the web UI now; remove the initial password from compose and config files. | Clients using the admin login re-authenticate. |
+| Unknown Gotify clients/applications or ntfy tokens | Delete them after confirming with the user; give new tokens labels and, for ntfy, expiries. | Any forgotten script using them stops. |
+| CasaOS dashboard reachable beyond the trusted LAN, or unclaimed | Claim it now (the user); remove any forward or tunnel to it; reach it only over VPN. | Remote management needs the VPN. |
+| CasaOS core unmaintained for a long time | Plan a move to a maintained platform (or plain compose files on a maintained OS), or accept the risk explicitly with the dashboard LAN-only. | Migration effort; apps keep their data volumes if moved carefully. |
 | Unused app | Remove it, its volumes (after a backup), its proxy route, and its stored keys at other services. | None if truly unused; confirm first. |
 
 Changing ports, obscure hostnames or paths, and "nobody knows it's there" are supplementary only. Never
@@ -349,6 +460,16 @@ Apply only approved changes, one at a time, following the core rules. App specif
   accepts losing or replacing it.
 - **Updates:** read the release notes; for major versions, follow the project's migration guide and keep
   the backup and the previous image until the new version is confirmed working.
+- **ntfy access changes:** set `auth-default-access: deny-all` only after every publisher and subscriber
+  the user named has a token or login and an ACL entry; otherwise alerts silently stop. Send nothing to
+  test it; ask the user to confirm the next real notification arrives (or, with approval, send one
+  test message to a topic only the user subscribes to). Restarting ntfy is C1 for a single-user server,
+  C2 when alerting for other systems depends on it.
+- **Token clean-up:** create the replacement token, update the client, confirm it works, then revoke the
+  old one (`ntfy token remove`, or delete the Gotify client/application). Deleting a Gotify application
+  also deletes its messages (C3 for message history the user wants to keep).
+- **CasaOS updates** are C2: they restart the platform's services. Back up the CasaOS configuration and
+  app data first, and run them over SSH or a local console as the project advises.
 - **Retiring an app:** back up, stop, remove its proxy route and DNS name, revoke the keys it held at
   other services, then delete volumes only after the user confirms.
 
@@ -359,7 +480,11 @@ record before and after.
 ### Hard stops (refer to a specialist or do manually; never automate)
 
 - Completing first-user setup, creating admin accounts, or setting passwords on the user's behalf.
-- Logging in with default or guessed credentials, even to "confirm" a finding.
+- Logging in with default or guessed credentials (including Gotify's initial `admin` login), even to
+  "confirm" a finding.
+- Subscribing to or reading someone's ntfy topics or Gotify messages to "check" what they contain; ask
+  the user what they send instead.
+- Using the CasaOS web terminal or file manager to make changes on the host.
 - Running the app's scan, script, or command features as a test.
 - Deleting app data volumes or databases without a verified backup and the user's explicit go-ahead.
 - Editing the app's database directly to change users or settings.
@@ -409,6 +534,11 @@ auth layer even if the key change is rolled back).
 
 ## Version history
 
+- **1.1** (2026-10-31): Added push-notification servers (ntfy: open-by-default access,
+  `auth-default-access`, ACLs, public and guessable topics, tokens, admin socket; Gotify: initial
+  `admin` account, application vs client tokens, plugins) and CasaOS as a homelab platform (first-run
+  account, gateway port and exposure, Docker and terminal control, app-store sources, maintenance status
+  and updates). Updated Detection, Discover, Recommend, Remediate, Respond, and references.
 - **1.0** (2026-10-30): Initial version.
 
 ---
@@ -434,6 +564,15 @@ network access to the whole LAN. Scope widely, even when the app itself looks un
   or stop publishing its port. That stops new access without destroying evidence.
 - **Then stop the container, don't remove it:** `docker stop` keeps its writable layer and logs for
   evidence; `docker rm` or `docker compose down` followed by `up` discards them.
+- **Notification servers (ntfy, Gotify):** indicators include phishing-style notifications nobody sent
+  ("log in here", "approve this"), new ntfy users, tokens, or ACL entries (especially for `everyone`),
+  `auth-default-access` loosened, or new Gotify clients, applications, or plugins. Warn the people who
+  get the notifications not to act on links or codes in them until the incident is closed. A new client
+  token means someone may have read every past message; a new application token means someone can send
+  fake ones.
+- **CasaOS:** treat a compromised dashboard as a compromised host (it controls Docker and has a web
+  terminal). Look for apps nobody installed, added third-party app-store sources, and new accounts.
+  Contain at the host level using the `linux` skill and the core playbook.
 - **If the app had the Docker socket, host networking, or privileged mode:** treat the container host as
   compromised (switch to that host's skill or the core playbook) and contain the host, not just the app.
 
@@ -451,6 +590,11 @@ Collect before changing anything. Treat configuration and data as secret.
   backup) to compare.
 - For a host with a mounted Docker socket: the list of all containers and images with creation times
   (`docker ps -a`, `docker images`), to find anything the attacker started.
+- ntfy: the auth database (`auth-file`), the server config, and the output of `ntfy user list`,
+  `ntfy access`, and `ntfy token list` (store securely; tokens are secrets). Gotify: its database
+  (SQLite by default) and the list of users, clients, applications, and plugins. CasaOS: its
+  configuration directory (`/etc/casaos/`, verify on the installed version), the list of installed apps
+  and app-store sources, and the systemd journal for the `casaos*` services.
 - From the app's UI or data, if safe: user list, recent logins, and the list of monitors, scripts,
   plugins, and integrations. Screenshot anything unexpected.
 
@@ -464,6 +608,9 @@ Collect before changing anything. Treat configuration and data as secret.
   ARP spoofing, new devices, and traffic from the app's host to systems it doesn't normally contact.
 - **The identity provider**, if the app used SSO: check for new users or clients created there.
 - **Other apps sharing the same volume, network, or `.env` file.**
+- **Everything that sent through a notification server:** if messages carried codes, links, or hostnames,
+  treat those as disclosed; if the attacker could publish, ask which notifications people acted on.
+- **Every app CasaOS installed**, and the host under it.
 - **Git repositories** holding the app's configuration, if they also held keys.
 
 ## Eradication and recovery
@@ -472,6 +619,8 @@ Collect before changing anything. Treat configuration and data as secret.
   clean compose file. Don't reuse the old writable layer.
 - Restore app data only from a backup taken before the earliest plausible compromise, or rebuild the
   configuration by hand; check restored data for attacker-added users, scripts, and integrations.
+- For ntfy and Gotify, rotate every token and password (all clients and publishers need the new ones),
+  revoke tokens nobody recognizes, and set ntfy's `auth-default-access` to `deny-all` before reopening.
 - **Rotate every secret the app held:** create new keys at each integrated service and revoke the old
   ones; new admin and user passwords for the app; new session or signing secrets where the app has them;
   new notification credentials and webhook URLs.
@@ -500,7 +649,7 @@ documentation, release notes, and security advisories for the installed version.
 the apps named in the skill; for any other app, find the equivalent pages (README, documentation,
 releases, `SECURITY.md`, GitHub Security Advisories) before assessing it.
 
-Last verified: 2026-10-30
+Last verified: 2026-10-31
 
 ## Vendor (authoritative)
 
@@ -534,6 +683,36 @@ Last verified: 2026-10-30
   https://grafana.com/docs/grafana/latest/setup-grafana/sign-in-to-grafana/
 - Grafana security advisories: https://grafana.com/security/security-advisories/
 
+### Notification servers
+
+- ntfy server configuration (default port, `auth-file`, `auth-default-access`, ACLs, tokens, admin
+  socket, `behind-proxy`, attachments, Web Push keys): https://docs.ntfy.sh/config/
+- ntfy publishing and topic names (topic name as the only secret on open servers):
+  https://docs.ntfy.sh/publish/
+- ntfy FAQ (guessable topics, ACLs): https://docs.ntfy.sh/faq/
+- ntfy releases and security advisories: https://github.com/binwiederhier/ntfy/releases and
+  https://github.com/binwiederhier/ntfy/security
+- Gotify configuration (default port, initial `admin` user and password, registration, `_FILE`
+  secrets, trusted proxies, secure cookie, config file permissions): https://gotify.net/docs/config
+- Gotify concepts (applications vs clients): https://gotify.net/docs/
+- Gotify pushing messages (`X-Gotify-Key` application token): https://gotify.net/docs/pushmsg
+- Gotify plugins (Go plugin system): https://gotify.net/docs/plugin
+- Gotify releases and security advisories: https://github.com/gotify/server/releases and
+  https://github.com/gotify/server/security
+
+### Homelab platforms
+
+- CasaOS repository (install script, supported systems, update and uninstall, web-terminal caution):
+  https://github.com/IceWhaleTech/CasaOS
+- CasaOS releases (check the date of the latest stable release): https://github.com/IceWhaleTech/CasaOS/releases
+- CasaOS security policy and advisories (support limited before v1.0):
+  https://github.com/IceWhaleTech/CasaOS/security
+- CasaOS wiki (first account, running behind a web server): https://wiki.casaos.io/en/guides/casaos-behind-webserver
+- CasaOS app store repository: https://github.com/IceWhaleTech/CasaOS-AppStore
+- ZimaOS (the vendor's actively developed NAS OS): https://github.com/IceWhaleTech/ZimaOS
+- Vendor-hosted community summary of CasaOS development status (summarizes forum posts; not an official
+  lifecycle notice): https://shop.zimaspace.com/pages/is-casaos-abandoned-development-status
+
 ### Containers and access layers
 
 - Docker Engine security (daemon attack surface): https://docs.docker.com/engine/security/
@@ -552,6 +731,10 @@ the core documents.
 - Tecnativa Docker Socket Proxy: https://github.com/Tecnativa/docker-socket-proxy. A filtering proxy for
   the Docker API, named in Traefik's documentation. It limits which API endpoints a container can call;
   configure it to allow only what the app needs, and remember it's still access to the Docker API.
+- A Debian install guide documenting the CasaOS gateway's port fallback (80, then 81–89, then
+  8080–8089, saved in `/etc/casaos/gateway.ini`):
+  https://computingforgeeks.com/how-to-setup-personal-cloud-using-casaos-on-debian/. Confirm on the
+  installed version.
 - GitHub repository metadata (last commit, last release, archived flag, open security issues): the
   practical signal for project maintenance status. Read it as evidence, not as a guarantee either way.
 
