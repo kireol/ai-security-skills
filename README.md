@@ -157,6 +157,17 @@ report at the end.
 
 Everything about your systems stays on your machine in `~/ai-security-reports/`, readable only by you.
 
+## Live dashboard
+
+Run `python3 tools/dashboard/dashboard.py serve` (or answer yes to the launcher's dashboard question) to
+get a private local web page showing what your agents have found as they work: the inventory, mode,
+domain status, findings, changes, and incidents. See [tools/dashboard/README.md](tools/dashboard/README.md).
+
+![The dashboard during an example run: a list of assessments with open findings by priority, and the
+run's inventory, network-wide domains, and findings](docs/images/dashboard.png)
+
+*An example run, from the dashboard's invented sample data.*
+
 ## Layout
 
 ```
@@ -219,17 +230,6 @@ tools/dashboard/          Local live dashboard and the report generator (report.
 | web | [`web-servers`](skills/web/web-servers/SKILL.md) | Web servers and reverse proxies (Apache, nginx, Caddy, Traefik, HAProxy, NPM) |
 
 Suggestions for new skills are welcome; start from `templates/skill-template/`.
-
-## Live dashboard
-
-Run `python3 tools/dashboard/dashboard.py serve` (or answer yes to the launcher's dashboard question) to
-get a private local web page showing what your agents have found as they work: the inventory, mode,
-domain status, findings, changes, and incidents. See [tools/dashboard/README.md](tools/dashboard/README.md).
-
-![The dashboard during an example run: a list of assessments with open findings by priority, and the
-run's inventory, network-wide domains, and findings](docs/images/dashboard.png)
-
-*An example run, from the dashboard's invented sample data.*
 
 ## Contributing
 
