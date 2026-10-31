@@ -123,7 +123,6 @@ function tabs(a) {
 }
 
 function answeredBy(answer) {
-  if (!answer) return "Not answered yet";
   const where = answer.source === "dashboard" ? "Set in the dashboard" : "Answered in the chat";
   return `${where}, ${when(answer.time)}`;
 }
@@ -161,7 +160,7 @@ function kickoffForm(a) {
     input.id = `kickoff-${f.key}`;
     if (description) input.setAttribute("aria-describedby", descId);
     return el("div", { class: "field" }, el("label", { for: input.id }, f.question), description, input,
-      el("div", { class: "small muted" }, answeredBy(answer)));
+      answer ? el("div", { class: "small muted" }, answeredBy(answer)) : null);
   });
 
   async function save(e) {
