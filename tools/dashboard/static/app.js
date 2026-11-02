@@ -11,6 +11,7 @@ let showClosed = false;
 let lastState = null;
 let tab = "overview";       // for runs: "overview" or "kickoff"
 let kickoffDirty = false;   // unsaved edits in the kick-off form; don't re-render over them
+const kickoffRequired = new Set();   // questions the user tried to save without answering
 let kickoffMessage = null;  // {text, ok} after saving
 
 function el(tag, props = {}, ...children) {
@@ -116,7 +117,7 @@ const kickoffAnswered = (a) => Boolean(a.kickoff.discovery_level);
 function tabs(a) {
   const button = (name, text) => el("button", {
     class: `tab${tab === name ? " current" : ""}`,
-    onclick: () => { tab = name; kickoffDirty = false; kickoffMessage = null; render(lastState); },
+    onclick: () => { tab = name; kickoffDirty = false; kickoffMessage = null; kickoffRequired.clear(); render(lastState); },
   }, text);
   return el("div", { class: "tabs", role: "tablist" }, button("overview", "Overview"),
     button("kickoff", kickoffAnswered(a) ? "Kick-off settings" : "Kick-off settings (needs answers)"));
@@ -152,7 +153,11 @@ function kickoffForm(a) {
         el("div", { class: "small muted" }, answer ? `Kick-off answer: ${(f.choices.find(([v]) => v === answer.value) || [, answer.value])[1]}. ` : "",
           "To change who can view it, stop the dashboard (scripts/assess.sh --stop) and start it again."));
     }
-    const mark = () => { kickoffDirty = true; kickoffMessage = null; };
+    const mark = () => {
+      kickoffDirty = true;
+      if (input.value.trim()) clearRequired(f.key);
+      kickoffMessage = kickoffRequired.size ? { ok: false, required: true, text: requiredText(kickoffRequired.size) } : null;
+    };
     let input;
     if (f.choices) {
       input = el("select", { name: f.key, oninput: mark },
@@ -167,15 +172,42 @@ function kickoffForm(a) {
     }
     input.id = `kickoff-${f.key}`;
     if (description) input.setAttribute("aria-describedby", descId);
-    return el("div", { class: "field" }, el("label", { for: input.id }, f.question), description, input,
+    const field = el("div", { class: "field", id: `kickoff-${f.key}-field` }, el("label", { for: input.id }, f.question),
+      description, input,
       answer ? el("div", { class: "small muted" }, answeredBy(answer))
         : suggested ? el("div", { class: "small muted" }, `${PREFILL_SOURCE[f.key] || "Suggested."} Check it; it's `
-          + "saved with your other answers when you press Save answers. Clear it to leave the question unanswered.")
+          + "saved with your other answers when you press Save answers.")
         : null);
+    // Keep the red marks across the dashboard's periodic redraws until the question is answered.
+    if (kickoffRequired.has(f.key) && !input.value.trim()) markRequired(field, input, f.key);
+    else kickoffRequired.delete(f.key);
+    return field;
   });
 
   async function save(e) {
     e.preventDefault();
+    // Every question needs an answer. Mark the empty ones and take the user to the first of them.
+    const missing = fields.filter((f) => e.target.elements[f.key] && !e.target.elements[f.key].value.trim());
+    if (missing.length > 0) {
+      fields.forEach((f) => clearRequired(f.key));
+      missing.forEach((f) => {
+        kickoffRequired.add(f.key);
+        markRequired(document.getElementById(`kickoff-${f.key}-field`), e.target.elements[f.key], f.key);
+      });
+      kickoffMessage = { ok: false, required: true, text: requiredText(missing.length) };
+      const message = document.getElementById("kickoff-message");
+      message.textContent = kickoffMessage.text;
+      message.className = "error";
+      message.hidden = false;
+      message.dataset.required = "true";
+      message.parentElement.className = "kickoff-feedback";
+      const stale = document.querySelector(".tell-agent");
+      if (stale) stale.remove();
+      const first = e.target.elements[missing[0].key];
+      document.getElementById(`kickoff-${missing[0].key}-field`).scrollIntoView({ block: "start", behavior: "smooth" });
+      first.focus({ preventScroll: true });
+      return;
+    }
     const answers = {};
     for (const f of fields) {
       const input = e.target.elements[f.key];
@@ -187,7 +219,9 @@ function kickoffForm(a) {
     if (Object.keys(answers).length === 0) {
       kickoffMessage = { text: "Nothing changed.", ok: true };
       kickoffDirty = false;
-      return redraw();
+      revealKickoffFeedback = true;
+      redraw();
+      return revealFeedback();
     }
     try {
       const response = await fetch("/api/kickoff", {
@@ -201,6 +235,7 @@ function kickoffForm(a) {
       kickoffMessage = { text: "Your answers are saved. Next, go back to your AI assistant and tell it you've "
         + "answered the kick-off questions here. It also re-reads these answers at every checkpoint, and confirms "
         + "them with you before it starts.", ok: true, tellAgent: true };
+      revealKickoffFeedback = true;
       if (document.activeElement) document.activeElement.blur();
       refresh();
     } catch (err) {
@@ -208,6 +243,8 @@ function kickoffForm(a) {
       const message = document.getElementById("kickoff-message");
       message.textContent = `Not saved: ${err.message}`;
       message.className = "error";
+      message.hidden = false;
+      message.scrollIntoView({ block: "nearest", behavior: "smooth" });
       const stale = document.querySelector(".tell-agent");
       if (stale) stale.remove();
     }
@@ -217,15 +254,63 @@ function kickoffForm(a) {
     el("p", { class: "muted" }, locked
       ? "This run is complete. These are the kick-off answers it used."
       : "Answer here or in the chat with your AI assistant; both end up in the same place. The newest answer "
-        + "to each question wins. Leaving a field blank keeps the existing answer."),
+        + "to each question wins. Every question needs an answer before you can save."),
     el("fieldset", locked ? { disabled: "" } : {}, rows,
+      // The result goes just above the button the user pressed, so it lands where they're already looking.
+      locked ? null : el("div", { id: "kickoff-feedback", class: kickoffMessage ? "kickoff-feedback" : "" },
+        el("p", { id: "kickoff-message", class: kickoffMessage && !kickoffMessage.ok ? "error"
+          : kickoffMessage && kickoffMessage.tellAgent ? "saved saved-panel" : "saved",
+          ...(kickoffMessage ? {} : { hidden: "" }),
+          ...(kickoffMessage && kickoffMessage.required ? { "data-required": "true" } : {}) },
+          kickoffMessage ? kickoffMessage.text : ""),
+        kickoffMessage && kickoffMessage.tellAgent ? tellAgentBox() : null),
       locked ? null : el("div", { class: "actions" }, el("button", { type: "submit" }, "Save answers"),
         kickoffDirty ? el("button", { type: "button", class: "link",
-          onclick: () => { kickoffDirty = false; kickoffMessage = null; redraw(); } }, "Discard changes") : null)),
-    el("p", { id: "kickoff-message", class: kickoffMessage && !kickoffMessage.ok ? "error"
-      : kickoffMessage && kickoffMessage.tellAgent ? "saved saved-panel" : "saved" },
-      kickoffMessage ? kickoffMessage.text : ""),
-    kickoffMessage && kickoffMessage.tellAgent ? tellAgentBox() : null);
+          onclick: () => { kickoffDirty = false; kickoffMessage = null; kickoffRequired.clear(); redraw(); } },
+          "Discard changes") : null)));
+}
+
+// Red "required" text under an unanswered question, linked to its input for screen readers.
+function markRequired(field, input, key) {
+  if (field.querySelector(".required-message")) return;
+  input.after(el("div", { id: `kickoff-${key}-required`, class: "required-message" }, "This question is required."));
+  input.setAttribute("aria-invalid", "true");
+  const described = (input.getAttribute("aria-describedby") || "").split(" ").filter(Boolean);
+  input.setAttribute("aria-describedby", [...described, `kickoff-${key}-required`].join(" "));
+  field.classList.add("field-required");
+}
+
+const requiredText = (n) => (n === 1 ? "Not saved: 1 question still needs an answer. It's marked in red."
+  : `Not saved: ${n} questions still need an answer. They're marked in red.`);
+
+function clearRequired(key) {
+  kickoffRequired.delete(key);
+  const note = document.getElementById(`kickoff-${key}-required`);
+  if (!note) return;
+  note.remove();
+  // Keep the count above the Save button current as questions get answered.
+  const message = document.getElementById("kickoff-message");
+  if (message && message.dataset.required) {
+    message.textContent = kickoffRequired.size ? requiredText(kickoffRequired.size) : "";
+    if (!kickoffRequired.size) message.hidden = true;
+  }
+  const input = document.getElementById(`kickoff-${key}`);
+  input.removeAttribute("aria-invalid");
+  const described = (input.getAttribute("aria-describedby") || "").split(" ")
+    .filter((id) => id && id !== `kickoff-${key}-required`);
+  if (described.length) input.setAttribute("aria-describedby", described.join(" "));
+  else input.removeAttribute("aria-describedby");
+  document.getElementById(`kickoff-${key}-field`).classList.remove("field-required");
+}
+
+// After a save, bring the result into view once, in case the redraw moved it off screen.
+let revealKickoffFeedback = false;
+function revealFeedback() {
+  if (!revealKickoffFeedback) return;
+  const box = document.getElementById("kickoff-feedback");
+  if (!box || !box.classList.contains("kickoff-feedback")) return;
+  revealKickoffFeedback = false;
+  box.scrollIntoView({ block: "nearest", behavior: "smooth" });
 }
 
 const TELL_AGENT = "I answered the kick-off settings questions in the dashboard.";
@@ -392,6 +477,7 @@ async function poll() {
     document.getElementById("login").hidden = true;
     document.getElementById("app").hidden = false;
     render(lastState);
+    revealFeedback();
     setStatus(`live · ${new Date().toLocaleTimeString()}`, true);
   } catch (err) {
     setStatus(`disconnected (${err.message})`, false);

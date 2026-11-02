@@ -81,20 +81,24 @@ button.link { background: none; border: none; padding: 0; color: var(--accent); 
 .tab.current { background: var(--accent); border-color: var(--accent); color: #fff; }
 .tab:focus-visible { outline: 3px solid var(--warn); outline-offset: 2px; }
 .kickoff fieldset { border: none; padding: 0; margin: 0; max-width: 720px; }
-.field { margin: 0 0 14px; }
+.field { margin: 0 0 14px; scroll-margin-top: 24px; }
 .field label { display: block; font-weight: 600; margin-bottom: 4px; }
 .field input, .field select, .field textarea { width: 100%; padding: 6px 8px; font: inherit; color: var(--text);
   background: var(--panel); border: 1px solid var(--line); border-radius: 4px; }
 .field textarea { resize: vertical; }
+.required-message { color: var(--bad); font-size: 13px; font-weight: 600; margin-top: 4px; }
+.field-required input, .field-required select, .field-required textarea { border-color: var(--bad); }
+.field-required label { color: var(--bad); }
 .field .description { color: var(--muted); font-size: 13px; margin: 0 0 6px; max-width: 70ch; }
 .actions { display: flex; gap: 16px; align-items: center; }
 .actions button[type=submit] { padding: 7px 16px; border-radius: 4px; border: none; background: var(--accent);
   color: #fff; font: inherit; font-weight: 600; cursor: pointer; }
 .saved { color: var(--good); } .error { color: var(--bad); }
 .kickoff-needed { margin: 8px 0; padding: 8px 12px; border: 2px solid var(--warn); border-radius: 6px; }
-.saved-panel { min-height: 96px; margin: 16px 0 0; padding: 16px 20px; max-width: 720px; font-size: 16px;
+.saved-panel { min-height: 96px; margin: 0; padding: 16px 20px; max-width: 720px; font-size: 16px;
   line-height: 1.5; color: var(--text); background: var(--panel); border: 2px solid var(--good);
   border-left-width: 8px; border-radius: 6px; }
+.kickoff-feedback { margin: 16px 0; }
 .tell-agent { max-width: 720px; margin: 12px 0 0; padding: 14px 20px; background: var(--panel);
   border: 2px solid var(--accent); border-radius: 6px; }
 .tell-agent-title { font-weight: 600; font-size: 15px; margin-bottom: 8px; }

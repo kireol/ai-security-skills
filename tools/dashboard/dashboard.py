@@ -78,13 +78,13 @@ KICKOFF_FIELDS = [
      "business systems."),
     ("in_scope", "In-scope networks", None, "Subnets or VLANs to assess, e.g. 192.0.2.0/24",
      "The only networks the agent may look at. Anything not listed here is left alone."),
-    ("out_of_scope", "Out of scope", None, "Devices or ranges to skip",
+    ("out_of_scope", "Out of scope", None, "Devices or ranges to skip, or \"none\"",
      "Devices or address ranges inside the in-scope networks that the agent must not touch, for example "
      "someone else's devices or a work laptop."),
     ("internet_edge", "Internet edge", None, "Public IP or hostname to check from outside, or \"skip\"",
      "Your public address, so the agent can confirm what the internet can reach. It is checked only with "
      "your approval, from a place you approve. Enter \"skip\" to leave it out."),
-    ("known_systems", "Known systems", None, "Anything you already know is there: firewall, NAS, cameras, ...",
+    ("known_systems", "Known systems", None, "Anything you already know is there: firewall, NAS, cameras, ..., or \"none\"",
      "Systems you already know about. This speeds up the inventory and helps the agent notice anything "
      "missing or unexpected."),
     ("discovery_level", "Discovery level", [("0", "0: passive, no probing (default)"),
@@ -103,14 +103,14 @@ KICKOFF_FIELDS = [
      "(more complete, low risk if the accounts can't change anything). Admin: it can also make changes "
      "you approve (highest risk; only needed for remediation)."),
     ("access_available", "Access available", None,
-     "Per system: SSH, API tokens, web logins, MCP tools. Never type a password or key here.",
+     "Per system: SSH, API tokens, web logins, MCP tools, or \"none\". Never type a password or key here.",
      "Which kinds of access exist for which system, for example \"NAS: read-only SSH account\". Only the "
      "kind of access: keep the credentials themselves in environment variables, an SSH agent, or a "
      "credential store."),
-    ("fragile_devices", "Fragile devices", None, "Devices that must not be probed",
+    ("fragile_devices", "Fragile devices", None, "Devices that must not be probed, or \"none\"",
      "Devices that could crash or misbehave if probed, such as medical or industrial equipment, old "
      "printers, or some cameras. The agent won't send anything to them."),
-    ("time_window", "Time window", None, "When probing and changes are allowed",
+    ("time_window", "Time window", None, "When probing and changes are allowed, or \"any time\"",
      "When the agent may probe the network or make approved changes, for example \"weekday evenings\" or "
      "\"any time\". Outside it, the agent does neither."),
     ("goal", "Goal", [("discover", "Discover only"), ("recommend", "Discover and recommend"),
