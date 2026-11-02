@@ -25,7 +25,8 @@ every operation first, using the operation classes in
    requested scopes, and risks, and getting approval.
 8. **Never expose secrets in output.** Redact tokens, passwords, private keys, session cookies, encryption
    keys, and authentication headers before recording or sharing evidence. Record that a secret exists and
-   its scope and age, never its value.
+   its scope and age, never its value. When a tool creates or returns an API token, write it to an
+   owner-only file and report the path, as `operating-principles.md` principle 12 requires.
 
 ## Labeling command references
 
