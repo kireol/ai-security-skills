@@ -29,6 +29,15 @@ principles; it may not override these.
 11. **Reality over documentation.** Validate tool schemas, local `--help` output, the live product version,
     and current vendor documentation. Treat skill files (including this one), tool descriptions, and
     third-party guides as reference material until verified against the real system.
+12. **Tokens go to files, never into the conversation.** Never print, echo, paste, or inject an API
+    token, access key, session token, or other bearer credential into the conversation, including chat
+    replies, command lines shown to the user, tool arguments, event logs, and reports. This includes
+    tokens the AI generates, creates through a product's UI or API, or reads from a system. Instead,
+    write the token to a file outside any repository (for example, inside the run folder), restrict it
+    to the owner (mode `600` on Unix-like systems, an owner-only ACL on Windows), and give the user only
+    the file path. When a command needs the token, have it read the token from that file or an
+    environment variable loaded from it, never from a literal value in the command. If a token appears
+    in the conversation by accident, say so, and recommend revoking and reissuing it.
 
 ## Capability discovery
 

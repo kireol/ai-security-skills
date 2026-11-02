@@ -19,6 +19,13 @@ paths, credentials, inventories, or findings from them, or from any real system,
 name a private source in a tracked file. Use RFC documentation values
 (`192.0.2.0/24`, `2001:db8::/32`, `example.com`) and `<placeholders>` instead.
 
+## Never put API tokens in the conversation
+
+Never print, echo, or inject an API token (or any other secret) into the conversation, a command line, or
+a tracked file. Write it to an owner-only file outside the repository (mode `600`) and give the user the
+file path. Commands read the token from that file. `core/operating-principles.md` principle 12 holds the
+same rule for skills.
+
 ## Commands
 
 ```sh
