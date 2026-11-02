@@ -100,6 +100,67 @@ if ($Stop) {
     exit 0
 }
 
+# Only one assessment at a time. The run file holds the PID of the process running it and that process's start
+# time (so a reused PID isn't mistaken for it). assess.sh uses the same file. What to stop depends on how the
+# previous run was started: assess.sh execs the assistant, so its process is the assistant, or that script
+# still asking questions. assess.ps1 runs the assistant as a child process, possibly inside an interactive
+# PowerShell window, which must be left open.
+$RunFile = Join-Path $Data "assess.pid"
+$Marker = "full-assessment skill"   # appears in the assistant's command line (the prompt)
+function Get-StartTime([int]$Id) {
+    if ($OnWindows) {
+        $p = Get-Process -Id $Id -ErrorAction SilentlyContinue
+        if ($p) { try { return $p.StartTime.ToUniversalTime().ToString("o") } catch { } }
+        return ""
+    }
+    return ("" + (& env LC_ALL=C ps -p $Id -o lstart= 2>$null)).TrimEnd()
+}
+function Get-ChildIds([int]$Id) {
+    if ($OnWindows) {
+        return @(Get-CimInstance Win32_Process -Filter "ParentProcessId = $Id" -ErrorAction SilentlyContinue |
+            ForEach-Object { [int]$_.ProcessId })
+    }
+    return @(& ps -A -o pid= -o ppid= | ForEach-Object {
+        $f = "$_".Trim() -split '\s+'
+        if ($f.Count -ge 2 -and $f[1] -eq "$Id") { [int]$f[0] }
+    })
+}
+$targets = @()
+$oldPid = 0
+if (Test-Path -LiteralPath $RunFile) {
+    $saved = @(Get-Content -LiteralPath $RunFile -TotalCount 2) + @("", "")
+    $savedPid = "$($saved[0])".Trim(); $oldStart = "$($saved[1])".Trim()
+    if ($savedPid -match '^\d+$' -and [int]$savedPid -ne $PID -and (Test-Running ([int]$savedPid)) -and
+        $oldStart -and (Get-StartTime ([int]$savedPid)) -eq $oldStart) {
+        $oldPid = [int]$savedPid
+        $agents = @(Get-ChildIds $oldPid | Where-Object { (Get-ProcessCommandLine $_).Contains($Marker) })
+        $oldCmd = Get-ProcessCommandLine $oldPid
+        if ($oldCmd.Contains($Marker)) { $targets = @($oldPid) }
+        elseif ($oldCmd -match 'assess\.(sh|ps1)') { $targets = $agents + @($oldPid) }
+        else { $targets = $agents }   # an interactive PowerShell window: only its assistant, if one is running
+    }
+}
+if ($targets.Count -gt 0) {
+    Write-Output "Another assessment started by this script is still running (process $oldPid)."
+    if (-not $Interactive) { Fail "Stop it first, or run this again from a terminal to be asked." }
+    Write-Output "  1) Stop the previous run and start a new one"
+    Write-Output "  2) Exit and leave the previous run alone"
+    $choice = Read-Host "Choose 1-2"
+    if ($choice -ne "1") { Write-Output "Nothing started."; exit 0 }
+    foreach ($t in $targets) {
+        # On Windows, stop the whole tree: npm installs assistants behind a cmd shim, so the child is cmd.exe.
+        if ($OnWindows) { & taskkill /PID $t /T /F 2>$null | Out-Null }
+        else { & kill $t 2>$null }
+    }
+    foreach ($t in $targets) {
+        try { Wait-Process -Id $t -Timeout 5 -ErrorAction Stop } catch { Stop-Process -Id $t -Force -ErrorAction SilentlyContinue }
+    }
+    Write-Output "Previous run stopped. Its run folder and any dashboard it started are left as they are."
+}
+New-Item -ItemType Directory -Force -Path $Data | Out-Null
+if (-not $OnWindows) { & chmod 700 $Data }
+Set-Content -LiteralPath $RunFile -Value @("$PID", (Get-StartTime $PID)) -Encoding ascii
+
 # Ask which assistant to use before starting anything, so "exit" leaves nothing running.
 if (-not $Agent) {
     $installed = @($KnownAgents | Where-Object { Test-Command $_ })

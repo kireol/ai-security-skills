@@ -60,6 +60,57 @@ if [ "$STOP" = yes ]; then
   exit 0
 fi
 
+# Only one assessment at a time. The run file holds the PID of the process running it and that process's start
+# time (so a reused PID isn't mistaken for it). assess.ps1 uses the same file. What to stop depends on how the
+# previous run was started: assess.sh execs the assistant, so its process is the assistant, or this script
+# still asking questions. assess.ps1 runs the assistant as a child process, possibly inside an interactive
+# PowerShell window, which must be left open.
+RUN_FILE="$DATA/assess.pid"
+MARKER="full-assessment skill"   # appears in the assistant's command line (the prompt)
+start_time() { LC_ALL=C ps -p "$1" -o lstart= 2>/dev/null | sed 's/  *$//'; }
+command_of() { ps -ww -p "$1" -o command= 2>/dev/null || true; }
+targets=""
+if [ -f "$RUN_FILE" ]; then
+  old_pid=$(sed -n 1p "$RUN_FILE"); old_start=$(sed -n 2p "$RUN_FILE")
+  case "$old_pid" in ''|*[!0-9]*) old_pid="" ;; esac
+  if [ -n "$old_pid" ] && [ "$old_pid" != $$ ] && kill -0 "$old_pid" 2>/dev/null \
+    && [ -n "$old_start" ] && [ "$(start_time "$old_pid")" = "$old_start" ]; then
+    agents=""
+    for c in $(ps -A -o pid= -o ppid= | awk -v p="$old_pid" '$2 == p { print $1 }'); do
+      case "$(command_of "$c")" in *"$MARKER"*) agents="$agents $c" ;; esac
+    done
+    case "$(command_of "$old_pid")" in
+      *"$MARKER"*) targets=$old_pid ;;
+      *assess.sh*|*assess.ps1*) targets="$agents $old_pid" ;;
+      *) targets=$agents ;;   # an interactive PowerShell window: only its assistant, if one is running
+    esac
+  fi
+fi
+if [ -n "$(echo $targets)" ]; then
+  echo "Another assessment started by this script is still running (process $old_pid)."
+  if [ ! -t 0 ]; then
+    echo "Stop it first, or run this again from a terminal to be asked." >&2; exit 1
+  fi
+  echo "  1) Stop the previous run and start a new one"
+  echo "  2) Exit and leave the previous run alone"
+  printf "Choose 1-2: "
+  read -r choice
+  [ "$choice" = 1 ] || { echo "Nothing started."; exit 0; }
+  for t in $targets; do kill "$t" 2>/dev/null || true; done
+  tries=0
+  for t in $targets; do
+    while kill -0 "$t" 2>/dev/null; do
+      tries=$((tries + 1))
+      if [ $tries -ge 20 ]; then kill -9 "$t" 2>/dev/null || true; break; fi
+      sleep 0.25
+    done
+  done
+  echo "Previous run stopped. Its run folder and any dashboard it started are left as they are."
+fi
+mkdir -p "$DATA"
+chmod 700 "$DATA"
+printf '%s\n%s\n' $$ "$(start_time $$)" >"$RUN_FILE"
+
 # Ask which assistant to use before starting anything, so "exit" leaves nothing running.
 if [ -z "$AGENT" ]; then
   installed=""
