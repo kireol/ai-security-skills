@@ -399,13 +399,23 @@ async function poll() {
   pollTimer = setTimeout(poll, POLL_MS);
 }
 
-document.addEventListener("DOMContentLoaded", () => {
-  // The startup URL carries the token in the fragment, which browsers never send to the server.
+// The startup URL carries the token in the fragment, which browsers never send to the server.
+function takeTokenFromHash() {
   const match = location.hash.match(/token=([^&]+)/);
-  if (match) {
-    sessionStorage.setItem("aiss-token", decodeURIComponent(match[1]));
-    history.replaceState(null, "", location.pathname);
-  }
+  if (!match) return false;
+  sessionStorage.setItem("aiss-token", decodeURIComponent(match[1]));
+  history.replaceState(null, "", location.pathname);
+  return true;
+}
+
+// Pasting the startup URL into a tab already on this page changes only the fragment, which
+// doesn't reload the page, so pick the token up here too.
+window.addEventListener("hashchange", () => {
+  if (takeTokenFromHash()) refresh();
+});
+
+document.addEventListener("DOMContentLoaded", () => {
+  takeTokenFromHash();
   document.getElementById("login-form").addEventListener("submit", (e) => {
     e.preventDefault();
     const value = document.getElementById("token-input").value.trim();
