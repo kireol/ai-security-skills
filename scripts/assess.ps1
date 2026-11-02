@@ -227,6 +227,28 @@ function Test-DashboardUp {
     }
 }
 
+# Print the dashboard link inside a box of asterisks so it stands out before the assistant takes over the
+# terminal. Colour only on a console, and never when NO_COLOR is set (https://no-color.org).
+function Write-UrlBox([string]$Link) {
+    $label = "Copy this link into your browser to open the dashboard:"
+    $width = [Math]::Max($label.Length, $Link.Length)
+    $stars = "*" * ($width + 4)
+    $color = -not $env:NO_COLOR -and -not [Console]::IsOutputRedirected
+    Write-Output ""
+    Write-Output $stars
+    if ($color) {
+        Write-Host -NoNewline "* "; Write-Host -NoNewline -ForegroundColor Yellow $label.PadRight($width); Write-Host " *"
+        Write-Host ("* " + "".PadRight($width) + " *")
+        Write-Host -NoNewline "* "; Write-Host -NoNewline -ForegroundColor Cyan $Link.PadRight($width); Write-Host " *"
+    } else {
+        Write-Output ("* " + $label.PadRight($width) + " *")
+        Write-Output ("* " + "".PadRight($width) + " *")
+        Write-Output ("* " + $Link.PadRight($width) + " *")
+    }
+    Write-Output $stars
+    Write-Output ""
+}
+
 function Open-Url([string]$Url) {
     try {
         if ($OnWindows) { Start-Process $Url }
@@ -293,7 +315,7 @@ if ($Dashboard) {
     if ($env:AISS_DASHBOARD_TOKEN) { $token = $env:AISS_DASHBOARD_TOKEN }
     else { $token = (Get-Content -LiteralPath (Join-Path $Data "token") -TotalCount 1).Trim() }
     $url = "http://127.0.0.1:$Port/#token=$token"
-    Write-Output "Dashboard on this computer: $url"
+    Write-UrlBox $url
     Open-Url $url
     # The dashboard flushes its startup lines at the end, so they may lag the port opening by a moment.
     $lanLines = @()
