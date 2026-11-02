@@ -235,7 +235,7 @@ open_url() {
 # Print the dashboard link inside a box of asterisks so it stands out before the assistant takes over the
 # terminal. Colour only on a terminal, and never when NO_COLOR is set (https://no-color.org).
 url_box() {
-  label="Copy this link into your browser to open the dashboard:"
+  label=${2:-"Copy this link into your browser to open the dashboard:"}
   if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then on_label=$(printf '\033[1;33m'); on_url=$(printf '\033[1;36m'); off=$(printf '\033[0m')
   else on_label=""; on_url=""; off=""; fi
   width=${#label}
@@ -291,12 +291,29 @@ if [ "$DASHBOARD" = yes ]; then
     echo "Dashboard started. When you're done, stop it with: $STOP_CMD"
   fi
   if [ -n "${AISS_DASHBOARD_TOKEN:-}" ]; then TOKEN=$AISS_DASHBOARD_TOKEN; else TOKEN=$(cat "$DATA/token"); fi
-  url_box "http://127.0.0.1:$PORT/#token=$TOKEN"
-  open_url "http://127.0.0.1:$PORT/#token=$TOKEN"
-  if grep -q '^On your LAN:' "$DATA/dashboard.log" 2>/dev/null; then
-    echo "From another device on your network, open one of these:"
-    grep '^On your LAN:' "$DATA/dashboard.log" | sed 's/^On your LAN: */  /'
+  LOCAL_URL="http://127.0.0.1:$PORT/#token=$TOKEN"
+  LAN_URLS=""
+  if [ "$ACCESS" = lan ]; then
+    # The dashboard flushes its startup lines at the end, so they may lag the port opening by a moment.
+    tries=0
+    while [ $tries -lt 8 ]; do
+      LAN_URLS=$(grep '^On your LAN:' "$DATA/dashboard.log" 2>/dev/null | sed 's/^On your LAN: *//')
+      [ -n "$LAN_URLS" ] && break
+      tries=$((tries + 1)); sleep 0.25
+    done
   fi
+  if [ -n "$LAN_URLS" ]; then
+    # In LAN mode the box shows the LAN IP address, which works from this computer and every other device.
+    BOX_URL=$(printf '%s\n' "$LAN_URLS" | grep -E '^http://[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+:' | head -n 1)
+    [ -n "$BOX_URL" ] || BOX_URL=$(printf '%s\n' "$LAN_URLS" | head -n 1)
+    url_box "$BOX_URL" "Copy this link into a browser on this or any device on your network:"
+    echo "Other ways to open it:"
+    printf '%s\n' "$LAN_URLS" | grep -vxF "$BOX_URL" | sed 's/^/  /'
+    echo "  $LOCAL_URL (this computer only)"
+  else
+    url_box "$LOCAL_URL"
+  fi
+  open_url "$LOCAL_URL"
   if [ "$ACCESS" = lan ]; then VIEW="this computer and other devices on the user's local network"
   else VIEW="this computer only"; fi
   DASHBOARD_NOTE=" A live dashboard is running (viewable from $VIEW) and reads the run folder automatically, \

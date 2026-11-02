@@ -290,8 +290,7 @@ function Test-DashboardUp {
 
 # Print the dashboard link inside a box of asterisks so it stands out before the assistant takes over the
 # terminal. Colour only on a console, and never when NO_COLOR is set (https://no-color.org).
-function Write-UrlBox([string]$Link) {
-    $label = "Copy this link into your browser to open the dashboard:"
+function Write-UrlBox([string]$Link, [string]$Label = "Copy this link into your browser to open the dashboard:") {
     $width = [Math]::Max($label.Length, $Link.Length)
     $stars = "*" * ($width + 4)
     $color = -not $env:NO_COLOR -and -not [Console]::IsOutputRedirected
@@ -376,18 +375,26 @@ if ($Dashboard) {
     if ($env:AISS_DASHBOARD_TOKEN) { $token = $env:AISS_DASHBOARD_TOKEN }
     else { $token = (Get-Content -LiteralPath (Join-Path $Data "token") -TotalCount 1).Trim() }
     $url = "http://127.0.0.1:$Port/#token=$token"
-    Write-UrlBox $url
-    Open-Url $url
     # The dashboard flushes its startup lines at the end, so they may lag the port opening by a moment.
-    $lanLines = @()
-    for ($i = 0; $i -lt 8 -and $lanLines.Count -eq 0 -and $Access -eq "lan"; $i++) {
-        if (Test-Path -LiteralPath $log) { $lanLines = @(Select-String -LiteralPath $log -Pattern '^On your LAN:' | ForEach-Object { $_.Line }) }
-        if ($lanLines.Count -eq 0) { Start-Sleep -Milliseconds 250 }
+    $lanUrls = @()
+    for ($i = 0; $i -lt 8 -and $lanUrls.Count -eq 0 -and $Access -eq "lan"; $i++) {
+        if (Test-Path -LiteralPath $log) {
+            $lanUrls = @(Select-String -LiteralPath $log -Pattern '^On your LAN:' | ForEach-Object { $_.Line -replace '^On your LAN:\s*', '' })
+        }
+        if ($lanUrls.Count -eq 0) { Start-Sleep -Milliseconds 250 }
     }
-    if ($lanLines.Count -gt 0) {
-        Write-Output "From another device on your network, open one of these:"
-        $lanLines | ForEach-Object { "  " + ($_ -replace '^On your LAN:\s*', '') } | Write-Output
+    if ($lanUrls.Count -gt 0) {
+        # In LAN mode the box shows the LAN IP address, which works from this computer and every other device.
+        $boxUrl = @($lanUrls | Where-Object { $_ -match '^http://\d+\.\d+\.\d+\.\d+:' } | Select-Object -First 1)
+        if ($boxUrl.Count -gt 0) { $boxUrl = $boxUrl[0] } else { $boxUrl = $lanUrls[0] }
+        Write-UrlBox $boxUrl "Copy this link into a browser on this or any device on your network:"
+        Write-Output "Other ways to open it:"
+        $lanUrls | Where-Object { $_ -ne $boxUrl } | ForEach-Object { "  $_" } | Write-Output
+        Write-Output "  $url (this computer only)"
+    } else {
+        Write-UrlBox $url
     }
+    Open-Url $url
     if ($Access -eq "lan") { $view = "this computer and other devices on the user's local network" }
     else { $view = "this computer only" }
     $DashboardNote = " A live dashboard is running (viewable from $view) and reads the run folder automatically, " +
