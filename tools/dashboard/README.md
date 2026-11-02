@@ -7,7 +7,8 @@ has nothing to show, it lists the folders it's watching.
 
 For a full-assessment run, the **Kick-off settings** tab lists every kick-off question with its current
 answer and where it was given (in the chat or in the dashboard). You can answer or change answers there
-instead of typing them to the agent; after saving, tell the agent you've answered in the dashboard. It
+instead of typing them to the agent; after saving, tell the agent you've answered in the dashboard (the
+saved message has a Copy button with a ready-made line to paste into the chat). It
 also re-reads them at every checkpoint and confirms them with you before it acts. Answers to a completed
 run are read-only, so the tab doubles as a record of how the run was set up.
 

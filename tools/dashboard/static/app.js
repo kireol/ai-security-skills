@@ -198,8 +198,9 @@ function kickoffForm(a) {
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body.error || `HTTP ${response.status}`);
       kickoffDirty = false;
-      kickoffMessage = { text: "Saved. Tell the agent you've answered in the dashboard; it also re-reads these "
-        + "answers at every checkpoint, and confirms them with you before it starts.", ok: true };
+      kickoffMessage = { text: "Your answers are saved. Next, go back to your AI assistant and tell it you've "
+        + "answered the kick-off questions here. It also re-reads these answers at every checkpoint, and confirms "
+        + "them with you before it starts.", ok: true, tellAgent: true };
       if (document.activeElement) document.activeElement.blur();
       refresh();
     } catch (err) {
@@ -207,6 +208,8 @@ function kickoffForm(a) {
       const message = document.getElementById("kickoff-message");
       message.textContent = `Not saved: ${err.message}`;
       message.className = "error";
+      const stale = document.querySelector(".tell-agent");
+      if (stale) stale.remove();
     }
   }
 
@@ -219,8 +222,37 @@ function kickoffForm(a) {
       locked ? null : el("div", { class: "actions" }, el("button", { type: "submit" }, "Save answers"),
         kickoffDirty ? el("button", { type: "button", class: "link",
           onclick: () => { kickoffDirty = false; kickoffMessage = null; redraw(); } }, "Discard changes") : null)),
-    el("p", { id: "kickoff-message", class: kickoffMessage && !kickoffMessage.ok ? "error" : "saved" },
-      kickoffMessage ? kickoffMessage.text : ""));
+    el("p", { id: "kickoff-message", class: kickoffMessage && !kickoffMessage.ok ? "error"
+      : kickoffMessage && kickoffMessage.tellAgent ? "saved saved-panel" : "saved" },
+      kickoffMessage ? kickoffMessage.text : ""),
+    kickoffMessage && kickoffMessage.tellAgent ? tellAgentBox() : null);
+}
+
+const TELL_AGENT = "I answered the kick-off settings questions in the dashboard.";
+
+// A ready-made message for the user to paste into the assistant's chat, so they don't have to type it.
+function tellAgentBox() {
+  const text = el("input", { type: "text", readonly: "", class: "mono", "aria-label": "Message for your AI assistant" });
+  text.value = TELL_AGENT;
+  const status = el("span", { class: "small", role: "status" });
+  async function copy() {
+    try {
+      // The Clipboard API needs a secure context (localhost is one; a LAN address over http isn't).
+      if (navigator.clipboard && window.isSecureContext) await navigator.clipboard.writeText(TELL_AGENT);
+      else { text.select(); if (!document.execCommand("copy")) throw new Error("copy refused"); }
+      status.textContent = "Copied. Paste it into your AI assistant's chat.";
+      status.className = "small saved";
+    } catch (err) {
+      text.select();
+      status.textContent = "Couldn't copy automatically; the text is selected, so press Ctrl+C (⌘C on a Mac).";
+      status.className = "small error";
+    }
+  }
+  return el("div", { class: "tell-agent" },
+    el("div", { class: "tell-agent-title" }, "Tell your AI assistant"),
+    el("div", { class: "tell-agent-row" }, text,
+      el("button", { type: "button", onclick: copy }, "Copy")),
+    status);
 }
 
 function inventory(a) {

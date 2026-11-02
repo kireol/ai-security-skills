@@ -181,6 +181,24 @@ open_url() {
   return 0
 }
 
+# Print the dashboard link inside a box of asterisks so it stands out before the assistant takes over the
+# terminal. Colour only on a terminal, and never when NO_COLOR is set (https://no-color.org).
+url_box() {
+  label="Copy this link into your browser to open the dashboard:"
+  if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then on_label=$(printf '\033[1;33m'); on_url=$(printf '\033[1;36m'); off=$(printf '\033[0m')
+  else on_label=""; on_url=""; off=""; fi
+  width=${#label}
+  [ ${#1} -gt "$width" ] && width=${#1}
+  stars=$(printf '%*s' $((width + 4)) '' | tr ' ' '*')
+  echo
+  echo "$stars"
+  printf '* %s%-*s%s *\n' "$on_label" "$width" "$label" "$off"
+  printf '* %*s *\n' "$width" ''
+  printf '* %s%-*s%s *\n' "$on_url" "$width" "$1" "$off"
+  echo "$stars"
+  echo
+}
+
 # Suggested kick-off answers: the /24 around this computer's address, the network's public address (from an
 # outside service, unless --no-lookup), and one agent. The user confirms them; the dashboard pre-fills them.
 SUGGESTED=""
@@ -222,7 +240,7 @@ if [ "$DASHBOARD" = yes ]; then
     echo "Dashboard started. When you're done, stop it with: $STOP_CMD"
   fi
   if [ -n "${AISS_DASHBOARD_TOKEN:-}" ]; then TOKEN=$AISS_DASHBOARD_TOKEN; else TOKEN=$(cat "$DATA/token"); fi
-  echo "Dashboard on this computer: http://127.0.0.1:$PORT/#token=$TOKEN"
+  url_box "http://127.0.0.1:$PORT/#token=$TOKEN"
   open_url "http://127.0.0.1:$PORT/#token=$TOKEN"
   if grep -q '^On your LAN:' "$DATA/dashboard.log" 2>/dev/null; then
     echo "From another device on your network, open one of these:"
