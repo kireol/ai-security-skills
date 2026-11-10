@@ -8,8 +8,8 @@ description: >-
   bucket may have been exposed, emptied, or encrypted.
 license: CC-BY-4.0
 metadata:
-  version: "1.0"
-  last_reviewed: "2026-10-31"
+  version: "1.1"
+  last_reviewed: "2026-11-10"
   applies_to: "MinIO community edition (archived upstream; verify the build and its source), MinIO forks and AIStor, Garage, SeaweedFS, and other self-hosted S3-compatible servers (verify the live version)"
   audience: "home, work, homelab"
   finding_prefix: "S3"
@@ -133,7 +133,7 @@ MinIO `mc` (vendor-documented for recent builds; **not yet verified** on every b
 
 ```sh
 mc --version
-mc alias list                         # shows endpoints AND secret keys: redact before recording
+mc alias list | grep -vi secretkey    # endpoints and access-key IDs; unfiltered, this prints every secret key
 mc admin info <alias>                 # server version, nodes, drives
 mc admin user list <alias>
 mc admin group list <alias>
@@ -400,4 +400,6 @@ object lock, add a second, independent copy that the clients can't reach.
 
 ## Version history
 
+- **1.1** (2026-11-10): The baseline `mc alias list` command now filters out the secret keys it would
+  otherwise print.
 - **1.0** (2026-10-31): Initial version.

@@ -10,8 +10,8 @@ description: >-
   or when a DNS filtering server may have been compromised or is redirecting names.
 license: CC-BY-4.0
 metadata:
-  version: "1.1"
-  last_reviewed: "2026-10-31"
+  version: "1.2"
+  last_reviewed: "2026-11-10"
   applies_to: "AdGuard Home v0.107.x stable (v0.108 is in beta), Pi-hole v6.x (Core, FTL, Web), and Technitium DNS Server v15.x; verify the live versions"
   audience: "home, work, homelab"
   finding_prefix: "DNS"
@@ -42,7 +42,13 @@ This skill holds only DNS-filtering-specific guidance. It builds on the shared c
 | [incident-response.md](../../../core/incident-response.md) | The generic Respond playbook |
 
 DNS-filtering-specific Respond steps are in [incident-response.md](incident-response.md). Vendor
-documentation and advisories are in [references.md](references.md).
+documentation and advisories are in [references.md](references.md). Related skills:
+[home routers](../home-routers/SKILL.md), [OPNsense](../opnsense/SKILL.md), [pfSense](../pfsense/SKILL.md)
+(the router or firewall that hands out the resolver and can force DNS through it),
+[Docker](../../containers/docker/SKILL.md) (container installs),
+[Linux](../../operating-systems/linux/SKILL.md) (the host), [VPN servers](../vpn-servers/SKILL.md) (remote
+clients that use the filter), and [smart TVs](../../consumer-devices/smart-tvs/SKILL.md) (devices with
+hardcoded DNS).
 
 Technitium DNS Server is both a filtering resolver and a full authoritative DNS server (primary,
 secondary, and forwarder zones, DNSSEC signing, zone transfers, dynamic updates, a DHCP server, and
@@ -621,6 +627,7 @@ legitimate record was removed by mistake.
 
 ## Version history
 
+- **1.2** (2026-11-10): Added links to related skills.
 - **1.0** (2026-10-30): Initial version.
 - **1.1** (2026-10-31): Added Technitium DNS Server: deployment variants (Linux, Windows, Docker,
   clusters), detection (web console 5380/53443, DoT/DoQ/DoH), the default `admin` password, users and

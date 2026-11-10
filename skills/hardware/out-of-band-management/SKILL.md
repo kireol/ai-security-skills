@@ -10,8 +10,8 @@ description: >-
   controller may have been compromised.
 license: CC-BY-4.0
 metadata:
-  version: "1.0"
-  last_reviewed: "2026-10-31"
+  version: "1.1"
+  last_reviewed: "2026-11-10"
   applies_to: "Dell iDRAC 7-10, HPE iLO 4-7, Supermicro BMCs, other IPMI 2.0 and Redfish BMCs, Intel AMT/vPro (verify the live firmware; features and defaults vary by generation)"
   audience: "home, work, homelab"
   finding_prefix: "OOB"
@@ -147,7 +147,7 @@ commands on the host only with the user's approval, since they need root.
 ```sh
 # In-band from the host (needs root; reads the local BMC through the system interface)
 ipmitool mc info                      # BMC firmware version and IPMI version (ipmitool man page)
-ipmitool lan print 1                  # IP source, address, VLAN, auth types, cipher suite privileges (channel may differ)
+ipmitool lan print 1 | grep -vi community   # IP source, VLAN, auth types, cipher suites; the filter drops the SNMP community string
 ipmitool user list 1                  # user IDs, names, enabled state, privilege per channel
 ipmitool channel getaccess 1          # per-user channel access
 ipmitool sol info 1                   # serial-over-LAN state
@@ -438,4 +438,6 @@ configuration from the captured copy.
 
 ## Version history
 
+- **1.1** (2026-11-10): The baseline `ipmitool lan print` command now filters out the SNMP community
+  string it would otherwise print.
 - **1.0** (2026-10-31): Initial version.

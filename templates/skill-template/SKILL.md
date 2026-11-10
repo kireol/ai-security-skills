@@ -39,7 +39,8 @@ This skill holds only <product>-specific guidance. It builds on the shared core,
 | [incident-response.md](../../../core/incident-response.md) | The generic Respond playbook |
 
 <Product>-specific Respond steps are in [incident-response.md](incident-response.md). Vendor documentation
-and advisories are in [references.md](references.md).
+and advisories are in [references.md](references.md). Related skills:
+[<other skill>](../../<domain>/<skill>/SKILL.md) (<when to hand off to it>), <...>.
 
 ## <Product>-specific principles
 
@@ -70,6 +71,9 @@ All operations in this mode are class **R**. Mark anything you can't inspect **N
 ### Baseline commands
 
 <Candidate read-only commands, each labeled vendor-documented / observed / not yet verified.>
+
+<Commands that must never be run in Discover on this product because they print secrets or change
+state, even though they look like status commands.>
 
 ### Assessment domains
 

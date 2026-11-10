@@ -8,8 +8,8 @@ description: >-
   dashboard.
 license: CC-BY-4.0
 metadata:
-  version: "1.4"
-  last_reviewed: "2026-10-31"
+  version: "1.5"
+  last_reviewed: "2026-11-10"
   applies_to: "Any network the user owns or is authorized to assess"
   audience: "home, work, homelab"
   finding_prefix: "NET"
@@ -32,11 +32,10 @@ time, adds network-wide checks no single product skill can see, and merges the r
 2. **Ask the kick-off questions and wait for the answers.** The user may answer in the conversation or,
    if a dashboard is running, in its Kick-off settings tab (see "Answers from the dashboard"), possibly
    before you ask. Read the run folder's `events-dashboard.jsonl` first and ask only what is still
-   unanswered. Do not probe
-   the network in any way (no ping or ARP sweeps, port scans, `nmap`, service or version detection, or
-   vulnerability tools) until the user has confirmed the scope and chosen a discovery level. A request for a "complete" or "full" assessment
-   is not approval to scan. If the user says "just use the defaults", the default is discovery level 0
-   (passive, no probing).
+   unanswered. Do not probe the network in any way (no ping or ARP sweeps, port scans, `nmap`, service or
+   version detection, or vulnerability tools) until the user has confirmed the scope and chosen a
+   discovery level. A request for a "complete" or "full" assessment is not approval to scan. If the user
+   says "just use the defaults", the default is discovery level 0 (passive, no probing).
 3. **Keep the record current while you work.** Record each system with `asset.upserted` as soon as you
    know about it, send `status.updated` at each phase and around anything long-running or any wait for
    the user, and keep raw tool output (redacted) in the run folder's `raw/` folder, never only in a
@@ -152,7 +151,9 @@ If the user chooses to give access, help them do it safely:
 - **Never through chat.** Credentials go into environment variables, an SSH agent or key file, the
   system's own credential store, or a local file readable only by the user that the agent reads when it
   needs it. Never ask the user to paste a password, key, or token into the conversation, and never print,
-  log, or write one into the run folder, events, reports, or `run-state.md`.
+  log, or write one into the run folder, events, reports, or `run-state.md`. A token the agent itself
+  creates or is shown during the run (for example through a product's API or setup page) goes straight
+  into such a file, and the user gets only the path (core operating principle 12).
 - **Time-limited where possible.** Prefer tokens with an expiry, or plan to remove the accounts after the
   run. Note in `run-state.md` *which* access was granted (system, account name, scope, expiry; never the
   secret) and add "revoke agent access" to the final recommendations.
@@ -241,6 +242,11 @@ Rules for active discovery (levels 1–2):
 - External exposure checks against the user's public address only with explicit approval, from a vantage
   point the user approves, limited to confirming what is reachable. Note that IPv6 and tunnels are
   separate paths.
+- Looking up the user's public address or domain names in a third-party service (an internet-scan search
+  engine, a certificate-transparency log search, an online port checker) sends nothing to the user's
+  network, but it tells that service which address or name the user cares about. Ask first, name the
+  service, and record its results as **Third-party documented**: they show what was indexed at some
+  earlier time, not what is reachable now.
 - Check that a tool exists and read its help before using it (core tool-use contract). Record exact
   commands and options used.
 
@@ -257,6 +263,26 @@ Save raw scan output in the run folder's `raw/` folder.
 - DNS and DHCP: which systems provide them and what depends on them.
 - What runs on what: VMs and containers on each host, so you can see single points of failure.
 
+### Accounts and services a scan can't see
+
+Much of what an attacker goes after never appears in a network inventory: the accounts that can reset,
+reach, or administer everything else. Ask the user which of these they use, and add each one they want in
+scope as an asset (`kind` such as "email account" or "domain registrar", `exposure: internet`). Ask what
+exists, never for credentials:
+
+- Email and productivity suite. It receives the password resets for almost everything else.
+- Password manager, and how MFA is done (security keys, passkeys, authenticator app, SMS).
+- Identity provider or single sign-on in front of self-hosted apps.
+- Domain registrar and DNS host, and any CDN, reverse-proxy, or tunnel accounts.
+- Cloud providers, cloud file storage, and off-site backup destinations.
+- Code hosting and CI, and AI tools that hold access to systems or code (coding agents, MCP servers).
+- Vendor cloud accounts that control devices on the network: cameras and doorbells, smart home hubs,
+  routers and mesh systems, NAS relay services, printers, consoles.
+- Phones and laptops that leave the network, if the user wants endpoints in scope.
+
+Most of these can be assessed in conversation, with the user reading settings back, without giving the
+agent any access. Each has a skill in the catalog; match and plan them like any other asset.
+
 ## Phase 2: Match assets to skills
 
 For each asset, use the catalog's detection hints to pick a skill. Record the match and how confident
@@ -264,6 +290,10 @@ you are.
 
 - **Clear match:** set `skill` on the asset.
 - **Uncertain match:** ask the user to confirm the product.
+- **No product skill, but a category skill fits:** some skills cover a whole category for any vendor (the
+  catalog's "Applies to" line says so: home routers, Wi-Fi systems and switches, IP cameras, smart home
+  devices, smart TVs, printers, small self-hosted web apps, and others). Use the category skill before
+  deciding there is no skill, and note that the match is by category.
 - **No skill yet:** mark `coverage: no_skill`. It still gets the baseline checks in Phase 4, and at the
   end of the run the user is offered a chance to request a skill for it (see "Final report").
 - **One device, several roles** (for example a NAS that also runs containers, or a host that runs a
@@ -275,7 +305,9 @@ Present the inventory and an order of work for approval. Default order, most exp
 first:
 
 1. Internet edge: firewall/router, tunnels, anything port-forwarded, VPN.
-2. Infrastructure others depend on: hypervisors, DNS, NAS/storage, identity, backup systems.
+2. What everything else depends on: the accounts that can reset or administer other things (email,
+   identity provider, password manager, domain registrar and DNS host), then hypervisors, DNS,
+   NAS/storage, and backup systems.
 3. Home automation, cameras, doorbells, NVRs.
 4. Servers and applications: media, web apps, AI services.
 5. Endpoints and consumer devices: computers, phones, TVs.
@@ -291,7 +323,12 @@ Work through the plan one asset at a time:
 2. Report it as a **child assessment**: `assessment.started` with `parent` set to the run's
    `assessment_id`, using the skill's own finding prefix. Update the asset: `coverage: in_progress` and
    its `assessment_id`; then `coverage: assessed` when done.
-3. Before moving to the next asset, write a short summary of what you found (findings, unknowns, and
+3. **Add what you found inside it.** Assessing a host usually reveals more systems: containers, VMs,
+   web apps, a reverse proxy or tunnel, a management controller, a vendor cloud account it is linked to.
+   Record each as its own asset (`asset.upserted`, noting the host it runs on), match it to a skill
+   (Phase 2), and add it to the plan. Tell the user when this grows the plan by more than a few systems,
+   and get their agreement before assessing anything that wasn't in the confirmed scope.
+4. Before moving to the next asset, write a short summary of what you found (findings, unknowns, and
    anything relevant to other assets, such as a shared credential or a dependency). Keep the summary and
    drop the detail from working memory; the dashboard and the child report keep it.
 
@@ -354,6 +391,10 @@ These are the run's own assessment domains. Each needs a status, like any skill'
 
 - Shared or reused admin passwords and service accounts across systems (ask the user; never request the
   passwords themselves). Admin accounts without MFA. Where secrets are stored.
+- Which account can reset which. The email account, phone number, or identity provider that recovers the
+  others is a single point of compromise: it should have the strongest sign-in protection in use
+  anywhere, and its own recovery path should not loop back through something weaker.
+- Access the agent was given for this run: listed, and scheduled for removal at the end.
 
 #### H. Monitoring
 
@@ -434,6 +475,11 @@ NVR.
 
 ## Version history
 
+- **1.5** (2026-11-10): Inventory now asks about accounts and services a network scan can't see (email,
+  password manager, registrar, cloud, code hosting, vendor clouds) and adds the systems found inside each
+  assessed host (containers, VMs, apps) to the plan. Category skills are used before marking a system as
+  having no skill. Third-party lookups of the user's public address need approval. Tokens created during
+  a run go to a file (core principle 12). Account-recovery chains added to the credentials domain.
 - **1.4** (2026-10-31): Read the dashboard's kick-off answers before asking, and ask only the questions
   still unanswered.
 - **1.3** (2026-10-31): Kick-off asks who may view the dashboard (this computer only or the LAN); answers

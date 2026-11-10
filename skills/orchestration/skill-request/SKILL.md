@@ -6,8 +6,8 @@ description: >-
   that found "no skill" systems, or when the user asks to request a skill for a product.
 license: CC-BY-4.0
 metadata:
-  version: "1.0"
-  last_reviewed: "2026-10-30"
+  version: "1.1"
+  last_reviewed: "2026-11-10"
   applies_to: "Any assessment run with this collection"
   audience: "home, work, homelab"
   finding_prefix: "REQ"
@@ -34,6 +34,10 @@ Project issues: https://github.com/kireol/ai-security-skills/issues
 - **Ask first, every time.** Opening an issue publishes text on the internet under the user's GitHub
   account. Never create one without the user's explicit approval of the exact text, product by product.
   A "no" or no answer means no issue.
+- **Say what the issue reveals.** Even a clean request tells the public that the person behind that
+  GitHub account probably owns the product. For most products that doesn't matter; for an alarm system,
+  a safe, a lock, or a medical device it might. Say so when you ask, and suggest wording that doesn't
+  claim ownership ("a skill for this product family would be useful").
 - **Describe the product, never the setup.** The issue may contain only: the product's make and product
   family, its general category, why it matters in general terms, vendor-default ways to recognize it
   (default ports, page titles, discovery announcements), and links to the vendor's public documentation.
@@ -56,7 +60,9 @@ Project issues: https://github.com/kireol/ai-security-skills/issues
    `gh issue list --repo kireol/ai-security-skills --state all --search "<product> in:title"`; otherwise
    give the user a search link:
    `https://github.com/kireol/ai-security-skills/issues?q=<product>`). If one exists, offer to show it
-   instead of drafting a new one (the user can add a thumbs-up there).
+   instead of drafting a new one (the user can add a thumbs-up there). Also check the project's current
+   catalog (the README on the project page): the user's copy of the collection may be older, and a
+   skill, or a category skill that covers the product for any vendor, may already exist.
 4. **Draft.** Fill in the fields of the project's skill-request form:
 
    | Field | Content |
@@ -102,4 +108,6 @@ Project issues: https://github.com/kireol/ai-security-skills/issues
 
 ## Version history
 
+- **1.1** (2026-11-10): Tell the user what a public request reveals about them before they approve it;
+  check the project's current catalog, not only its issues, for an existing or category skill.
 - **1.0** (2026-10-30): Initial version.

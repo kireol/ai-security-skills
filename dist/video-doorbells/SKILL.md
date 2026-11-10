@@ -9,8 +9,8 @@ description: >-
   physical tamper and theft, or when a doorbell or camera account may have been taken over.
 license: CC-BY-4.0
 metadata:
-  version: "1.0"
-  last_reviewed: "2026-10-30"
+  version: "1.1"
+  last_reviewed: "2026-11-10"
   applies_to: "Cloud-managed consumer doorbells, cameras, and alarm kits and their vendor apps (verify the live app version; menus and features change often)"
   audience: "home, work"
   finding_prefix: "DBL"
@@ -45,7 +45,13 @@ always applies:
 | [incident-response.md](core/incident-response.md) | The generic Respond playbook |
 
 Doorbell- and camera-specific Respond steps are in [incident-response.md](incident-response.md). Vendor
-documentation, regulator findings, and advisories are in [references.md](references.md).
+documentation, regulator findings, and advisories are in [references.md](references.md). Related skills:
+[IP cameras](../ip-cameras/SKILL.md) (locally managed cameras), [Frigate](../frigate-nvr/SKILL.md),
+[NVR software](../nvr-software/SKILL.md) (local recording),
+[smart home devices](../smart-home-devices/SKILL.md),
+[Wi-Fi and switches](../wifi-and-switches/SKILL.md) (the network they sit on),
+[phones](../phones/SKILL.md) (the app), and [MFA](../mfa/SKILL.md) (the vendor
+account).
 
 ## Doorbell- and cloud-camera-specific principles
 
@@ -467,4 +473,5 @@ still works.
 
 ## Version history
 
+- **1.1** (2026-11-10): Added links to related skills.
 - **1.0** (2026-10-30): Initial version.

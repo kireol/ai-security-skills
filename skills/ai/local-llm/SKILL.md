@@ -10,8 +10,8 @@ description: >-
   servers may have been compromised.
 license: CC-BY-4.0
 metadata:
-  version: "1.1"
-  last_reviewed: "2026-10-31"
+  version: "1.2"
+  last_reviewed: "2026-11-10"
   applies_to: "Ollama, llama.cpp server, LM Studio, vLLM, LocalAI, Open WebUI, ComfyUI, Gradio-based image and speech web UIs, LiteLLM proxy (verify each live version; defaults change often)"
   audience: "home, work, homelab"
   finding_prefix: "LLM"
@@ -248,6 +248,12 @@ Accepted risk).
   rely on a remembered list.
 - Python and PyTorch versions in each virtual environment (`/system_stats` shows them for ComfyUI).
   Older PyTorch versions load pickles less safely.
+- **Remote-code loading switches.** Some models ship their own Python code in the model repository, and
+  loaders run it only when told to: a `trust_remote_code` option in Hugging Face-based loaders, exposed
+  as a `--trust-remote-code` flag by servers such as vLLM (verify the flag in the installed version's
+  help). With it on, pulling a model means running its publisher's code as the service account, whatever
+  the weight format. Check launch arguments, service units, and Compose files for it, and which models
+  required it.
 
 #### B. Network exposure and binding
 
@@ -659,6 +665,8 @@ recommended; restrict the forward's source instead if remote access is essential
 
 ## Version history
 
+- **1.2** (2026-11-10): Added a check for remote-code loading switches (`trust_remote_code`), which run a
+  model publisher's code regardless of weight format.
 - **1.0** (2026-10-30): Initial version.
 - **1.1** (2026-10-31): Added LocalAI (API keys and accounts, galleries and runtime installs, backends,
   agents, P2P/federated mode) and the LiteLLM proxy (master key, Admin UI login, virtual keys, budgets,

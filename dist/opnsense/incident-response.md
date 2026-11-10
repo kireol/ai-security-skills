@@ -36,6 +36,9 @@ Collect from the console or a clean admin workstation, before changing anything:
 - Unbound host overrides and forwarding settings; DHCP options and static mappings.
 - Installed plugins (`pkg info -x '^os-'`), configured package repositories, and cron jobs (GUI cron and
   system crontabs).
+- The other persistence surfaces from domain K of [SKILL.md](SKILL.md): backend action files, startup
+  hook scripts under `/usr/local/etc/rc.syshook.d/`, packages installed outside the plugin system,
+  tunables, and the result of the firmware health audit. Copy the files; don't run or delete them.
 - Logs: system, audit/backend, web GUI access, firewall, VPN, and DNS logs. Export them off the firewall;
   if `/var` is a RAM disk, logs are lost on reboot, so export before any restart.
 - For virtualized firewalls: a VM snapshot (including memory if the hypervisor supports it) before
@@ -54,7 +57,9 @@ Collect from the console or a clean admin workstation, before changing anything:
 ## Eradication and recovery
 
 - If firewall integrity is in doubt, **reinstall from a verified image** (check the checksum and signature
-  published with the release) rather than cleaning the running system.
+  published with the release) rather than cleaning the running system. Removing a malicious cron job or
+  hook script does not make the system trustworthy again: an attacker with root could have changed
+  anything, and the health audit only compares files it knows about.
 - Restore configuration only from a backup taken **before** the earliest plausible compromise, and diff it
   against the compromised configuration to understand what the attacker changed. Don't restore attacker
   changes.

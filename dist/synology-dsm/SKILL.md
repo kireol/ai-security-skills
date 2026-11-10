@@ -7,8 +7,8 @@ description: >-
   Synology NAS may have been compromised or hit by ransomware.
 license: CC-BY-4.0
 metadata:
-  version: "4.1"
-  last_reviewed: "2026-10-30"
+  version: "4.2"
+  last_reviewed: "2026-11-10"
   applies_to: "Synology DSM 7.x (verify the live build; menus and features vary by version and model)"
   audience: "home, work, homelab"
   finding_prefix: "NAS"
@@ -39,7 +39,14 @@ This skill holds only DSM-specific guidance. It builds on the shared core, which
 | [incident-response.md](core/incident-response.md) | The generic Respond playbook |
 
 DSM-specific Respond steps are in [incident-response.md](incident-response.md). Vendor documentation and
-advisories are in [references.md](references.md).
+advisories are in [references.md](references.md). Related skills: [Docker](../docker/SKILL.md)
+(Container Manager workloads), [NVR software](../nvr-software/SKILL.md) (Surveillance
+Station), [backup tools](../backup-tools/SKILL.md), [web servers](../web-servers/SKILL.md) (reverse
+proxies in front of NAS apps), [tunnels](../tunnels/SKILL.md),
+[Cloudflare](../cloudflare/SKILL.md) (remote access without a port forward),
+[Proxmox VE](../proxmox-ve/SKILL.md) (the host of a virtualized DSM),
+[UPS](../ups/SKILL.md) (safe shutdown), and [QNAP](../qnap-qts/SKILL.md) (a comparable NAS
+platform).
 
 ## DSM-specific principles
 
@@ -115,14 +122,35 @@ Accepted risk).
   whether it came from the official Package Center or a third-party source or manually installed SPK.
   Third-party sources are an added supply-chain risk.
 - Automatic-update settings vs. the actual installed builds.
+- Package Center settings: the publisher trust level (Synology only, trusted publishers, or any
+  publisher) and whether beta packages are enabled.
+- Packages that are services in their own right, each with its own login, ports, and advisories. Assess
+  the ones installed, and note any installed but unused: Surveillance Station (see
+  [NVR software](../nvr-software/SKILL.md)), Virtual Machine Manager (guests and the
+  networks they join), Web Station (hosted sites and their script runtimes), mail server packages, VPN
+  Server (which protocols are on; PPTP is obsolete), Download Station, and the file, photo, and drive
+  apps that create sharing links (domain C).
+- **Active Backup for Business**, if used: it stores credentials for every PC, server, hypervisor, and
+  cloud tenant it protects. Whoever controls the NAS can use them, so the NAS's own admin security sets
+  the security of everything it backs up. List what it protects and which accounts it uses.
 
 #### B. Administration and identity
 
 - Is the built-in `admin` account disabled, and is `guest` disabled? Is there a separate named
   administrator?
 - Administrators group membership, separation between admin and daily-use accounts, shared accounts.
-- 2-step verification or passkeys for administrators and remote-access users; any legacy clients that
-  block enforcement.
+- 2-factor authentication: who is **enforced** (Control Panel → Security → Account: administrators
+  group, all users, or specific users and groups) as opposed to merely enrolled, and which sign-in
+  methods are in use (authenticator codes, approve-sign-in in the vendor's app, hardware security keys).
+  Enforcement also covers SSH, SFTP, and rsync over SSH, and Synology documents that Hyper Backup and
+  Shared Folder Sync jobs using rsync with SSH encryption don't support it: they stop working for an
+  enforced account. Find those jobs before recommending enforcement.
+- Adaptive MFA for the administrators group: on or off. It asks for a second step only when an admin
+  signs in with a password alone, from an unrecognized device, from outside the local network
+  (vendor-documented). It is a safety net for admins without 2FA, not a replacement for enforcing it.
+- The Synology Account linked to the NAS (QuickConnect, cloud backup, remote monitoring): who owns it,
+  whether it has its own 2-factor sign-in, and its recovery email. It can reach the NAS without a port
+  forward, so it is an administrator-equivalent credential held outside DSM.
 - Service accounts for SMB, applications, backup jobs, and automation. Is a human admin credential being
   reused by containers, scripts, or integrations?
 - Stale users, unused service accounts, excess group membership, and application privileges. Effective
@@ -152,6 +180,27 @@ Accepted risk).
   where supported?
 - External exposure checks only within an authorized scope, recording address family, hostname, port,
   time, and limitations.
+- **Sharing links.** File Station, Synology Drive, and Synology Photos can each publish a file, folder,
+  or album at a link that needs no account. Each app has its own list of existing links: review all of
+  them for links nobody remembers, links with no password or expiry, links to whole folders, and who is
+  allowed to create public links at all. With QuickConnect or a forwarded port, every such link is
+  reachable from the internet.
+- Login Portal (Control Panel): per-application portals, aliases, and ports (each is a separate way
+  in), reverse-proxy rules that publish other hosts through the NAS, and access control profiles.
+- DSM session settings (Control Panel → Security → Security): record any of these that are off:
+  cross-site request forgery protection, the Content Security Policy header, the block on embedding DSM
+  in an iFrame; and note the logout timer and whether "skip IP checking" is on (it loosens session
+  binding).
+- **Trusted Proxies** (same page), when DSM sits behind a reverse proxy: DSM takes the client address
+  from whatever a listed proxy sends. If the proxy isn't listed, Auto Block and the logs see only the
+  proxy's address, so one attacker can get the proxy blocked for everyone. If something that isn't a
+  proxy is listed, a client can claim any address and never be blocked.
+- DoS protection (Control Panel → Security → Protection): enabled on the interfaces that face less
+  trusted networks.
+- Background: internet-facing DSM sign-in pages are password-guessed continuously, and Synology has
+  published warnings about botnet campaigns of this kind that ended in ransomware. A NAS exposed with a
+  password-only admin account is a P1 on that basis alone. Check the vendor's current security
+  announcements (references).
 
 #### D. File services, protocols, and certificates
 
@@ -206,6 +255,12 @@ Treat each container as an independently exposed workload and a potential route 
 - 3-2-1 coverage, RPO and RTO, and whether they match what the user can tolerate.
 - Shared-folder encryption: key storage and auto-mount behavior. It protects data at rest, not against
   ransomware on an unlocked share.
+- Volume encryption (DSM 7.2 and later, supported models): where the encryption key vault is. A vault on
+  the same NAS unlocks the volume automatically at boot, so it protects discarded or stolen drives but
+  not a stolen NAS; a vault on another device protects against both but makes that device a boot
+  dependency. Confirm the recovery key is stored off the NAS and that someone knows where.
+- WriteOnce shared folders, where used: the mode chosen and its retention period (some modes can't be
+  shortened or removed, even by an administrator; verify in the current help before recommending one).
 
 #### H. Monitoring and logging
 
@@ -253,7 +308,10 @@ dependencies are:
 | Area | Typical recommendation | Consequences to explain |
 |---|---|---|
 | Built-in `admin` | Create and **test** a named admin; then disable `admin`. | Integrations using `admin` will break; find them first. |
-| Admin MFA | Enable 2-step verification or passkeys for all admins. | Legacy clients may fail; keep recovery codes offline. |
+| Admin MFA | Enforce 2-factor authentication for the administrators group, with a second method or recovery codes stored offline; then consider all remote-access users. | Enforcement also applies to SSH, SFTP, and rsync over SSH. Hyper Backup and Shared Folder Sync jobs that use rsync over SSH with an enforced account stop working (vendor-documented): move them to a dedicated, non-admin account first. |
+| Public sharing links | Remove links nobody needs; require a password and expiry on the rest; limit who may create public links. | People who use an old link lose access; tell them before removing it. |
+| DSM behind a reverse proxy | List exactly the proxy's addresses under Trusted Proxies; keep Auto Block on. | A wrong entry either blocks the proxy for everyone or lets clients forge their address; test from outside after the change. |
+| Vendor account without 2-factor sign-in | Turn it on for the Synology Account, or unlink features that aren't used. | Remote features tied to the account need the new sign-in. |
 | DSM exposed to internet | Remove the port forward; use a VPN or an authenticated reverse proxy or tunnel. | Remote users need a new access path before removal. |
 | QuickConnect | Disable if unneeded; otherwise restrict which services use it. | Mobile apps and remote access that rely on it stop working. |
 | UPnP/NAT-PMP | Disable on the router and in DSM; verify mappings are gone. | Other devices (consoles, some apps) may rely on UPnP. |
@@ -346,6 +404,10 @@ check that every container still reads and writes its data.
 
 ## Version history
 
+- **4.2** (2026-11-10): Added public sharing links, enforced 2-factor authentication and what it breaks
+  (rsync-over-SSH backup jobs), Adaptive MFA, the linked vendor account, DSM session settings, Trusted
+  Proxies, Login Portal entries, add-on packages with their own attack surface, Active Backup credentials,
+  volume encryption key location, and WriteOnce folders. Added links to related skills.
 - **4.1** (2026-10-30): Added a Detection section for network inventories and linked the live reporting
   protocol.
 - **4.0** (2026-10-30): Split generic material into the shared `core/`. Reorganized around the four modes

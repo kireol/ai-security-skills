@@ -78,7 +78,9 @@ Collect before changing or rebooting anything, from a wired client if possible:
 - **Supported router:** with the user present and the ISP provisioning details ready, factory reset, then
   install the latest firmware from the vendor's own site or update function **before** reconnecting it to
   the internet where the vendor allows offline updates, then set it up by hand. Don't restore a backup
-  taken after the earliest plausible compromise; it may restore the attacker's settings.
+  taken after the earliest plausible compromise; it may restore the attacker's settings. A firmware
+  update on its own is not a cleanup: settings an attacker added (remote-shell access, authorized keys,
+  port forwards, DNS servers) are kept across updates, and only the factory reset removes them.
 - **ISP gateway:** ask the ISP to reset, re-provision, or replace it; then reapply the user's own settings
   by hand.
 - **OpenWrt:** reflash a verified image of a supported release (check the published checksum), then

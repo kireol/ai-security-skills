@@ -8,8 +8,8 @@ description: >-
   mastercontainer and its admin interface, or when a Nextcloud instance may have been compromised.
 license: CC-BY-4.0
 metadata:
-  version: "1.0"
-  last_reviewed: "2026-10-31"
+  version: "1.1"
+  last_reviewed: "2026-11-10"
   applies_to: "Nextcloud Server (supported major versions; verify on the vendor's maintenance schedule) and Nextcloud All-in-One; also the community Docker image, snap, and NAS/appliance packages"
   audience: "home, work, homelab"
   finding_prefix: "NXC"
@@ -214,6 +214,12 @@ Accepted risk).
   request comes through.
 - `loglevel` at 2 (warning) or lower so failed logins reach `nextcloud.log`, which fail2ban or CrowdSec
   can read. `audit.log` (admin audit app) logs successful logins only.
+- Whether the admin audit app is enabled at all. Without it there is no record of who opened,
+  downloaded, shared, or deleted which file, and an incident can't be scoped afterward. Check where its
+  log goes and how long it is kept.
+- Sign-in alerts for users (the suspicious-login and new-device notification apps, where installed),
+  and each user's device and session list (Personal settings → Security), which is also where a lost
+  device's session is revoked or the device is told to wipe its synced files.
 - Whether fail2ban, CrowdSec, or the proxy adds rate limiting in front.
 
 #### E. Apps
@@ -428,4 +434,6 @@ group enforcement in *Security* settings.
 
 ## Version history
 
+- **1.1** (2026-11-10): Added the admin audit app (needed to scope an incident), sign-in alerts, and
+  per-user device and session lists.
 - **1.0** (2026-10-31): Initial version.

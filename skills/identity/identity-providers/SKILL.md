@@ -10,8 +10,8 @@ description: >-
   when an identity provider or the apps behind it may have been compromised.
 license: CC-BY-4.0
 metadata:
-  version: "1.0"
-  last_reviewed: "2026-10-31"
+  version: "1.1"
+  last_reviewed: "2026-11-10"
   applies_to: "Authentik (supported release lines), Authelia 4.x, and Keycloak (current releases, Quarkus-based distribution), self-hosted in containers, VMs, or Kubernetes; configuration keys, defaults, and admin UI layouts change between releases, so verify on the live system and the version's documentation"
   audience: "homelab, work, web"
   finding_prefix: "IDP"
@@ -184,6 +184,11 @@ Accepted risk).
 
 #### B. Administrators and bootstrap accounts
 
+- **Impersonation.** Authentik and Keycloak let an administrator act as another user without that
+  user's password or second factor. It is a support feature and a quiet way to reach any application as
+  anyone. Record whether it is enabled (both products can turn it off; verify the setting for the
+  installed version), who holds the right to use it (in Keycloak it is a separate role that can be
+  granted without full admin), and whether impersonation events are logged and reviewed.
 - **Authentik:** the initial `akadmin` account: renamed, disabled after a named admin was created, or at
   least protected by MFA. Members of the admin group (superuser flag); RBAC roles granted. Whether the
   initial-setup flow is still usable (it should complete once; an old advisory made it reachable again if
@@ -475,4 +480,6 @@ green.
 
 ## Version history
 
+- **1.1** (2026-11-10): Added user impersonation as an administration check: who can act as another user,
+  and whether it is logged.
 - **1.0** (2026-10-31): Initial version.

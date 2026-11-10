@@ -11,7 +11,7 @@ Last verified: 2026-10-30
 - Hikvision cybersecurity advisories: https://www.hikvision.com/en/support/cybersecurity/security-advisory/
   (page needs a browser; content not verified by automated fetch)
 - Hikvision port list (legacy US technical bulletin): https://us-legacy.hikvision.com/sites/default/files/tb/network_port_list.pdf
-- Dahua cybersecurity center and advisories: https://www.dahuasecurity.com/support/cybersecurity (verify the current index page)
+- Dahua trust center and PSIRT (security advisories and notices): https://www.dahuasecurity.com/about-dahua/trust-center/dahua-psirt
 - Reolink, how to disable UID (P2P) and configure service ports:
   https://support.reolink.com/hc/en-us/articles/900000621783-How-to-Disable-UID/
 - Reolink, about UID: https://support.reolink.com/hc/en-us/articles/360013481134-Enable-UID-for-Reolink-Products

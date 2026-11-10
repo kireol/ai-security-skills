@@ -9,8 +9,8 @@ description: >-
   media/config folder permissions, updates, or backups, or when one of these apps may have been compromised.
 license: CC-BY-4.0
 metadata:
-  version: "1.0"
-  last_reviewed: "2026-10-30"
+  version: "1.1"
+  last_reviewed: "2026-11-10"
   applies_to: "Sonarr v4/v5, Radarr, Lidarr, Prowlarr, Bazarr, Seerr and its predecessors, Tautulli, SABnzbd, NZBGet, qBittorrent, Transmission 4.x, FlareSolverr (verify each installed version; settings move between releases)"
   audience: "home, homelab"
   finding_prefix: "ARR"
@@ -46,9 +46,13 @@ applies:
 | [incident-response.md](core/incident-response.md) | The generic Respond playbook |
 
 Media-automation-specific Respond steps are in [incident-response.md](incident-response.md). Vendor
-documentation and advisories are in [references.md](references.md). Media servers (Plex, Jellyfin, Emby)
-and transcoders (Tdarr) are covered by the `media-servers` skill; assess them together when they share
-folders or tokens.
+documentation and advisories are in [references.md](references.md). Media servers (Plex, Jellyfin, Emby) and
+transcoders (Tdarr) are covered by the [media servers](../media-servers/SKILL.md) skill; assess them
+together when they share folders or tokens. Related skills: [Docker](../docker/SKILL.md) (how
+these apps are usually run), [web servers](../web-servers/SKILL.md) (the reverse proxy in front),
+[identity providers](../identity-providers/SKILL.md) (single sign-on in front of apps with weak
+login), and [self-hosted web apps](../self-hosted-web-apps/SKILL.md) (companion apps with no
+skill of their own).
 
 ## Media-automation-specific principles
 
@@ -264,6 +268,11 @@ Accepted risk).
 - DNS: whether the client's lookups go through the tunnel or the normal resolver.
 - Peer-protocol settings that widen exposure: UPnP/NAT-PMP in the client (opens router ports), and
   encryption preferences.
+- **Downloads that aren't media.** Releases are sometimes executables, shortcuts, scripts, or
+  password-protected archives named to look like a video. Check whether the download client or the
+  automation app can block unwanted file types, whether completed-download folders are ever opened on a
+  desktop, and whether any "run on completion" hook or import script would execute or unpack what
+  arrived. A PC that opened such a file is a P0 indicator for that PC.
 
 #### F. Indexer, usenet, and third-party credentials
 
@@ -462,4 +471,5 @@ bypass instead).
 
 ## Version history
 
+- **1.1** (2026-11-10): Added disguised executable downloads as a check, and links to related skills.
 - **1.0** (2026-10-30): Initial version.

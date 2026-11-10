@@ -3,12 +3,17 @@
 Always prefer current Synology documentation for exact DSM behavior and builds. Re-verify links and
 contents when updating this skill; record the date checked.
 
-Last verified: 2026-10-30 (links carried forward from v3.1; contents not re-checked)
+Last verified: 2026-11-10 (all links resolve; the two Control Panel help pages below were re-read)
 
 ## Vendor (authoritative)
 
 - Security recommendations: https://kb.synology.com/en-us/DSM/tutorial/How_to_add_extra_security_to_your_Synology_NAS
 - Security Advisor: https://kb.synology.com/en-global/DSM/help/DSM/SecurityScan/securityscan_desc?version=7
+- Control Panel → Security → Account (2-factor enforcement and what it breaks, Adaptive MFA, Account
+  Protection): https://kb.synology.com/en-global/DSM/help/DSM/AdminCenter/connection_security_account?version=7
+- Control Panel → Security → Security (session settings, Trusted Proxies):
+  https://kb.synology.com/en-global/DSM/help/DSM/AdminCenter/connection_security_security?version=7
+- Product support status (which models still receive updates): https://www.synology.com/en-global/products/status
 - Product Security Advisories: https://www.synology.com/en-global/security/advisory
 - DSM release notes: https://www.synology.com/en-global/releaseNote/DSM
 - Downloads and model-specific support: https://www.synology.com/en-global/support/download
@@ -31,6 +36,3 @@ Reviewed when preparing v3.0. Treat as operational references only (see the core
   Primarily an MCP tool-selection guide. Useful patterns: explicit multi-NAS targeting, session-state
   discovery, aggregate-first health checks, path validation, and inspect-before-mutate. Its tool names
   apply only when that exact server and version is installed.
-
-A third-party "Clawic" Synology skill was mentioned during research but could not be located or verified,
-so it was not used.

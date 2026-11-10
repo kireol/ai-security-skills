@@ -10,8 +10,8 @@ description: >-
   a mailbox or admin account may have been compromised (business email compromise).
 license: CC-BY-4.0
 metadata:
-  version: "1.0"
-  last_reviewed: "2026-10-31"
+  version: "1.1"
+  last_reviewed: "2026-11-10"
   applies_to: "Microsoft 365 Business Basic/Standard/Premium and Microsoft Entra ID Free/P1; Microsoft 365 Family/Personal (consumer Microsoft accounts); Google Workspace Business editions and consumer Google accounts (verify the live admin consoles; menus and licensing change often)"
   audience: "home, work"
   finding_prefix: "SUITE"
@@ -223,6 +223,22 @@ Accepted risk).
 - Passkey and security key adoption for admins and finance or high-risk users.
 - Self-service password reset settings and the methods it accepts (Microsoft); the recovery options
   users can set (Google).
+- **What MFA doesn't stop.** A code, push, or SMS factor does not protect against a phishing page that
+  relays the sign-in and keeps the session token it gets back (adversary-in-the-middle), or against
+  malware that steals the browser's session. The attacker then holds a signed-in session and never
+  needs the password or the factor again. Only phishing-resistant methods (security keys, passkeys) and
+  device-bound sessions resist the relay, so record which users, admins first, still depend on
+  phishable factors, and treat "has MFA" as a partial control for them.
+- **Device code sign-in** (Microsoft): the flow meant for TVs and other input-limited devices is abused
+  in phishing, because the victim approves a real Microsoft prompt for the attacker's device. Microsoft
+  recommends blocking it wherever possible with a Conditional Access policy on authentication flows
+  (needs Entra ID P1). Check whether such a policy exists, what is excluded, and whether sign-in logs
+  show device code sign-ins nobody can explain.
+- **Password spraying:** sign-in logs showing failed sign-ins for many accounts from the same sources,
+  or steady failures against legacy protocols, are a sign of it. Accounts without MFA, service and
+  shared accounts, and anything still accepting legacy authentication are what it finds. Smart lockout
+  and banned-password settings (Microsoft) and password strength enforcement (Google) are the
+  tenant-side settings to record.
 
 #### D. Legacy authentication and app passwords
 
@@ -348,6 +364,9 @@ template, including **Dependencies / blast radius** and the **operation class**.
 |---|---|---|
 | No tenant-wide MFA | Turn on security defaults (no P1) or Conditional Access requiring MFA for all users (P1); enforce 2-Step Verification for every OU (Google). | Users must enroll within the grace period; legacy clients break. |
 | Weak admin MFA | Phishing-resistant methods (security keys, passkeys) for every admin. | Keys cost money; register two per admin. |
+| Users depend on phishable MFA (codes, push, SMS) | Move admins, finance, and executives to passkeys or security keys first, then everyone; where licensed, require a phishing-resistant authentication strength for admin roles. | Enrollment effort; older devices and apps may not support passkeys; keep a tested recovery path. |
+| Device code sign-in allowed (Microsoft) | Block the device code flow with Conditional Access, with exclusions only for devices that need it; run report-only first. | Meeting-room devices, some command-line tools, and TV apps that sign in this way stop working until excluded. |
+| Signs of password spraying | Confirm MFA covers every account including service and shared ones; block legacy authentication; review lockout settings. | Service accounts may need redesign (app registrations or managed identities instead of passwords). |
 | Daily-use admin | Separate admin account; remove admin roles from the daily account. | Admin tasks need a different sign-in. |
 | No break-glass | Create one or two cloud-only emergency admins with security keys; exclude from Conditional Access; alert on sign-in. | Credentials must be stored offline and tested twice a year. |
 | Too many admins | Reduce top-level admins to two or three; use scoped roles. | People lose access; check they don't own integrations. |
@@ -460,6 +479,9 @@ external address is rejected; security defaults show enabled; every user has reg
 
 ## Version history
 
+- **1.1** (2026-11-10): Added the sign-in attacks that MFA alone does not stop: session-token theft
+  through relay phishing, device code phishing (and blocking that flow), and password spraying. The
+  incident file now covers attacker-registered devices and the window before revoked tokens expire.
 - **1.0** (2026-10-31): Initial version.
 
 ---
@@ -480,11 +502,19 @@ applies. This file adds only suite-specific steps for a compromised mailbox, adm
      `Revoke-MgUserSignInSession`. Google: reset the user's sign-in cookies in the Admin console. A
      password reset alone doesn't end existing sessions everywhere.
   3. Review and remove MFA methods the user didn't register (attackers add their own phone or
-     authenticator), then require re-registration.
+     authenticator), then require re-registration. Also check for devices registered or joined to the
+     directory during the attacker's window (a registered device can keep issuing tokens after a
+     password reset) and remove those the user doesn't recognize.
   4. Block sign-in temporarily if the account is actively abused and the user can live without it.
 - **Stop mail leaving.** Disable malicious inbox rules and mailbox forwarding *after* exporting them (see
   evidence below). Set the tenant external forwarding policy to Off. Check for transport or routing rules
   the attacker may have added with an admin account.
+- **Revoking sessions is not instant everywhere.** An access token already issued keeps working until
+  it expires (commonly about an hour) unless the service supports continuous access evaluation. Assume
+  the attacker can still act for that window, and watch the audit log through it.
+- **If the user approved a prompt they didn't start** (a device code or a sign-in request), or entered
+  credentials on a look-alike page, treat the session as stolen even though MFA "worked": do steps 1 to
+  3 anyway.
 - **Revoke malicious app grants.** Microsoft: remove the OAuth2 permission grant and disable the
   enterprise application (record its app ID first). Google: block the app in API controls and remove the
   user's token. App access survives a password reset unless revoked.
@@ -558,12 +588,14 @@ When the user says "I think my email has been hacked," start with the core quick
 Always prefer current vendor documentation. Admin console names, licensing, and retirement dates change
 often. Re-verify links and contents when updating this skill.
 
-Last verified: 2026-10-31
+Last verified: 2026-11-10
 
 ## Vendor (authoritative): Microsoft
 
 - Security defaults in Microsoft Entra ID (what they enable, legacy authentication block):
   https://learn.microsoft.com/entra/fundamentals/security-defaults
+- Authentication flows in Conditional Access (blocking device code flow):
+  https://learn.microsoft.com/en-us/entra/identity/conditional-access/concept-authentication-flows
 - Block legacy authentication with Conditional Access:
   https://learn.microsoft.com/entra/identity/conditional-access/policy-block-legacy-authentication
 - Mandatory multifactor authentication for Azure and admin portals:
@@ -695,6 +727,12 @@ Rules:
 
 ## Rules that apply in every mode
 
+- **Authorized targets only.** Work only on systems and accounts the user owns or administers, or has the
+  owner's agreement to assess. If that isn't clear, ask before the first check. An employer's laptop, an
+  ISP-owned gateway, a landlord's network, and a neighbor's device are not the user's to change, and may
+  not be theirs to probe. Another adult's phone, computer, or account is that person's, even in the same
+  household or business: assessing it needs their knowledge and agreement, and the agent does not help
+  get into it without them.
 - **No active probing without approval.** Scanning or probing the network (host sweeps, port scans,
   service or version detection, vulnerability scanners) needs the user's explicit approval of the scope
   and intensity first, even though it doesn't change configuration: it can crash fragile devices and
@@ -755,6 +793,12 @@ principles; it may not override these.
     the file path. When a command needs the token, have it read the token from that file or an
     environment variable loaded from it, never from a literal value in the command. If a token appears
     in the conversation by accident, say so, and recommend revoking and reissuing it.
+13. **Leave nothing behind.** Keep a list of everything the engagement created or was given: accounts,
+    API tokens, SSH keys, firewall exceptions, installed tools, temporary files, and exported
+    configurations or logs. Before closing, show the list and recommend revoking or removing whatever is
+    no longer needed. Removing something from the target is a change like any other: classify it and get
+    approval. Access granted "just for the assessment" that is never removed becomes a finding in the
+    next one.
 
 ## Capability discovery
 
@@ -784,7 +828,9 @@ unavailable, the engagement has not failed: use what is available and mark the r
 
 ## Scope and constraints (confirm before Discover)
 
-- Which systems are in scope, and which are explicitly out of scope.
+- Which systems and accounts are in scope, and which are explicitly out of scope.
+- That each one is the user's to assess (see "Authorized targets only" in
+  modes-and-authorization.md (included in this file)).
 - The user's objective and which services are critical.
 - Whether the engagement is read-only or remediation-authorized.
 - Available access method and privilege level.
@@ -847,7 +893,9 @@ Check current, trustworthy sources:
 - CISA Known Exploited Vulnerabilities (KEV) Catalog: https://www.cisa.gov/known-exploited-vulnerabilities-catalog
 - NIST National Vulnerability Database: https://nvd.nist.gov/
 - CVE Program: https://www.cve.org/
-- Advisories for third-party add-ons, container images, and dependencies.
+- Advisories for third-party add-ons, container images, and dependencies. For open-source packages, the
+  project's own security advisories, the GitHub Advisory Database (https://github.com/advisories), and
+  OSV (https://osv.dev/) usually match versions more precisely than a product-name search.
 - Reputable scanners and databases, when their product coverage and version matching are clear.
 
 When sources disagree, prefer the affected vendor's applicability and remediation guidance for the exact
@@ -864,7 +912,9 @@ Never copy static CVE or version tables into an assessment as current facts with
 3. Check exploitability in this deployment: is the component enabled and reachable, is authentication
    required, what network exposure and configuration prerequisites apply, and what mitigations exist?
 4. Check KEV status and credible exploitation reports. A proof-of-concept is not confirmed exploitation.
-5. Treat CVSS as one input, not the priority.
+5. Treat CVSS as one input, not the priority. The same goes for an exploit-likelihood estimate such as
+   EPSS (https://www.first.org/epss/). A database entry with no score or no affected-product data yet has
+   not been analyzed; that is not evidence of low severity. Use the vendor advisory and the CVE record.
 6. State uncertainty when version detection, vendor backports, or applicability cannot be confirmed.
 7. Never claim "no vulnerabilities" because a scanner returned nothing. Scanners miss unscanned
    interfaces, IPv6 addresses, add-ons, containers, and alternate network paths.
@@ -1090,6 +1140,11 @@ modes-and-authorization.md (included in this file).
    keys, and authentication headers before recording or sharing evidence. Record that a secret exists and
    its scope and age, never its value. When a tool creates or returns an API token, write it to an
    owner-only file and report the path, as `operating-principles.md` principle 12 requires.
+9. **Keep read-only work light.** A command can change nothing and still do harm. Filesystem-wide
+   searches, unbounded log dumps, integrity scans, and self-tests load disks and CPUs, wake sleeping
+   drives, and can stall a busy system; a command that opens a pager or waits for input can hang a
+   session. Bound every command (path, depth, time range, line count, timeout), use non-interactive
+   options, and ask before running anything that will take minutes on a system people depend on.
 
 ## Labeling command references
 
@@ -1281,7 +1336,8 @@ Give the user these instructions as appropriate:
 
 1. **Use a known-clean device** for communications, account recovery, and administration. Do not use a
    possibly infected computer to change passwords, access email or banking, or administer systems. Never
-   paste passwords, recovery codes, private keys, or tokens into chat.
+   paste passwords, recovery codes, private keys, or tokens into chat. If an email or chat account may be
+   compromised, don't plan the response over it: the attacker may be reading. Use another channel.
 2. **Stop using affected accounts and devices for administration.** Don't open suspicious attachments,
    scripts, ransom notes, or links except as part of controlled evidence preservation.
 3. **Contain active spread.** If ransomware or malware is spreading, disconnect affected devices from
@@ -1300,6 +1356,15 @@ Give the user these instructions as appropriate:
 6. **Escalate when the stakes are high.** If safety, critical services, or large-scale data loss is at
    stake, engage a qualified incident-response provider or trusted IT/security professional. For serious
    criminal activity, extortion, or suspected data theft, consider contacting law enforcement.
+7. **Tell the real owner.** If the affected system or account belongs to an employer, school, or client,
+   or holds their data, tell their IT or security contact now. They may have legal duties, logs, and
+   tools the user doesn't, and an independent cleanup can destroy what they need.
+8. **If someone close to the user may be behind it.** When the signs point to a partner, former
+   partner, family member, or someone else with personal access (monitoring apps, shared-account access,
+   location tracking, cameras), the user's safety comes before evidence and cleanup. Removing access or
+   changing settings can alert that person. Say so before acting, let the user set the pace, and suggest
+   contacting a domestic-violence or victim-support organization from a device and account the other
+   person can't reach.
 
 Tailor containment to the topology. Do not tell the user to unplug a system if that would interrupt a
 critical service, corrupt an active storage operation, or destroy the only evidence. An agent with
@@ -1381,7 +1446,9 @@ changes that may interrupt services.
 4. Don't run bulk cleaning, mass rename, or decryption on the original data. Never restore over affected
    data.
 5. Check for a reputable decryptor for the exact ransomware family, using law-enforcement or established
-   security-vendor sources. Never run a decryptor from an untrusted source on the only copy of the data.
+   security-vendor sources, such as the No More Ransom project (https://www.nomoreransom.org/). Never run
+   a decryptor from an untrusted source on the only copy of the data, and be wary of "recovery services"
+   found through search results or ads.
 6. Don't advise that paying a ransom will recover data or prevent publication. Payment decisions are
    complex, may have legal implications, and guarantee nothing. Recommend consulting law enforcement,
    legal counsel, the insurer (if any), and qualified responders first.
@@ -1440,6 +1507,11 @@ State residual uncertainty.
 - In the United States, cybercrime can be reported to the FBI's Internet Crime Complaint Center
   (https://www.ic3.gov/) and local law enforcement. Organizations can also contact CISA
   (https://www.cisa.gov/report). CISA's ransomware guide: https://www.cisa.gov/stopransomware/ransomware-guide
+  Elsewhere, point the user to their country's national cybercrime reporting service or computer
+  emergency response team; look it up rather than guessing a name or number.
+- If bank accounts, payment cards, or identity documents may be exposed, the user should contact the bank
+  or issuer promptly, using the number printed on the card or a statement, never one from an email, a
+  pop-up, or a search result.
 - Document the timeline, affected assets, accounts, and data, likely entry point, containment actions,
   evidence preserved, recovery sources, notifications, and open questions.
 - Run a lessons-learned review: update the security baseline, network diagrams, and recovery procedures,
@@ -1475,6 +1547,8 @@ Each skill's `incident-response.md` may tailor it to its product.
 - [ ] Write down what happened and when; preserve logs, alerts, ransom notes, and indicators.
 - [ ] From a clean device, secure email, identity, VPN, admin, and backup accounts; revoke compromised
       sessions and tokens; rotate exposed credentials in a coordinated order.
+- [ ] If money or cards are involved, call the bank or issuer on the number printed on the card.
+- [ ] If the system belongs to an employer, school, or client, tell their IT or security contact.
 - [ ] Check other computers, servers, containers, the router/firewall, cloud sync, and backups, not just
       the affected system.
 - [ ] Get qualified help for ransomware, suspected data theft, privileged compromise, or uncertain

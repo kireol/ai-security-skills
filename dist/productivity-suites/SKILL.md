@@ -10,8 +10,8 @@ description: >-
   a mailbox or admin account may have been compromised (business email compromise).
 license: CC-BY-4.0
 metadata:
-  version: "1.0"
-  last_reviewed: "2026-10-31"
+  version: "1.1"
+  last_reviewed: "2026-11-10"
   applies_to: "Microsoft 365 Business Basic/Standard/Premium and Microsoft Entra ID Free/P1; Microsoft 365 Family/Personal (consumer Microsoft accounts); Google Workspace Business editions and consumer Google accounts (verify the live admin consoles; menus and licensing change often)"
   audience: "home, work"
   finding_prefix: "SUITE"
@@ -223,6 +223,22 @@ Accepted risk).
 - Passkey and security key adoption for admins and finance or high-risk users.
 - Self-service password reset settings and the methods it accepts (Microsoft); the recovery options
   users can set (Google).
+- **What MFA doesn't stop.** A code, push, or SMS factor does not protect against a phishing page that
+  relays the sign-in and keeps the session token it gets back (adversary-in-the-middle), or against
+  malware that steals the browser's session. The attacker then holds a signed-in session and never
+  needs the password or the factor again. Only phishing-resistant methods (security keys, passkeys) and
+  device-bound sessions resist the relay, so record which users, admins first, still depend on
+  phishable factors, and treat "has MFA" as a partial control for them.
+- **Device code sign-in** (Microsoft): the flow meant for TVs and other input-limited devices is abused
+  in phishing, because the victim approves a real Microsoft prompt for the attacker's device. Microsoft
+  recommends blocking it wherever possible with a Conditional Access policy on authentication flows
+  (needs Entra ID P1). Check whether such a policy exists, what is excluded, and whether sign-in logs
+  show device code sign-ins nobody can explain.
+- **Password spraying:** sign-in logs showing failed sign-ins for many accounts from the same sources,
+  or steady failures against legacy protocols, are a sign of it. Accounts without MFA, service and
+  shared accounts, and anything still accepting legacy authentication are what it finds. Smart lockout
+  and banned-password settings (Microsoft) and password strength enforcement (Google) are the
+  tenant-side settings to record.
 
 #### D. Legacy authentication and app passwords
 
@@ -348,6 +364,9 @@ template, including **Dependencies / blast radius** and the **operation class**.
 |---|---|---|
 | No tenant-wide MFA | Turn on security defaults (no P1) or Conditional Access requiring MFA for all users (P1); enforce 2-Step Verification for every OU (Google). | Users must enroll within the grace period; legacy clients break. |
 | Weak admin MFA | Phishing-resistant methods (security keys, passkeys) for every admin. | Keys cost money; register two per admin. |
+| Users depend on phishable MFA (codes, push, SMS) | Move admins, finance, and executives to passkeys or security keys first, then everyone; where licensed, require a phishing-resistant authentication strength for admin roles. | Enrollment effort; older devices and apps may not support passkeys; keep a tested recovery path. |
+| Device code sign-in allowed (Microsoft) | Block the device code flow with Conditional Access, with exclusions only for devices that need it; run report-only first. | Meeting-room devices, some command-line tools, and TV apps that sign in this way stop working until excluded. |
+| Signs of password spraying | Confirm MFA covers every account including service and shared ones; block legacy authentication; review lockout settings. | Service accounts may need redesign (app registrations or managed identities instead of passwords). |
 | Daily-use admin | Separate admin account; remove admin roles from the daily account. | Admin tasks need a different sign-in. |
 | No break-glass | Create one or two cloud-only emergency admins with security keys; exclude from Conditional Access; alert on sign-in. | Credentials must be stored offline and tested twice a year. |
 | Too many admins | Reduce top-level admins to two or three; use scoped roles. | People lose access; check they don't own integrations. |
@@ -460,4 +479,7 @@ external address is rejected; security defaults show enabled; every user has reg
 
 ## Version history
 
+- **1.1** (2026-11-10): Added the sign-in attacks that MFA alone does not stop: session-token theft
+  through relay phishing, device code phishing (and blocking that flow), and password spraying. The
+  incident file now covers attacker-registered devices and the window before revoked tokens expire.
 - **1.0** (2026-10-31): Initial version.

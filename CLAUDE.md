@@ -65,6 +65,8 @@ the content check. Never commit it, and never copy its contents into a tracked f
   `build-dist.py` rewrites those links for the bundles.
 - Skills may link to each other with relative paths (`../mqtt/SKILL.md`). `build-dist.py` rewrites them
   to sibling-folder links in folder bundles and to `dist/<skill>.md` pointers in single-file bundles.
+  Each skill lists its related skills at the end of the paragraph under the core table in "How to use
+  this skill", and links inline where a check hands off to another skill instead of copying it.
 - `check-content.sh` also flags vendor contact emails and vendor-documented private addresses; leave
   those out and point to the vendor page instead.
 - `scripts/assess.sh` and `scripts/assess.ps1` ask the same questions and build the same prompt; change

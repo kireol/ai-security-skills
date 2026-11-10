@@ -40,8 +40,8 @@ Last verified: 2026-10-30
 - CSA Matter security and privacy one-pager:
   https://csa-iot.org/wp-content/uploads/2022/06/Matter-Security-Privacy_one-pager.pdf
 - Matter handbook, security and discovery (DNS-SD service types):
-  https://handbook.buildwithmatter.com/howitworks/security and
-  https://handbook.buildwithmatter.com/howitworks/discovery
+  https://handbook.buildwithmatter.com/how-it-works/security/ and
+  https://handbook.buildwithmatter.com/how-it-works/discovery/
 - Google Home developers, commissionable and operational discovery:
   https://developers.home.google.com/matter/primer/commissionable-and-operational-discovery
 - Amazon, Matter commissioning best practices (commissioning windows, multi-admin):

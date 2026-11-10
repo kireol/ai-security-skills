@@ -11,8 +11,8 @@ description: >-
   installed or abused by an attacker.
 license: CC-BY-4.0
 metadata:
-  version: "1.0"
-  last_reviewed: "2026-10-30"
+  version: "1.1"
+  last_reviewed: "2026-11-10"
   applies_to: "ngrok agent v3 and Traffic Policy, Tailscale (Serve, Funnel, subnet routers, exit nodes), Headscale, frp 0.5x and later (TOML/YAML/JSON configuration), Pangolin with Newt, zrok 1.x/2.x, Microsoft Dev Tunnels CLI and VS Code port forwarding/remote tunnels, OpenSSH remote forwarding, ZeroTier, NetBird (verify the live versions; CLIs, flags, and defaults change often)"
   audience: "home, work, homelab, web"
   finding_prefix: "TUN"
@@ -317,6 +317,11 @@ Accepted risk).
   or NetBird policies. Flag an allow-all policy (the default Tailscale policy lets every member reach
   every device), rules that give guests or shared users broad access, and `autogroup:internet` granted
   more widely than intended.
+- **Tailscale SSH**, where enabled: the tailnet policy's SSH rules, not the hosts' own `authorized_keys`
+  or `sshd_config`, decide who can open a shell on which node and as which user. Look for rules that
+  allow `root` or any non-root user, rules open to all members or to shared users, and whether sensitive
+  destinations require the periodic re-authentication ("check") mode. A host hardened for OpenSSH can
+  still be wide open this way; verify the current rule syntax in the vendor's documentation.
 - **Device admission:** device approval required or not; Tailnet Lock (Tailscale) where used; ZeroTier
   networks set to public (verify the current behavior in ZeroTier's docs; a public network admits members
   without authorization); unknown, unnamed, or long-offline devices.
@@ -522,4 +527,6 @@ only with Traffic Policy authentication).
 
 ## Version history
 
+- **1.1** (2026-11-10): Added Tailscale SSH policy rules as a check: they grant shell access independently
+  of the host's own SSH configuration.
 - **1.0** (2026-10-30): Initial version.

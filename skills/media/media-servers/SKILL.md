@@ -9,8 +9,8 @@ description: >-
   or transcoding node may have been compromised.
 license: CC-BY-4.0
 metadata:
-  version: "1.0"
-  last_reviewed: "2026-10-30"
+  version: "1.1"
+  last_reviewed: "2026-11-10"
   applies_to: "Plex Media Server 1.4x, Jellyfin 10.10/10.11, Emby Server 4.8/4.9, Tdarr 2.x/3.x (verify each installed version; settings and menus change between releases)"
   audience: "home, homelab"
   finding_prefix: "MED"
@@ -43,8 +43,13 @@ This skill holds only media-server-specific guidance. It builds on the shared co
 
 Media-server-specific Respond steps are in [incident-response.md](incident-response.md). Vendor
 documentation and advisories are in [references.md](references.md). The download and automation apps that
-feed the library (Sonarr, Radarr, request apps, Tautulli) are covered by the `media-automation` skill;
-they often hold this server's token, so assess them together.
+feed the library (Sonarr, Radarr, request apps, Tautulli) are covered by the
+[media automation](../media-automation/SKILL.md) skill; they often hold this server's token, so assess them
+together. Related skills: [Docker](../../containers/docker/SKILL.md),
+[web servers](../../web/web-servers/SKILL.md) (the reverse proxy in front),
+[tunnels](../../edge/tunnels/SKILL.md) and [Cloudflare](../../edge/cloudflare/SKILL.md) (remote access
+without a port forward), [GPU hosts](../../ai/gpu-hosts/SKILL.md) (GPU passthrough for transcoding), and
+[smart TVs](../../consumer-devices/smart-tvs/SKILL.md) (the client devices).
 
 ## Media-server-specific principles
 
@@ -433,4 +438,5 @@ daily account can't open the dashboard; the admin account works.
 
 ## Version history
 
+- **1.1** (2026-11-10): Added links to related skills.
 - **1.0** (2026-10-30): Initial version.

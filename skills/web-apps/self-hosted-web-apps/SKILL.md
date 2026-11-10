@@ -10,8 +10,8 @@ description: >-
   status, updates, and backups, or when one may have been compromised.
 license: CC-BY-4.0
 metadata:
-  version: "1.1"
-  last_reviewed: "2026-10-31"
+  version: "1.2"
+  last_reviewed: "2026-11-10"
   applies_to: "Small self-hosted web apps without a dedicated skill, usually run as containers, including ntfy, Gotify, and CasaOS (verify the live version of each app)"
   audience: "home, homelab"
   finding_prefix: "APP"
@@ -43,7 +43,22 @@ which always applies:
 | [incident-response.md](../../../core/incident-response.md) | The generic Respond playbook |
 
 App-specific Respond steps are in [incident-response.md](incident-response.md). Vendor documentation and
-advisories are in [references.md](references.md).
+advisories are in [references.md](references.md). Related skills: [Nextcloud](../nextcloud/SKILL.md),
+[photo and document apps](../photo-and-document-apps/SKILL.md),
+[automation platforms](../automation-platforms/SKILL.md),
+[media servers](../../media/media-servers/SKILL.md),
+[media automation](../../media/media-automation/SKILL.md),
+[Home Assistant](../../home-automation/home-assistant/SKILL.md),
+[password managers](../../identity/password-managers/SKILL.md) (Vaultwarden and Bitwarden),
+[identity providers](../../identity/identity-providers/SKILL.md),
+[monitoring](../../monitoring/monitoring/SKILL.md),
+[logging and SIEM](../../monitoring/logging-and-siem/SKILL.md),
+[code hosting and CI](../../dev/code-hosting-and-ci/SKILL.md) (Gitea and Forgejo),
+[local LLM servers](../../ai/local-llm/SKILL.md) (LLM web UIs),
+[AI app builders](../../ai/ai-app-builders/SKILL.md) (use the dedicated skill when one exists),
+[Docker](../../containers/docker/SKILL.md), [web servers](../../web/web-servers/SKILL.md),
+[Cloudflare](../../edge/cloudflare/SKILL.md), and [tunnels](../../edge/tunnels/SKILL.md) (how the app is run
+and published).
 
 This skill is generic on purpose. Where a dedicated skill exists for a product (for example a NAS, a
 firewall, or the reverse proxy in front of these apps), use that skill instead and this one only for the
@@ -293,6 +308,22 @@ capabilities, secrets held, maintained, backed up) keeps the report readable.
   apps usually publish their ports on all host addresses too. List every port CasaOS apps publish, and
   check that the dashboard itself is never port-forwarded or tunneled to the internet; it's a host
   admin console. Check CasaOS's own instructions before putting it behind a reverse proxy.
+- **The app's own back-end services.** Compose files often publish the database, cache, or search port
+  next to the app's (PostgreSQL, MySQL/MariaDB, Redis, MongoDB, Elasticsearch on their default ports).
+  A published port bypasses the host firewall like any other, and several of these accept connections
+  with no password or a default one. They should be on the Compose network only, with no `ports:` entry,
+  unless something outside the stack truly needs them.
+- **Debug and development modes** left on (a framework debug flag, a development server, verbose error
+  pages, a built-in console or profiler): these show secrets and source paths in error pages, and some
+  give code execution to anyone who can reach them. Check the app's environment settings against its
+  documentation's production advice.
+- **Features that fetch a URL for the user** (link previews, favicon and icon fetchers, webhooks the
+  user configures, import-from-URL, feed readers, monitoring probes): from the internet they turn the
+  app into a way to reach other hosts on the LAN and cloud metadata addresses. Note which the app has,
+  whether it restricts destinations, and whether untrusted users can use them.
+- Unauthenticated side doors on the same port: health, metrics, and API documentation paths, and
+  admin or setup paths that stay reachable after setup. Ask the vendor documentation which exist; a
+  metrics page can list users, hostnames, and internal addresses.
 - TLS: plain HTTP is common inside the LAN. Note it where the app carries passwords or session cookies
   across untrusted segments; the fix is usually TLS at the reverse proxy (assessed with `web-servers`).
 
@@ -532,6 +563,9 @@ auth layer even if the key change is rolled back).
 
 ## Version history
 
+- **1.2** (2026-11-10): Added published database and cache ports, debug and development modes,
+  URL-fetching features that reach the LAN, and unauthenticated health, metrics, and setup paths. Added
+  links to the dedicated skills this one should hand off to.
 - **1.1** (2026-10-31): Added push-notification servers (ntfy: open-by-default access,
   `auth-default-access`, ACLs, public and guessable topics, tokens, admin socket; Gotify: initial
   `admin` account, application vs client tokens, plugins) and CasaOS as a homelab platform (first-run

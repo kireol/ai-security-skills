@@ -11,8 +11,8 @@ description: >-
   misused, hijacked by injected instructions, or exposed secrets.
 license: CC-BY-4.0
 metadata:
-  version: "1.0"
-  last_reviewed: "2026-10-31"
+  version: "1.1"
+  last_reviewed: "2026-11-10"
   applies_to: "Claude Code, Codex CLI, OpenCode, Continue, Cursor, Aider, and similar agentic coding tools (settings names change often; verify each against the tool's current docs)"
   audience: "home, work, homelab"
   finding_prefix: "AGT"
@@ -153,7 +153,7 @@ Config files can contain API keys and tokens: **list key names, never values**.
 # What is installed and running (not yet verified on every OS)
 command -v claude codex opencode aider cn cursor 2>&1
 claude --version; codex --version; opencode --version; aider --version   # versions only
-ps -eo user,pid,args | grep -Ei 'claude|codex|opencode|aider|cursor|continue' | grep -v grep
+ps -eo user,pid,args | grep -Ei 'claude|codex|opencode|aider|cursor|continue' | grep -v grep   # redact any key or token passed as an argument
 
 # Claude Code: permission and sandbox settings (structure only; vendor-documented keys)
 jq '{defaultMode: .permissions.defaultMode, allow: .permissions.allow, deny: .permissions.deny,
@@ -356,6 +356,12 @@ especially cloned third-party ones.
   they're kept (Claude Code has a cleanup period setting; verify the name), file permissions, whether
   they're in git (Aider adds `.aider*` to `.gitignore` by default), and whether they're synced or backed
   up unencrypted. They contain any secret the agent read.
+- **Memory and notes the agent writes for itself** (memory files or folders, auto-generated rules,
+  saved "learnings"; names and locations differ per tool): they are loaded into later sessions as
+  trusted context. Text an attacker got the agent to save, through a poisoned repository, web page, or
+  tool result, keeps steering it after the original source is gone. Check where they live, whether they
+  are shared across projects or synced, who else can write to them, and read them for instructions the
+  user didn't give. They can also hold secrets the agent chose to remember.
 - Code sent to third parties through MCP servers, web fetches, or model routers.
 
 #### K. Headless, scheduled, and CI use
@@ -367,6 +373,15 @@ especially cloned third-party ones.
   [code-hosting-and-ci](../../dev/code-hosting-and-ci/SKILL.md)).
 - Tokens given to agents for git hosting: fine-grained, repository-scoped, short-lived; no admin or
   workflow-write scope unless needed.
+- **Agents that run somewhere else:** vendor-hosted cloud or background agents, and agents on a remote
+  machine the user connects to. Record which repositories, secrets, and network access the hosted
+  environment has, who can start a run (a web page, a chat integration, a phone), whether its setup
+  scripts and environment secrets are editable by anyone with repository write access, and how its
+  output comes back (a branch, a pull request, or direct pushes). The laptop's sandbox and allowlists do
+  not apply there.
+- **Sub-agents and parallel agents:** whether they inherit the parent's permission mode, tools, and MCP
+  servers or can be given narrower ones, and whether anything they do bypasses the approval prompts the
+  user sees. A sub-agent that reads untrusted content should not also hold write or network tools.
 
 #### L. Change control and recovery
 
@@ -509,4 +524,6 @@ copy; a test run in the container can't read `~/.ssh` or reach `downloads.exampl
 
 ## Version history
 
+- **1.1** (2026-11-10): Added checks for agent-written memory files (a persistent injection and
+  secret-storage surface), vendor-hosted and remote agents, and what sub-agents inherit.
 - **1.0** (2026-10-31): Initial version.

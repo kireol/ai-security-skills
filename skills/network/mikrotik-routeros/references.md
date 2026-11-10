@@ -3,7 +3,7 @@
 Always prefer current MikroTik documentation. The manual moved from help.mikrotik.com (now frozen) to
 manual.mikrotik.com; menus, defaults, and syntax change between RouterOS versions.
 
-Last verified: 2026-10-31
+Last verified: 2026-11-10
 
 ## Vendor (authoritative)
 
@@ -21,6 +21,13 @@ Last verified: 2026-10-31
 - Default password (factory-set password on newer devices):
   https://help.mikrotik.com/docs/spaces/RKB/pages/285147143/Default+password
 - CHR licensing: https://manual.mikrotik.com/docs/getting-started/routeros-licensing/chr/chr-licensing/
+- Users and groups (policies, including what the built-in `read` group can do):
+  https://help.mikrotik.com/docs/spaces/ROS/pages/8978504/User
+- WireGuard (properties marked sensitive; `print` examples show the private key):
+  https://help.mikrotik.com/docs/spaces/ROS/pages/69664792/WireGuard
+- SMB server (`enabled=auto`, interfaces, guest user): https://help.mikrotik.com/docs/spaces/ROS/pages/117145608/SMB
+- TR-069 client (remote management by an auto-configuration server):
+  https://help.mikrotik.com/docs/spaces/ROS/pages/9863195/TR-069
 - Downloads and changelogs (channels: long-term, stable, testing, development):
   https://mikrotik.com/download and https://mikrotik.com/download/changelogs
 - Release announcements (forum): https://forum.mikrotik.com/

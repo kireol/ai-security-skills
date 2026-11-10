@@ -26,6 +26,8 @@ applies. This file adds only DSM-specific steps.
 - `synopkg list` output, package sources configured in Package Center, and any manually installed SPKs.
 - Container Manager: projects, containers, image digests, mounts, and published ports.
 - Firewall, port forwarding (router), QuickConnect, reverse-proxy, and certificate settings.
+- Every sharing link in File Station, Synology Drive, and Synology Photos, with creation time and
+  creator. A link is an easy way to keep reading data after passwords are changed.
 - SSH authorized keys for every account.
 - Security Advisor results, **without** acting on its auto-fix suggestions yet.
 - For virtualized DSM: a hypervisor snapshot of the VM can capture state for later analysis. Passed-through
@@ -38,6 +40,8 @@ applies. This file adds only DSM-specific steps.
   account or a NAS-side process.
 - Every system that shares the NAS's admin credentials, or that the NAS backs up to or replicates with.
 - The Synology Account linked to the NAS (QuickConnect, cloud services), and its MFA and recovery options.
+- Everything Active Backup for Business protects: the NAS held working credentials for those PCs,
+  servers, hypervisors, and cloud tenants. Treat them as exposed and rotate them.
 - For virtualized DSM: the hypervisor's admin accounts and access logs.
 
 ## Eradication and recovery
@@ -49,8 +53,8 @@ applies. This file adds only DSM-specific steps.
   Prefer a backup held outside the NAS's admin boundary, taken before the earliest plausible compromise.
 - Rebuild containers from verified images; don't reuse their secrets.
 - Before reconnecting: `admin` disabled, MFA on every admin, unauthorized Task Scheduler entries, packages,
-  containers, and SSH keys removed, firewall and remote access reviewed, and the initial access path
-  closed.
+  containers, SSH keys, and sharing links removed, firewall and remote access reviewed, and the initial
+  access path closed.
 
 ## Quick checklist tailored for a NAS
 

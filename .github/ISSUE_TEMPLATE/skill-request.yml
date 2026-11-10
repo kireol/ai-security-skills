@@ -34,6 +34,11 @@ body:
         - media
         - AI
         - web apps / web servers
+        - cloud services / online accounts
+        - identity / passwords / MFA
+        - developer tools / CI
+        - monitoring / logging
+        - hardware / power / remote management
         - other
     validations:
       required: true

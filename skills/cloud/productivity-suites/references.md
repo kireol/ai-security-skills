@@ -3,12 +3,14 @@
 Always prefer current vendor documentation. Admin console names, licensing, and retirement dates change
 often. Re-verify links and contents when updating this skill.
 
-Last verified: 2026-10-31
+Last verified: 2026-11-10
 
 ## Vendor (authoritative): Microsoft
 
 - Security defaults in Microsoft Entra ID (what they enable, legacy authentication block):
   https://learn.microsoft.com/entra/fundamentals/security-defaults
+- Authentication flows in Conditional Access (blocking device code flow):
+  https://learn.microsoft.com/en-us/entra/identity/conditional-access/concept-authentication-flows
 - Block legacy authentication with Conditional Access:
   https://learn.microsoft.com/entra/identity/conditional-access/policy-block-legacy-authentication
 - Mandatory multifactor authentication for Azure and admin portals:

@@ -5,12 +5,12 @@
 Always prefer current Unraid documentation and release notes for exact behavior. Re-verify links and
 contents when updating this skill; record the date checked.
 
-Last verified: 2026-10-31
+Last verified: 2026-11-10 (all links resolve; the release-notes index link was replaced)
 
 ## Vendor (authoritative)
 
 - Release notes (security fixes are announced here; read every version between installed and current):
-  https://docs.unraid.net/unraid-os/release-notes/
+  https://docs.unraid.net/category/release-notes/
   - Example security maintenance release (7.2.9): https://docs.unraid.net/unraid-os/release-notes/7.2.9/
   - 7.3.0 (internal boot, TPM licensing, rollback limits): https://docs.unraid.net/unraid-os/release-notes/7.3.0/
 - Updating Unraid: https://docs.unraid.net/unraid-os/updating-unraid/

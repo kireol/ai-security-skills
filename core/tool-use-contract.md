@@ -27,6 +27,11 @@ every operation first, using the operation classes in
    keys, and authentication headers before recording or sharing evidence. Record that a secret exists and
    its scope and age, never its value. When a tool creates or returns an API token, write it to an
    owner-only file and report the path, as `operating-principles.md` principle 12 requires.
+9. **Keep read-only work light.** A command can change nothing and still do harm. Filesystem-wide
+   searches, unbounded log dumps, integrity scans, and self-tests load disks and CPUs, wake sleeping
+   drives, and can stall a busy system; a command that opens a pager or waits for input can hang a
+   session. Bound every command (path, depth, time range, line count, timeout), use non-interactive
+   options, and ask before running anything that will take minutes on a system people depend on.
 
 ## Labeling command references
 

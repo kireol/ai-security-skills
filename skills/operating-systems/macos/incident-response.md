@@ -18,6 +18,11 @@ sessions, keychain items, SSH keys, cloud tokens, and Apple Account session. Sco
   or Screen Recording granted to an unknown app; SIP, Gatekeeper, or startup security lowered; unknown
   trusted root certificates; changed DNS, proxy, or `/etc/hosts`; XProtect malware alerts; unexpected
   outbound connections; or browser extensions nobody installed.
+- **Signs of a credential stealer** (the most common Mac compromise): the user pasted a command into
+  Terminal or opened a downloaded "installer" and was then asked for their Mac password; accounts
+  elsewhere are taken over while the Mac seems fine. These tools often run once and leave little
+  behind, so the absence of launch items does not clear the Mac. Assume the login password, the login
+  keychain, browser passwords and sessions, and any wallet or notes files were copied.
 - **Contain by isolating the network, not by powering off.** Turn off Wi-Fi and unplug Ethernet (or block
   the Mac at the router, with approval). Keep it powered on and logged in: shutting down loses memory and,
   with FileVault on, locks the data until someone unlocks it again. Don't log out the affected user.
@@ -65,6 +70,9 @@ tickets whole.
 - **Apple Account:** devices signed in (remove unknown ones), recent sign-ins and security notifications,
   and whether iCloud Keychain synced passwords to other devices. If the attacker had the Mac unlocked, they
   may have had iCloud Keychain, Messages, Mail, and Photos.
+- **The Mac login password and login keychain:** if the user typed the password into a prompt they
+  didn't expect, everything in the keychain is exposed (Wi-Fi passwords, app and mail passwords,
+  certificates and keys). Change the login password from a clean state and rotate what the keychain held.
 - **Browsers:** saved passwords, active sessions and cookies (session theft bypasses passwords and 2FA),
   and extensions in every installed browser and profile.
 - **SSH keys and known_hosts:** every server the Mac's keys can reach; `known_hosts` lists where they were
