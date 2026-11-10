@@ -11,8 +11,8 @@ description: >-
   (including tech-support scams and ransomware).
 license: CC-BY-4.0
 metadata:
-  version: "1.1"
-  last_reviewed: "2026-10-31"
+  version: "1.2"
+  last_reviewed: "2026-11-10"
   applies_to: "Windows 11, Windows 10 22H2 with ESU, small Windows Server 2016-2025 installs, and small Active Directory domains (one forest, one domain, a few domain controllers); verify the live build and edition"
   audience: "home, work, homelab"
   finding_prefix: "WIN"
@@ -44,8 +44,17 @@ This skill holds only Windows-specific guidance. It builds on the shared core, w
 | reporting-protocol.md (included in this file) | Optional live progress reporting to a dashboard |
 | incident-response.md (included in this file) | The generic Respond playbook |
 
-Windows-specific Respond steps are in incident-response.md (included in this file). Vendor documentation
-and advisories are in references.md (included in this file).
+Windows-specific Respond steps are in incident-response.md (included in this file). Vendor documentation and
+advisories are in references.md (included in this file). Related skills:
+productivity suites (`dist/productivity-suites.md`) (Microsoft 365 and Entra ID),
+cloud storage (`dist/cloud-storage.md`) (OneDrive),
+remote desktop and RMM (`dist/remote-desktop-and-rmm.md`) (remote-access tools installed
+on the PC), password managers (`dist/password-managers.md`),
+MFA (`dist/mfa.md`), backup tools (`dist/backup-tools.md`),
+Docker (`dist/docker.md`) (Docker Desktop), printers (`dist/printers.md`)
+(network printers behind the spooler), logging and SIEM (`dist/logging-and-siem.md`) (where
+its event logs go), and AI coding agents (`dist/ai-coding-agents.md`) (agent tools on a
+workstation).
 
 ## Windows-specific principles
 
@@ -423,6 +432,13 @@ Accepted risk).
   has been turned off, and whether the user routinely clicks through "Run anyway".
 - Reputation-based protection and PUA blocking in Edge.
 - Developer mode on (allows sideloading and lowers some protections): only if the user develops software.
+- Office macros: whether macros in files from the internet are blocked (the default in current Microsoft
+  365 apps; verify on the installed version), and the Trusted Locations and Trusted Publishers lists,
+  which bypass that block. A network share or the Downloads folder as a Trusted Location is a finding.
+- Whether anyone on this PC has ever followed instructions from a web page, email, or caller to paste a
+  command into the Run box, PowerShell, or a terminal ("press Windows+R, then Ctrl+V" on a fake
+  verification or error page). The command runs with the user's own rights, SmartScreen never sees a
+  file, and it usually installs credential-stealing malware. A "yes" is a P0 indicator: go to Respond.
 - Memory integrity (HVCI) and other Core isolation settings; the Microsoft vulnerable driver blocklist.
 - On small-office machines: App Control for Business or AppLocker policies, if any exist.
 
@@ -536,6 +552,15 @@ Accepted risk).
   → Startup apps. Microsoft Sysinternals Autoruns gives the most complete view; it's a vendor tool, but
   explain and get approval before downloading it (core tool-use contract).
 - WMI event subscriptions in `root\subscription` (rare on clean home PCs).
+- Quieter locations that Autoruns also lists: Image File Execution Options "debugger" entries (they
+  swap one program for another when it starts), accessibility tools on the sign-in screen that have been
+  replaced or redirected (Sticky Keys or Ease of Access opening a system command prompt before anyone
+  signs in), AppInit DLLs, and COM registrations in the user's own hive. Any of these on a home PC needs
+  an explanation.
+- Windows Subsystem for Linux: `wsl --list --verbose` shows installed distributions. Each is a Linux
+  system with its own services, cron jobs, SSH keys, and packages that Windows tools don't inspect.
+  If one is in use, assess it with the Linux (`dist/linux.md`) skill; if nobody installed it, that
+  is a finding.
 - Browser extensions in each browser profile: unknown or broad-permission extensions are a common
   credential-theft path.
 - Installed programs: unknown, unused, "cleaner"/"optimizer" tools, cracked software, and anything
@@ -602,6 +627,12 @@ Accepted risk).
 - Booting from USB allowed in firmware, firmware password set on high-risk laptops (optional).
 - Thunderbolt/DMA protection (Kernel DMA Protection in System Information).
 - Find my device enabled.
+- Recall, on PCs that offer it (Copilot+ hardware): on or off, and which apps and sites are excluded. It
+  keeps a searchable history of what was on screen, so anyone who can sign in as the user can search
+  months of activity. Verify current behavior and protections on the installed build.
+- WDigest plain-text credential caching (`UseLogonCredential` under the WDigest security provider key):
+  it is off by default on supported Windows; a value of 1 means sign-in passwords are kept in memory in
+  clear text, and on a PC nobody configured that way it is a sign of tampering.
 - Disposal: devices being sold or recycled are reset with "clean the drive" or securely erased (advice
   only; never automate).
 
@@ -917,6 +948,9 @@ fails).
 
 ## Version history
 
+- **1.2** (2026-11-10): Added quieter persistence locations (Image File Execution Options, sign-in screen
+  accessibility tools, AppInit, COM), WSL distributions, Office macro trust settings, the paste-a-command
+  lure, Recall, and WDigest credential caching. Added links to related skills.
 - **1.0** (2026-10-30): Initial version.
 - **1.1** (2026-10-31): Added small-office and homelab Active Directory domain controller coverage:
   deployment variants for DCs and virtualized DCs, DC detection ports and announcements, read-only DC
@@ -945,6 +979,8 @@ other PCs with the same admin password). Plan to scope beyond the machine from t
     bank while they watched.
   - *Ransomware*: ransom notes, files with new extensions, shadow copies deleted, Defender disabled,
     sometimes BitLocker enabled by the attacker with a key the owner doesn't have.
+  - *Pasted command*: a web page, message, or caller had the user paste a command into the Run box or
+    PowerShell. Treat as an infostealer infection even if nothing visible happened.
   - *Infostealer*: a cracked game or fake installer, followed by account takeovers elsewhere (email,
     social media, crypto wallets) even though the PC "seems fine".
   - *Exposed RDP*: successful external logons (event 4624 logon type 10) after many failures.
@@ -1268,6 +1304,12 @@ Rules:
 
 ## Rules that apply in every mode
 
+- **Authorized targets only.** Work only on systems and accounts the user owns or administers, or has the
+  owner's agreement to assess. If that isn't clear, ask before the first check. An employer's laptop, an
+  ISP-owned gateway, a landlord's network, and a neighbor's device are not the user's to change, and may
+  not be theirs to probe. Another adult's phone, computer, or account is that person's, even in the same
+  household or business: assessing it needs their knowledge and agreement, and the agent does not help
+  get into it without them.
 - **No active probing without approval.** Scanning or probing the network (host sweeps, port scans,
   service or version detection, vulnerability scanners) needs the user's explicit approval of the scope
   and intensity first, even though it doesn't change configuration: it can crash fragile devices and
@@ -1328,6 +1370,12 @@ principles; it may not override these.
     the file path. When a command needs the token, have it read the token from that file or an
     environment variable loaded from it, never from a literal value in the command. If a token appears
     in the conversation by accident, say so, and recommend revoking and reissuing it.
+13. **Leave nothing behind.** Keep a list of everything the engagement created or was given: accounts,
+    API tokens, SSH keys, firewall exceptions, installed tools, temporary files, and exported
+    configurations or logs. Before closing, show the list and recommend revoking or removing whatever is
+    no longer needed. Removing something from the target is a change like any other: classify it and get
+    approval. Access granted "just for the assessment" that is never removed becomes a finding in the
+    next one.
 
 ## Capability discovery
 
@@ -1357,7 +1405,9 @@ unavailable, the engagement has not failed: use what is available and mark the r
 
 ## Scope and constraints (confirm before Discover)
 
-- Which systems are in scope, and which are explicitly out of scope.
+- Which systems and accounts are in scope, and which are explicitly out of scope.
+- That each one is the user's to assess (see "Authorized targets only" in
+  modes-and-authorization.md (included in this file)).
 - The user's objective and which services are critical.
 - Whether the engagement is read-only or remediation-authorized.
 - Available access method and privilege level.
@@ -1420,7 +1470,9 @@ Check current, trustworthy sources:
 - CISA Known Exploited Vulnerabilities (KEV) Catalog: https://www.cisa.gov/known-exploited-vulnerabilities-catalog
 - NIST National Vulnerability Database: https://nvd.nist.gov/
 - CVE Program: https://www.cve.org/
-- Advisories for third-party add-ons, container images, and dependencies.
+- Advisories for third-party add-ons, container images, and dependencies. For open-source packages, the
+  project's own security advisories, the GitHub Advisory Database (https://github.com/advisories), and
+  OSV (https://osv.dev/) usually match versions more precisely than a product-name search.
 - Reputable scanners and databases, when their product coverage and version matching are clear.
 
 When sources disagree, prefer the affected vendor's applicability and remediation guidance for the exact
@@ -1437,7 +1489,9 @@ Never copy static CVE or version tables into an assessment as current facts with
 3. Check exploitability in this deployment: is the component enabled and reachable, is authentication
    required, what network exposure and configuration prerequisites apply, and what mitigations exist?
 4. Check KEV status and credible exploitation reports. A proof-of-concept is not confirmed exploitation.
-5. Treat CVSS as one input, not the priority.
+5. Treat CVSS as one input, not the priority. The same goes for an exploit-likelihood estimate such as
+   EPSS (https://www.first.org/epss/). A database entry with no score or no affected-product data yet has
+   not been analyzed; that is not evidence of low severity. Use the vendor advisory and the CVE record.
 6. State uncertainty when version detection, vendor backports, or applicability cannot be confirmed.
 7. Never claim "no vulnerabilities" because a scanner returned nothing. Scanners miss unscanned
    interfaces, IPv6 addresses, add-ons, containers, and alternate network paths.
@@ -1663,6 +1717,11 @@ modes-and-authorization.md (included in this file).
    keys, and authentication headers before recording or sharing evidence. Record that a secret exists and
    its scope and age, never its value. When a tool creates or returns an API token, write it to an
    owner-only file and report the path, as `operating-principles.md` principle 12 requires.
+9. **Keep read-only work light.** A command can change nothing and still do harm. Filesystem-wide
+   searches, unbounded log dumps, integrity scans, and self-tests load disks and CPUs, wake sleeping
+   drives, and can stall a busy system; a command that opens a pager or waits for input can hang a
+   session. Bound every command (path, depth, time range, line count, timeout), use non-interactive
+   options, and ask before running anything that will take minutes on a system people depend on.
 
 ## Labeling command references
 
@@ -1854,7 +1913,8 @@ Give the user these instructions as appropriate:
 
 1. **Use a known-clean device** for communications, account recovery, and administration. Do not use a
    possibly infected computer to change passwords, access email or banking, or administer systems. Never
-   paste passwords, recovery codes, private keys, or tokens into chat.
+   paste passwords, recovery codes, private keys, or tokens into chat. If an email or chat account may be
+   compromised, don't plan the response over it: the attacker may be reading. Use another channel.
 2. **Stop using affected accounts and devices for administration.** Don't open suspicious attachments,
    scripts, ransom notes, or links except as part of controlled evidence preservation.
 3. **Contain active spread.** If ransomware or malware is spreading, disconnect affected devices from
@@ -1873,6 +1933,15 @@ Give the user these instructions as appropriate:
 6. **Escalate when the stakes are high.** If safety, critical services, or large-scale data loss is at
    stake, engage a qualified incident-response provider or trusted IT/security professional. For serious
    criminal activity, extortion, or suspected data theft, consider contacting law enforcement.
+7. **Tell the real owner.** If the affected system or account belongs to an employer, school, or client,
+   or holds their data, tell their IT or security contact now. They may have legal duties, logs, and
+   tools the user doesn't, and an independent cleanup can destroy what they need.
+8. **If someone close to the user may be behind it.** When the signs point to a partner, former
+   partner, family member, or someone else with personal access (monitoring apps, shared-account access,
+   location tracking, cameras), the user's safety comes before evidence and cleanup. Removing access or
+   changing settings can alert that person. Say so before acting, let the user set the pace, and suggest
+   contacting a domestic-violence or victim-support organization from a device and account the other
+   person can't reach.
 
 Tailor containment to the topology. Do not tell the user to unplug a system if that would interrupt a
 critical service, corrupt an active storage operation, or destroy the only evidence. An agent with
@@ -1954,7 +2023,9 @@ changes that may interrupt services.
 4. Don't run bulk cleaning, mass rename, or decryption on the original data. Never restore over affected
    data.
 5. Check for a reputable decryptor for the exact ransomware family, using law-enforcement or established
-   security-vendor sources. Never run a decryptor from an untrusted source on the only copy of the data.
+   security-vendor sources, such as the No More Ransom project (https://www.nomoreransom.org/). Never run
+   a decryptor from an untrusted source on the only copy of the data, and be wary of "recovery services"
+   found through search results or ads.
 6. Don't advise that paying a ransom will recover data or prevent publication. Payment decisions are
    complex, may have legal implications, and guarantee nothing. Recommend consulting law enforcement,
    legal counsel, the insurer (if any), and qualified responders first.
@@ -2013,6 +2084,11 @@ State residual uncertainty.
 - In the United States, cybercrime can be reported to the FBI's Internet Crime Complaint Center
   (https://www.ic3.gov/) and local law enforcement. Organizations can also contact CISA
   (https://www.cisa.gov/report). CISA's ransomware guide: https://www.cisa.gov/stopransomware/ransomware-guide
+  Elsewhere, point the user to their country's national cybercrime reporting service or computer
+  emergency response team; look it up rather than guessing a name or number.
+- If bank accounts, payment cards, or identity documents may be exposed, the user should contact the bank
+  or issuer promptly, using the number printed on the card or a statement, never one from an email, a
+  pop-up, or a search result.
 - Document the timeline, affected assets, accounts, and data, likely entry point, containment actions,
   evidence preserved, recovery sources, notifications, and open questions.
 - Run a lessons-learned review: update the security baseline, network diagrams, and recovery procedures,
@@ -2048,6 +2124,8 @@ Each skill's `incident-response.md` may tailor it to its product.
 - [ ] Write down what happened and when; preserve logs, alerts, ransom notes, and indicators.
 - [ ] From a clean device, secure email, identity, VPN, admin, and backup accounts; revoke compromised
       sessions and tokens; rotate exposed credentials in a coordinated order.
+- [ ] If money or cards are involved, call the bank or issuer on the number printed on the card.
+- [ ] If the system belongs to an employer, school, or client, tell their IT or security contact.
 - [ ] Check other computers, servers, containers, the router/firewall, cloud sync, and backups, not just
       the affected system.
 - [ ] Get qualified help for ransomware, suspected data theft, privileged compromise, or uncertain

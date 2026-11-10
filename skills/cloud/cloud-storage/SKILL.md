@@ -10,8 +10,8 @@ description: >-
   compromised or files were encrypted or deleted.
 license: CC-BY-4.0
 metadata:
-  version: "1.0"
-  last_reviewed: "2026-10-31"
+  version: "1.1"
+  last_reviewed: "2026-11-10"
   applies_to: "Dropbox Basic/Plus/Essentials/Family; OneDrive with personal Microsoft accounts and Microsoft 365 Family/Personal; Google Drive with consumer Google accounts and Google One; Apple iCloud with iCloud+ (verify the live web apps and clients; features and retention vary by plan and change often)"
   audience: "home, work"
   finding_prefix: "CLS"
@@ -205,6 +205,10 @@ Accepted risk).
 - For each: what it can reach (full Drive or Dropbox versus an app folder only), when it was authorized,
   whether it's still used. Flag "full access" grants to apps the user doesn't remember, browser
   extensions, and file converters or PDF tools used once.
+- **App-specific passwords** (Apple Account, Google Account, and Microsoft account all offer them for
+  apps that can't do modern sign-in): each one is a long-lived password that skips the second factor.
+  List them, revoke those nobody uses, and note that changing the main password revokes them on some
+  services and not others (check the vendor's current help page).
 - Automation services (IFTTT-style, Zapier-style), backup tools, and scanners that write to the account,
   and where their credentials live.
 
@@ -366,4 +370,6 @@ browser window fails; both family members can open the folder.
 
 ## Version history
 
+- **1.1** (2026-11-10): Added app-specific passwords as a check: long-lived credentials that skip the
+  second factor.
 - **1.0** (2026-10-31): Initial version.

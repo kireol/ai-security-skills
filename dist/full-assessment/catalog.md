@@ -8,7 +8,7 @@ Every product skill in this collection, with hints for recognizing the product o
 
 **Use for:** Security assessment, hardening, remediation, and incident response for self-hosted low-code LLM app builders: Flowise, Dify, Langflow, and similar visual agent and RAG builders. Use when auditing exposure and authentication, first-run admin setup, default secrets in .env files, API keys for published flows and apps, the stored credentials for model providers and tools, code-execution nodes (custom JavaScript or Python, Custom MCP, code sandboxes), plugins, SSRF controls, RAG knowledge bases and uploaded documents, or when a builder instance may have been exposed, abused for code execution, or had its stored keys stolen.
 
-**Applies to:** Flowise 3.x, Dify self-hosted (Community Edition, Docker Compose), Langflow 1.x, and similar builders (verify each live version; defaults have changed between releases) · **Finding prefix:** `AIB` · **Version:** 1.0 · **Bundle:** `dist/ai-app-builders.md`
+**Applies to:** Flowise 3.x, Dify self-hosted (Community Edition, Docker Compose), Langflow 1.x, and similar builders (verify each live version; defaults have changed between releases) · **Finding prefix:** `AIB` · **Version:** 1.1 · **Bundle:** `dist/ai-app-builders.md`
 
 ### Detection
 
@@ -34,7 +34,7 @@ Defaults can be changed, so confirm with the user before relying on a match.
 
 **Use for:** Security assessment, hardening, remediation, and incident response for AI coding agents and IDE assistants that run on the user's own machines: Claude Code, OpenAI Codex CLI, OpenCode, Continue, Cursor, Aider, and similar tools. Use when auditing permission and approval modes, command allowlists, sandboxing, which directories and secrets an agent can read (.env files, SSH keys, cloud credentials), hooks and agent config files committed to repositories, instruction files and prompt injection from untrusted repos, how API keys are stored, telemetry and transcript retention, headless or CI use, or running agents as a dedicated user or in containers and devcontainers, or when an agent may have been misused, hijacked by injected instructions, or exposed secrets.
 
-**Applies to:** Claude Code, Codex CLI, OpenCode, Continue, Cursor, Aider, and similar agentic coding tools (settings names change often; verify each against the tool's current docs) · **Finding prefix:** `AGT` · **Version:** 1.0 · **Bundle:** `dist/ai-coding-agents.md`
+**Applies to:** Claude Code, Codex CLI, OpenCode, Continue, Cursor, Aider, and similar agentic coding tools (settings names change often; verify each against the tool's current docs) · **Finding prefix:** `AGT` · **Version:** 1.1 · **Bundle:** `dist/ai-coding-agents.md`
 
 ### Detection
 
@@ -100,7 +100,7 @@ on the network; the services around it are.
 
 **Use for:** Security assessment, hardening, remediation, and incident response for self-hosted LLM and generative-AI servers and model gateways: Ollama, llama.cpp server, LM Studio's server, vLLM, LocalAI, Open WebUI, ComfyUI, Stable Diffusion web UIs (AUTOMATIC1111, Forge, and similar Gradio apps), text-to-speech web apps, and the LiteLLM proxy (AI gateway). Use when auditing a machine that serves models, reviewing its API exposure, bind addresses, tunnels, accounts, model and extension supply chain, stored cloud API keys, gateway master and virtual keys, budgets, GPU abuse, or prompt and chat privacy, or when one of these servers may have been compromised.
 
-**Applies to:** Ollama, llama.cpp server, LM Studio, vLLM, LocalAI, Open WebUI, ComfyUI, Gradio-based image and speech web UIs, LiteLLM proxy (verify each live version; defaults change often) · **Finding prefix:** `LLM` · **Version:** 1.1 · **Bundle:** `dist/local-llm.md`
+**Applies to:** Ollama, llama.cpp server, LM Studio, vLLM, LocalAI, Open WebUI, ComfyUI, Gradio-based image and speech web UIs, LiteLLM proxy (verify each live version; defaults change often) · **Finding prefix:** `LLM` · **Version:** 1.2 · **Bundle:** `dist/local-llm.md`
 
 ### Detection
 
@@ -172,7 +172,7 @@ Defaults can be changed, so confirm with the user before relying on a match.
 
 **Use for:** Security assessment, hardening, remediation, and incident response for small personal, homelab, and small-office accounts on public cloud providers: Amazon Web Services, Microsoft Azure, Google Cloud, DigitalOcean, and Linode/Akamai Cloud. Covers root or owner account MFA and root access keys, IAM users and long-lived access keys, budget and billing alerts (crypto-mining abuse), public storage buckets, security groups and firewalls open to the internet, publicly shared snapshots and images, API tokens, and keys leaked in code repositories. Discovery is read-only, through the providers' consoles and CLIs. Use when auditing a personal or homelab cloud account, after a surprise bill, or when a cloud key may have leaked or an account may have been compromised.
 
-**Applies to:** AWS (standalone accounts and small AWS Organizations), Microsoft Azure subscriptions with Microsoft Entra ID, Google Cloud projects with or without an organization, DigitalOcean teams, Linode/Akamai Cloud accounts (verify the live consoles and CLI versions; features and defaults change often) · **Finding prefix:** `CLD` · **Version:** 1.0 · **Bundle:** `dist/cloud-providers.md`
+**Applies to:** AWS (standalone accounts and small AWS Organizations), Microsoft Azure subscriptions with Microsoft Entra ID, Google Cloud projects with or without an organization, DigitalOcean teams, Linode/Akamai Cloud accounts (verify the live consoles and CLI versions; features and defaults change often) · **Finding prefix:** `CLD` · **Version:** 1.1 · **Bundle:** `dist/cloud-providers.md`
 
 ### Detection
 
@@ -200,7 +200,7 @@ permissions; never read credential files.
 
 **Use for:** Security assessment, hardening, remediation, and incident response for consumer cloud storage and sync services: Dropbox, Microsoft OneDrive, Google Drive, and Apple iCloud (iCloud Drive, iCloud Photos, and Advanced Data Protection). Covers shared links and who has access, sync clients on each device, connected apps, version history and ransomware recovery, family sharing, and account recovery. Use when reviewing what a household or small office has shared from its cloud storage, checking which devices and apps can reach it, planning ransomware recovery, or when a cloud storage account may have been compromised or files were encrypted or deleted.
 
-**Applies to:** Dropbox Basic/Plus/Essentials/Family; OneDrive with personal Microsoft accounts and Microsoft 365 Family/Personal; Google Drive with consumer Google accounts and Google One; Apple iCloud with iCloud+ (verify the live web apps and clients; features and retention vary by plan and change often) · **Finding prefix:** `CLS` · **Version:** 1.0 · **Bundle:** `dist/cloud-storage.md`
+**Applies to:** Dropbox Basic/Plus/Essentials/Family; OneDrive with personal Microsoft accounts and Microsoft 365 Family/Personal; Google Drive with consumer Google accounts and Google One; Apple iCloud with iCloud+ (verify the live web apps and clients; features and retention vary by plan and change often) · **Finding prefix:** `CLS` · **Version:** 1.1 · **Bundle:** `dist/cloud-storage.md`
 
 ### Detection
 
@@ -248,7 +248,7 @@ These are vendor-documented defaults; confirm with the user.
 
 **Use for:** Security assessment, hardening, remediation, and incident response for Microsoft 365 (Business plans and consumer Family/Personal) and Google Workspace used by a small office or a household with its own domain. Covers admin accounts and MFA enforcement (security defaults, 2-Step Verification), legacy authentication, mail forwarding and inbox rules, third-party OAuth app consents, external sharing defaults, audit logs, SPF/DKIM/DMARC, break-glass admin accounts, and account recovery. Use when auditing a Microsoft 365 tenant or Google Workspace domain, reviewing a family's email accounts, or when a mailbox or admin account may have been compromised (business email compromise).
 
-**Applies to:** Microsoft 365 Business Basic/Standard/Premium and Microsoft Entra ID Free/P1; Microsoft 365 Family/Personal (consumer Microsoft accounts); Google Workspace Business editions and consumer Google accounts (verify the live admin consoles; menus and licensing change often) · **Finding prefix:** `SUITE` · **Version:** 1.0 · **Bundle:** `dist/productivity-suites.md`
+**Applies to:** Microsoft 365 Business Basic/Standard/Premium and Microsoft Entra ID Free/P1; Microsoft 365 Family/Personal (consumer Microsoft accounts); Google Workspace Business editions and consumer Google accounts (verify the live admin consoles; menus and licensing change often) · **Finding prefix:** `SUITE` · **Version:** 1.1 · **Bundle:** `dist/productivity-suites.md`
 
 ### Detection
 
@@ -306,7 +306,7 @@ never interact with these services beyond observing that they exist.
 
 **Use for:** Security and privacy assessment, hardening, remediation, and incident response for smart TVs and streaming devices (Samsung Tizen, LG webOS, Google TV and Android TV, Roku, Amazon Fire TV, Apple TV, and generic Android TV boxes). Use when reviewing a TV's update and support status, viewing-data tracking (ACR) and advertising settings, microphones and cameras, developer mode, sideloading and ADB debugging, installed apps, signed-in accounts, network placement, or casting and remote-control exposure, or when a TV or streaming box may have been compromised or recruited into a botnet.
 
-**Applies to:** Current and recent smart TV and streaming-device platforms (verify the live OS version; menus change between releases and brands) · **Finding prefix:** `TV` · **Version:** 1.0 · **Bundle:** `dist/smart-tvs.md`
+**Applies to:** Current and recent smart TV and streaming-device platforms (verify the live OS version; menus change between releases and brands) · **Finding prefix:** `TV` · **Version:** 1.1 · **Bundle:** `dist/smart-tvs.md`
 
 ### Detection
 
@@ -335,7 +335,7 @@ relying on a match, and **never** interact with these services beyond observing 
 
 **Use for:** Security assessment, hardening, remediation, and incident response for container hosts and workloads: Docker Engine on Linux, Docker Desktop on macOS, Windows, and Linux, Podman, and the container layer of NAS container managers, including Compose stacks. Use when auditing a container host, reviewing daemon and API exposure, published ports, container privileges, mounts, images, secrets, auto-updaters, networks, volumes, or logging, or when a container or container host may have been compromised.
 
-**Applies to:** Docker Engine 28.x-29.x, Docker Desktop 4.x, Podman 4.x-5.x, Docker Compose v2 (verify the installed versions; defaults change between releases) · **Finding prefix:** `DKR` · **Version:** 1.0 · **Bundle:** `dist/docker.md`
+**Applies to:** Docker Engine 28.x-29.x, Docker Desktop 4.x, Podman 4.x-5.x, Docker Compose v2 (verify the installed versions; defaults change between releases) · **Finding prefix:** `DKR` · **Version:** 1.1 · **Bundle:** `dist/docker.md`
 
 ### Detection
 
@@ -402,7 +402,7 @@ Defaults can be changed, so confirm with the user before relying on a match.
 
 **Use for:** Security assessment, hardening, remediation, and incident response for infrastructure-as-code tooling: Ansible (vault, inventories, become, Galaxy collections and roles) and Terraform and OpenTofu (state files, remote backends and locking, state and plan encryption, provider credentials, registry modules and providers, plan output). Use when auditing an IaC repository or control machine, reviewing where secrets live in inventories, variables, state, or plans, checking backend access and locking, or reviewing third-party modules and collections, or when IaC credentials, state, or a control node may have been exposed or compromised.
 
-**Applies to:** ansible-core and Ansible community packages; Terraform 1.x; OpenTofu 1.x (verify each installed version; state encryption, ephemeral values, and backend options vary by version) · **Finding prefix:** `IAC` · **Version:** 1.0 · **Bundle:** `dist/infrastructure-as-code.md`
+**Applies to:** ansible-core and Ansible community packages; Terraform 1.x; OpenTofu 1.x (verify each installed version; state encryption, ephemeral values, and backend options vary by version) · **Finding prefix:** `IAC` · **Version:** 1.1 · **Bundle:** `dist/infrastructure-as-code.md`
 
 ### Detection
 
@@ -429,7 +429,7 @@ skill). IaC tools have no listening ports of their own.
 
 **Use for:** Security assessment, hardening, remediation, and incident response for Cloudflare accounts and the sites and services published through them: DNS zones, proxied sites, Cloudflare Tunnels (cloudflared), Zero Trust Access policies, WAF and rate limiting, SSL/TLS modes, and origin lockdown. Use when auditing a Cloudflare account or zone, reviewing what a tunnel publishes, checking Access policies in front of self-hosted apps, or when a Cloudflare account, API token, or tunnel may have been compromised.
 
-**Applies to:** Cloudflare dashboard, DNS, Zero Trust (Cloudflare One) Access and Tunnel, cloudflared releases within Cloudflare's one-year support window (verify the live dashboard; menu names change often) · **Finding prefix:** `CF` · **Version:** 1.0 · **Bundle:** `dist/cloudflare.md`
+**Applies to:** Cloudflare dashboard, DNS, Zero Trust (Cloudflare One) Access and Tunnel, cloudflared releases within Cloudflare's one-year support window (verify the live dashboard; menu names change often) · **Finding prefix:** `CF` · **Version:** 1.1 · **Bundle:** `dist/cloudflare.md`
 
 ### Detection
 
@@ -456,7 +456,7 @@ Defaults can be changed, so confirm with the user before relying on a match.
 
 **Use for:** Security assessment, hardening, remediation, and incident response for tunnels and service-publishing tools other than Cloudflare Tunnel: ngrok, Tailscale Funnel and Serve, frp (fast reverse proxy), Pangolin, zrok/OpenZiti, localtunnel-style tools, Microsoft Dev Tunnels and VS Code port forwarding or remote tunnels, SSH reverse tunnels, and mesh VPNs (Tailscale, Headscale, ZeroTier, NetBird) where they publish services or extend network access. Use when inventorying what is published from a home or work network and who can reach it, reviewing authentication in front of tunneled services, agent credentials, frp or Pangolin servers, mesh VPN ACLs, subnet routers, and exit nodes, or when a tunnel agent may have been installed or abused by an attacker.
 
-**Applies to:** ngrok agent v3 and Traffic Policy, Tailscale (Serve, Funnel, subnet routers, exit nodes), Headscale, frp 0.5x and later (TOML/YAML/JSON configuration), Pangolin with Newt, zrok 1.x/2.x, Microsoft Dev Tunnels CLI and VS Code port forwarding/remote tunnels, OpenSSH remote forwarding, ZeroTier, NetBird (verify the live versions; CLIs, flags, and defaults change often) · **Finding prefix:** `TUN` · **Version:** 1.0 · **Bundle:** `dist/tunnels.md`
+**Applies to:** ngrok agent v3 and Traffic Policy, Tailscale (Serve, Funnel, subnet routers, exit nodes), Headscale, frp 0.5x and later (TOML/YAML/JSON configuration), Pangolin with Newt, zrok 1.x/2.x, Microsoft Dev Tunnels CLI and VS Code port forwarding/remote tunnels, OpenSSH remote forwarding, ZeroTier, NetBird (verify the live versions; CLIs, flags, and defaults change often) · **Finding prefix:** `TUN` · **Version:** 1.1 · **Bundle:** `dist/tunnels.md`
 
 ### Detection
 
@@ -493,7 +493,7 @@ logs. Defaults can be changed, so confirm with the user before relying on a matc
 
 **Use for:** Security assessment, hardening, remediation, and incident response for out-of-band management controllers: server BMCs (Dell iDRAC, HPE iLO, Supermicro IPMI/BMC, Lenovo XCC, AMI MegaRAC and OpenBMC boards, generic IPMI and Redfish) and Intel AMT/vPro on PCs. Use when auditing a server's or PC's management controller, reviewing BMC accounts, default credentials, IPMI over LAN (RAKP hash disclosure, cipher 0), Redfish API accounts, virtual console and virtual media, management-network placement, firmware support status on old hardware, or AMT provisioning and MEBx settings, or when a BMC or AMT controller may have been compromised.
 
-**Applies to:** Dell iDRAC 7-10, HPE iLO 4-7, Supermicro BMCs, other IPMI 2.0 and Redfish BMCs, Intel AMT/vPro (verify the live firmware; features and defaults vary by generation) · **Finding prefix:** `OOB` · **Version:** 1.0 · **Bundle:** `dist/out-of-band-management.md`
+**Applies to:** Dell iDRAC 7-10, HPE iLO 4-7, Supermicro BMCs, other IPMI 2.0 and Redfish BMCs, Intel AMT/vPro (verify the live firmware; features and defaults vary by generation) · **Finding prefix:** `OOB` · **Version:** 1.1 · **Bundle:** `dist/out-of-band-management.md`
 
 ### Detection
 
@@ -630,7 +630,7 @@ Defaults can be changed, so confirm with the user before relying on a match.
 
 **Use for:** Security assessment, hardening, remediation, and incident response for consumer smart home devices and their hubs: smart plugs, bulbs, switches and dimmers, locks, thermostats, sensors, garage-door openers, robot vacuums, voice assistants and smart speakers, hubs and bridges (Philips Hue, SmartThings, Aqara, Zigbee/Z-Wave coordinators, Matter controllers, Thread border routers), and DIY or open firmware (ESPHome, Tasmota, Shelly local APIs). Use when inventorying smart home devices, reviewing vendor cloud accounts, shared users, locks and garage doors, local APIs, Zigbee/Z-Wave/Thread/Matter security, firmware support, IoT network placement, voice assistants, privacy, or resale and disposal, or when a smart home device or account may have been compromised.
 
-**Applies to:** Consumer smart home devices, hubs, and bridges from any vendor, plus ESPHome, Tasmota, and Shelly Gen1/Gen2+ firmware (verify each device's current firmware, app, and support status) · **Finding prefix:** `SHD` · **Version:** 1.0 · **Bundle:** `dist/smart-home-devices.md`
+**Applies to:** Consumer smart home devices, hubs, and bridges from any vendor, plus ESPHome, Tasmota, and Shelly Gen1/Gen2+ firmware (verify each device's current firmware, app, and support status) · **Finding prefix:** `SHD` · **Version:** 1.1 · **Bundle:** `dist/smart-home-devices.md`
 
 ### Detection
 
@@ -672,7 +672,7 @@ relying on a match, and **never** interact with these services beyond observing 
 
 **Use for:** Security assessment, hardening, remediation, and incident response for self-hosted single sign-on and identity providers in homelabs and small offices: Authentik, Authelia, and Keycloak. Use when reviewing admin console exposure, bootstrap and admin accounts, outposts and forward-auth integration with reverse proxies (Traefik, nginx, Caddy, Nginx Proxy Manager), access-control rules, OIDC and SAML clients (client secrets, redirect URI validation, PKCE), session and 2FA policy, password reset and enrollment flows, LDAP or Active Directory sources, secrets and signing keys, backups, and updates, or when an identity provider or the apps behind it may have been compromised.
 
-**Applies to:** Authentik (supported release lines), Authelia 4.x, and Keycloak (current releases, Quarkus-based distribution), self-hosted in containers, VMs, or Kubernetes; configuration keys, defaults, and admin UI layouts change between releases, so verify on the live system and the version's documentation · **Finding prefix:** `IDP` · **Version:** 1.0 · **Bundle:** `dist/identity-providers.md`
+**Applies to:** Authentik (supported release lines), Authelia 4.x, and Keycloak (current releases, Quarkus-based distribution), self-hosted in containers, VMs, or Kubernetes; configuration keys, defaults, and admin UI layouts change between releases, so verify on the live system and the version's documentation · **Finding prefix:** `IDP` · **Version:** 1.1 · **Bundle:** `dist/identity-providers.md`
 
 ### Detection
 
@@ -701,7 +701,7 @@ skill). Defaults can be changed, so confirm with the user before relying on a ma
 
 **Use for:** Security assessment, hardening, remediation, and incident response for multi-factor authentication in a household or small office: hardware security keys (YubiKey and other FIDO2 keys, backup keys, PINs, discoverable credentials), passkeys (synced and device-bound), TOTP authenticator apps and their backups, Duo Security (Duo Free and paid editions, the Admin Panel, enrollment policy, bypass codes and bypass status), recovery codes, SMS and voice fallback, and push fatigue. Use when choosing or reviewing second factors for important accounts, checking that every person has a working backup factor and stored recovery codes, auditing a Duo deployment, or when an account's second factor may have been bypassed, phished, lost, or approved by mistake.
 
-**Applies to:** FIDO2/WebAuthn security keys (YubiKey 5 and Security Key series, and other certified keys), platform and synced passkeys (Apple, Google, Microsoft, password managers), TOTP authenticator apps, Duo Security (Free, Essentials, Advantage, Premier), and account recovery codes; feature names, firmware capabilities, and edition features change, so verify on the live device, app, or admin panel · **Finding prefix:** `MFA` · **Version:** 1.0 · **Bundle:** `dist/mfa.md`
+**Applies to:** FIDO2/WebAuthn security keys (YubiKey 5 and Security Key series, and other certified keys), platform and synced passkeys (Apple, Google, Microsoft, password managers), TOTP authenticator apps, Duo Security (Free, Essentials, Advantage, Premier), and account recovery codes; feature names, firmware capabilities, and edition features change, so verify on the live device, app, or admin panel · **Finding prefix:** `MFA` · **Version:** 1.1 · **Bundle:** `dist/mfa.md`
 
 ### Detection
 
@@ -825,7 +825,7 @@ Confirm with the user before relying on a match.
 
 **Use for:** Security assessment, hardening, remediation, and incident response for media-automation stacks: the Servarr apps (Sonarr, Radarr, Lidarr, Readarr-style apps, Prowlarr), Bazarr, request apps (Overseerr, Jellyseerr, Seerr), Tautulli, usenet downloaders (SABnzbd, NZBGet), torrent clients (qBittorrent, Transmission), and helpers such as FlareSolverr. Use when auditing an "*arr" stack, reviewing its authentication, API keys, reverse-proxy or tunnel exposure, download-client web UIs, VPN binding, shared media/config folder permissions, updates, or backups, or when one of these apps may have been compromised.
 
-**Applies to:** Sonarr v4/v5, Radarr, Lidarr, Prowlarr, Bazarr, Seerr and its predecessors, Tautulli, SABnzbd, NZBGet, qBittorrent, Transmission 4.x, FlareSolverr (verify each installed version; settings move between releases) · **Finding prefix:** `ARR` · **Version:** 1.0 · **Bundle:** `dist/media-automation.md`
+**Applies to:** Sonarr v4/v5, Radarr, Lidarr, Prowlarr, Bazarr, Seerr and its predecessors, Tautulli, SABnzbd, NZBGet, qBittorrent, Transmission 4.x, FlareSolverr (verify each installed version; settings move between releases) · **Finding prefix:** `ARR` · **Version:** 1.1 · **Bundle:** `dist/media-automation.md`
 
 ### Detection
 
@@ -852,7 +852,7 @@ Defaults can be changed, so confirm with the user before relying on a match.
 
 **Use for:** Security assessment, hardening, remediation, and incident response for self-hosted media servers and transcoding: Plex Media Server, Jellyfin, Emby, and Tdarr (server and nodes). Use when auditing a media server's remote access (Plex Remote Access and relay, port 32400, Jellyfin or Emby direct exposure), accounts, shared users, admin users, API keys and tokens, plugins and repositories, hardware transcoding device access, library mounts, Tdarr server and node exposure, logs, or updates, or when a media server or transcoding node may have been compromised.
 
-**Applies to:** Plex Media Server 1.4x, Jellyfin 10.10/10.11, Emby Server 4.8/4.9, Tdarr 2.x/3.x (verify each installed version; settings and menus change between releases) · **Finding prefix:** `MED` · **Version:** 1.0 · **Bundle:** `dist/media-servers.md`
+**Applies to:** Plex Media Server 1.4x, Jellyfin 10.10/10.11, Emby Server 4.8/4.9, Tdarr 2.x/3.x (verify each installed version; settings and menus change between releases) · **Finding prefix:** `MED` · **Version:** 1.1 · **Bundle:** `dist/media-servers.md`
 
 ### Detection
 
@@ -880,7 +880,7 @@ Defaults can be changed, so confirm with the user before relying on a match.
 
 **Use for:** Security and privacy assessment, hardening, remediation, and incident response for cell phones and tablets: iPhone (iOS), iPad (iPadOS), and Android phones and tablets (Pixel, Samsung Galaxy, and other makers), personal and work devices, and phones and tablets used by family members and children, including shared family tablets. Use when reviewing a phone's or tablet's OS version and support window, updates, screen lock, Find My or Find Hub, theft protections (Stolen Device Protection, Android Theft Protection and Identity Check), Lockdown Mode or Android Advanced Protection, Apple Account or Google Account security, SIM PIN and carrier protections against SIM swap and port-out, app permissions, accessibility and device admin apps, configuration profiles and MDM, sideloading, jailbreak or root, VPN and private DNS, Bluetooth, AirDrop, and Quick Share, backups, stalkerware and unwanted trackers, work profiles, or disposal and resale, shared or family tablets (whose account the iPad is signed in to, Screen Time, Family Link and Kids Space, Android multiple users, guest mode, and restricted profiles, organization Shared iPad), or when a phone, a tablet, or its accounts may have been compromised, lost, or stolen.
 
-**Applies to:** iPhone on iOS, iPad on iPadOS, and Android phones and tablets (Pixel, Pixel Tablet, Samsung Galaxy and Galaxy Tab, and other Google-certified devices) on versions still receiving security updates; feature names and menu paths change between releases, makers, and between phones and tablets, so verify on the live device · **Finding prefix:** `PHN` · **Version:** 1.1 · **Bundle:** `dist/phones.md`
+**Applies to:** iPhone on iOS, iPad on iPadOS, and Android phones and tablets (Pixel, Pixel Tablet, Samsung Galaxy and Galaxy Tab, and other Google-certified devices) on versions still receiving security updates; feature names and menu paths change between releases, makers, and between phones and tablets, so verify on the live device · **Finding prefix:** `PHN` · **Version:** 1.2 · **Bundle:** `dist/phones.md`
 
 ### Detection
 
@@ -921,7 +921,7 @@ and inventory phones by asking the household, not by scanning.
 
 **Use for:** Security assessment, hardening, remediation, and incident response for log collection, SIEM, and automated-blocking tools: Wazuh (manager, indexer, dashboard, agents, active response), Graylog, Elasticsearch/ELK and OpenSearch, CrowdSec (Local API, bouncers, console), and Fail2ban. Also checks whether anything is being logged at all, retention, and log integrity. Use when auditing a log or SIEM stack, deciding whether logs would survive and reveal an attack, reviewing default accounts, agent enrollment, exposed search clusters, or automatic ban rules, or when a logging system may have been tampered with.
 
-**Applies to:** Wazuh 4.x and later, Graylog, Elasticsearch/Kibana 8.x and later, OpenSearch 2.x/3.x, CrowdSec Security Engine, Fail2ban (verify the live version of each) · **Finding prefix:** `SIEM` · **Version:** 1.0 · **Bundle:** `dist/logging-and-siem.md`
+**Applies to:** Wazuh 4.x and later, Graylog, Elasticsearch/Kibana 8.x and later, OpenSearch 2.x/3.x, CrowdSec Security Engine, Fail2ban (verify the live version of each) · **Finding prefix:** `SIEM` · **Version:** 1.1 · **Bundle:** `dist/logging-and-siem.md`
 
 ### Detection
 
@@ -974,7 +974,7 @@ Defaults can be changed, so confirm with the user before relying on a match.
 
 **Use for:** Security assessment, hardening, remediation, and incident response for network-wide DNS filtering servers: AdGuard Home, Pi-hole (v6 and later), and Technitium DNS Server, on bare metal, in containers, or in LXC containers and VMs. Use when auditing a DNS filtering server's admin UI and API access (including API tokens and clustering), listening interfaces and open-resolver or recursion exposure, hosted zones and zone transfers, upstream and encrypted DNS, DNSSEC, blocklist sources, local DNS records and rewrites, client bypass and firewall enforcement, redundancy, query logs, or updates, or when a DNS filtering server may have been compromised or is redirecting names.
 
-**Applies to:** AdGuard Home v0.107.x stable (v0.108 is in beta), Pi-hole v6.x (Core, FTL, Web), and Technitium DNS Server v15.x; verify the live versions · **Finding prefix:** `DNS` · **Version:** 1.1 · **Bundle:** `dist/dns-filtering.md`
+**Applies to:** AdGuard Home v0.107.x stable (v0.108 is in beta), Pi-hole v6.x (Core, FTL, Web), and Technitium DNS Server v15.x; verify the live versions · **Finding prefix:** `DNS` · **Version:** 1.2 · **Bundle:** `dist/dns-filtering.md`
 
 ### Detection
 
@@ -1008,7 +1008,7 @@ Defaults can be changed, so confirm with the user before relying on a match.
 
 **Use for:** Security assessment, hardening, remediation, and incident response for home routers, ISP-supplied gateways (cable, DSL, and fiber ONT/router combos), standalone modems, consumer routers (ASUS, TP-Link, Netgear, Linksys, and similar), routers running OpenWrt or DD-WRT, and devices in bridge, passthrough, or IP-passthrough mode in front of a separate firewall. Use when auditing a home router or ISP gateway, reviewing bridge versus router mode and double NAT, DMZ/exposed-host settings, port forwards, UPnP and NAT-PMP, WPS, DNS settings, remote and cloud management, ISP remote management (TR-069), firmware and end-of-life status, built-in VPN or file-sharing features, or OpenWrt/DD-WRT specifics, or when a home router may have been compromised or had its DNS settings changed.
 
-**Applies to:** Consumer routers, ISP gateways, modems, and OpenWrt/DD-WRT routers, any vendor (verify the live firmware, ISP restrictions, and support status; menu names vary by vendor, ISP, and firmware) · **Finding prefix:** `RTR` · **Version:** 1.0 · **Bundle:** `dist/home-routers.md`
+**Applies to:** Consumer routers, ISP gateways, modems, and OpenWrt/DD-WRT routers, any vendor (verify the live firmware, ISP restrictions, and support status; menu names vary by vendor, ISP, and firmware) · **Finding prefix:** `RTR` · **Version:** 1.1 · **Bundle:** `dist/home-routers.md`
 
 ### Detection
 
@@ -1040,7 +1040,7 @@ Defaults can be changed, so confirm with the user before relying on a match.
 
 **Use for:** Security assessment, hardening, remediation, and incident response for MikroTik devices running RouterOS v7 (and v6 where still found), including RouterBOARD and CCR hardware, CRS switches, wireless devices, and Cloud Hosted Router (CHR) virtual machines. Use when auditing a MikroTik router or switch, reviewing its RouterOS version and update channel, users, IP services (Winbox, WebFig, SSH, API, API-SSL, REST), MAC server and neighbor discovery, RoMON, firewall, device-mode, scripts and scheduler, or when a MikroTik device may have been compromised or recruited into a botnet.
 
-**Applies to:** MikroTik RouterOS 7.x (long-term and stable channels) and 6.49 long-term; RouterBOARD, CCR, CRS, wireless, and CHR (verify the live version and channel) · **Finding prefix:** `MTK` · **Version:** 1.0 · **Bundle:** `dist/mikrotik-routeros.md`
+**Applies to:** MikroTik RouterOS 7.x (long-term and stable channels) and 6.49 long-term; RouterBOARD, CCR, CRS, wireless, and CHR (verify the live version and channel) · **Finding prefix:** `MTK` · **Version:** 1.1 · **Bundle:** `dist/mikrotik-routeros.md`
 
 ### Detection
 
@@ -1067,7 +1067,7 @@ Defaults can be changed, so confirm with the user before relying on a match.
 
 **Use for:** Security assessment, hardening, remediation, and incident response for OPNsense firewalls (community and business editions, on hardware or virtualized). Use when auditing an OPNsense firewall, reviewing its firewall and NAT rules, admin access, VPNs (WireGuard, OpenVPN, IPsec), DNS/DHCP services, plugins, backups, or logging, or when an OPNsense firewall may have been compromised.
 
-**Applies to:** OPNsense 26.x community and business editions (verify the live version; menus change between series) · **Finding prefix:** `OPN` · **Version:** 1.0 · **Bundle:** `dist/opnsense.md`
+**Applies to:** OPNsense 26.x community and business editions (verify the live version; menus change between series) · **Finding prefix:** `OPN` · **Version:** 1.1 · **Bundle:** `dist/opnsense.md`
 
 ### Detection
 
@@ -1085,7 +1085,7 @@ Defaults can be changed, so confirm with the user before relying on a match.
 
 **Use for:** Security assessment, hardening, remediation, and incident response for pfSense firewalls (pfSense CE and pfSense Plus, on Netgate hardware, bare metal, or virtualized). Use when auditing a pfSense firewall, reviewing its firewall and NAT rules, admin access and privileges, VPNs (WireGuard, OpenVPN, IPsec), DNS Resolver/Forwarder and DHCP services, packages such as pfBlockerNG, configuration backups, or logging, or when a pfSense firewall may have been compromised.
 
-**Applies to:** pfSense CE 2.8.x-2.9.x and pfSense Plus 26.x (verify the live version; menus change between releases) · **Finding prefix:** `PFS` · **Version:** 1.0 · **Bundle:** `dist/pfsense.md`
+**Applies to:** pfSense CE 2.8.x-2.9.x and pfSense Plus 26.x (verify the live version; menus change between releases) · **Finding prefix:** `PFS` · **Version:** 1.1 · **Bundle:** `dist/pfsense.md`
 
 ### Detection
 
@@ -1140,7 +1140,7 @@ Defaults can be changed, so confirm with the user before relying on a match.
 
 **Use for:** Security assessment, hardening, remediation, and incident response for consumer and prosumer Wi-Fi mesh systems (app-managed systems such as eero, Google/Nest Wifi, Deco, Orbi, and UniFi-style controllers) and managed or smart switches, including used enterprise switches such as older Cisco Catalyst units in homelabs. Use when auditing Wi-Fi security modes, guest and IoT SSIDs, router versus bridge mode, vendor cloud accounts, UPnP, firmware and end-of-support status, or switch management access, legacy protocols, VLANs, ports, and config backups, or when a mesh system or switch may have been compromised.
 
-**Applies to:** App- or controller-managed Wi-Fi mesh systems and managed/smart Ethernet switches, any vendor (verify the live firmware, app version, and support status; menus change often) · **Finding prefix:** `WIFI` · **Version:** 1.0 · **Bundle:** `dist/wifi-and-switches.md`
+**Applies to:** App- or controller-managed Wi-Fi mesh systems and managed/smart Ethernet switches, any vendor (verify the live firmware, app version, and support status; menus change often) · **Finding prefix:** `WIFI` · **Version:** 1.1 · **Bundle:** `dist/wifi-and-switches.md`
 
 ### Detection
 
@@ -1197,7 +1197,7 @@ the user.
 
 **Use for:** Security assessment, hardening, remediation, and incident response for Linux hosts: servers, VMs, LXC containers, Raspberry Pi-class devices, and Linux desktops and laptops, with distribution-aware guidance for Debian, Ubuntu, RHEL-family (RHEL, Rocky, AlmaLinux, Fedora), Linux Mint, Arch and other rolling distributions. Use when auditing a Linux host's support status, automatic updates, users and sudo, SSH, listening services, host firewall, AppArmor/SELinux, secrets on disk, cron and systemd persistence, third-party repositories, logging, NFS/SMB, containers, or backups; a desktop's or laptop's full-disk encryption (LUKS), screen lock, Secure Boot and MOK, Flatpak/Snap/AUR software sources, desktop sharing (RDP/VNC), or rolling-release updates; or when a Linux host may have been compromised.
 
-**Applies to:** systemd-based Linux distributions: Debian 12-13, Ubuntu LTS 22.04-26.04 (server and desktop), RHEL-family 8-10, Fedora Workstation and Atomic desktops, Linux Mint 21-22 and LMDE, Arch and other rolling distributions, Raspberry Pi OS, and similar (verify the live release and its support status) · **Finding prefix:** `LNX` · **Version:** 1.1 · **Bundle:** `dist/linux.md`
+**Applies to:** systemd-based Linux distributions: Debian 12-13, Ubuntu LTS 22.04-26.04 (server and desktop), RHEL-family 8-10, Fedora Workstation and Atomic desktops, Linux Mint 21-22 and LMDE, Arch and other rolling distributions, Raspberry Pi OS, and similar (verify the live release and its support status) · **Finding prefix:** `LNX` · **Version:** 1.2 · **Bundle:** `dist/linux.md`
 
 ### Detection
 
@@ -1235,7 +1235,7 @@ Defaults can be changed, so confirm with the user before relying on a match.
 
 **Use for:** Security assessment, hardening, remediation, and incident response for Apple Macs running macOS: personal and work laptops and desktops, and Macs used as always-on home or homelab servers. Use when auditing a Mac's update status, FileVault, firewall, Gatekeeper/XProtect/SIP, accounts and login settings, sharing services (SSH, Screen Sharing, File Sharing, Remote Management), privacy permissions, login and background items, LaunchAgents/LaunchDaemons, Homebrew, Docker Desktop, MDM profiles, backups, or Find My, or when a Mac may have been compromised.
 
-**Applies to:** macOS on Apple silicon and Intel Macs, current major release and the two before it (verify the live version; System Settings names and locations change between releases) · **Finding prefix:** `MAC` · **Version:** 1.0 · **Bundle:** `dist/macos.md`
+**Applies to:** macOS on Apple silicon and Intel Macs, current major release and the two before it (verify the live version; System Settings names and locations change between releases) · **Finding prefix:** `MAC` · **Version:** 1.1 · **Bundle:** `dist/macos.md`
 
 ### Detection
 
@@ -1267,7 +1267,7 @@ Defaults can be changed, so confirm with the user before relying on a match.
 
 **Use for:** Security assessment, hardening, remediation, and incident response for Windows 10 and 11 desktops and laptops, and small Windows Server installs in homes and small offices, including a small office's or homelab's Active Directory domain controllers. Use when auditing a Windows PC or small server, reviewing its support status, updates, Microsoft Defender, BitLocker, accounts and UAC, firewall, RDP and remote-support tools, file sharing, logging, persistence, or backups; when reviewing a small Active Directory domain (privileged groups, Windows LAPS, krbtgt and service accounts, LDAP and SMB signing, NTLM, Group Policy, AD backups); or when a Windows machine or domain may have been compromised (including tech-support scams and ransomware).
 
-**Applies to:** Windows 11, Windows 10 22H2 with ESU, small Windows Server 2016-2025 installs, and small Active Directory domains (one forest, one domain, a few domain controllers); verify the live build and edition · **Finding prefix:** `WIN` · **Version:** 1.1 · **Bundle:** `dist/windows.md`
+**Applies to:** Windows 11, Windows 10 22H2 with ESU, small Windows Server 2016-2025 installs, and small Active Directory domains (one forest, one domain, a few domain controllers); verify the live build and edition · **Finding prefix:** `WIN` · **Version:** 1.2 · **Bundle:** `dist/windows.md`
 
 ### Detection
 
@@ -1352,7 +1352,7 @@ Defaults can be changed, so confirm with the user before relying on a match.
 
 **Use for:** Security assessment, hardening, remediation, and incident response for self-hosted remote desktop gateways and remote monitoring and management (RMM) tools: Apache Guacamole, RustDesk (clients and self-hosted hbbs/hbbr servers), MeshCentral, and Tactical RMM. Also covers finding remote-access tools that nobody authorized. Use when auditing one of these tools, deciding whether it is safe to expose, reviewing its admin accounts, MFA, agents, stored connection credentials, script features, and API keys, or when a remote-access tool may have been abused or installed by an attacker.
 
-**Applies to:** Apache Guacamole 1.5 and later, RustDesk client and server (OSS and Pro), MeshCentral, Tactical RMM (verify the live version of each) · **Finding prefix:** `RMM` · **Version:** 1.0 · **Bundle:** `dist/remote-desktop-and-rmm.md`
+**Applies to:** Apache Guacamole 1.5 and later, RustDesk client and server (OSS and Pro), MeshCentral, Tactical RMM (verify the live version of each) · **Finding prefix:** `RMM` · **Version:** 1.1 · **Bundle:** `dist/remote-desktop-and-rmm.md`
 
 ### Detection
 
@@ -1403,7 +1403,7 @@ clients with no listener; find them on the hosts, not the network.
 
 **Use for:** Security assessment, hardening, remediation, and incident response for self-hosted S3-compatible object storage: MinIO (community edition, its forks, and AIStor), with notes for Garage, SeaweedFS, and Ceph RGW. Use when auditing an object store's root credentials, access keys and policies, public or anonymous buckets, console and API exposure, TLS, versioning and object lock, or when a self-hosted bucket may have been exposed, emptied, or encrypted.
 
-**Applies to:** MinIO community edition (archived upstream; verify the build and its source), MinIO forks and AIStor, Garage, SeaweedFS, and other self-hosted S3-compatible servers (verify the live version) · **Finding prefix:** `S3` · **Version:** 1.0 · **Bundle:** `dist/object-storage.md`
+**Applies to:** MinIO community edition (archived upstream; verify the build and its source), MinIO forks and AIStor, Garage, SeaweedFS, and other self-hosted S3-compatible servers (verify the live version) · **Finding prefix:** `S3` · **Version:** 1.1 · **Bundle:** `dist/object-storage.md`
 
 ### Detection
 
@@ -1473,7 +1473,7 @@ Defaults can be changed, so confirm with the user before relying on a match.
 
 **Use for:** Security assessment, hardening, remediation, and incident response for Synology NAS devices running DSM, including DSM installed on non-Synology or virtualized hardware. Use when auditing a Synology NAS, reviewing DSM settings, packages, Container Manager, shares, remote access, or backups, or when a Synology NAS may have been compromised or hit by ransomware.
 
-**Applies to:** Synology DSM 7.x (verify the live build; menus and features vary by version and model) · **Finding prefix:** `NAS` · **Version:** 4.1 · **Bundle:** `dist/synology-dsm.md`
+**Applies to:** Synology DSM 7.x (verify the live build; menus and features vary by version and model) · **Finding prefix:** `NAS` · **Version:** 4.2 · **Bundle:** `dist/synology-dsm.md`
 
 ### Detection
 
@@ -1586,7 +1586,7 @@ Defaults can be changed, so confirm with the user before relying on a match.
 
 **Use for:** Security assessment, hardening, remediation, and incident response for network (IP) cameras and the small DVRs/NVRs that ship with them, vendor-neutral with short notes for common vendor families (Hikvision/Dahua-style OEMs, Reolink, TP-Link Tapo, Xiongmai/XMeye-style OEMs, Wyze and open firmware, Amcrest, Ubiquiti). Use when auditing cameras, reviewing their firmware support, cloud/P2P and UPnP features, accounts, RTSP/ONVIF access, network isolation and internet egress, or physical and privacy settings, or when a camera may have been compromised or joined a botnet.
 
-**Applies to:** Wired and Wi-Fi IP cameras, doorbells, and bundled DVR/NVR recorders from any vendor (verify each model's current firmware and support status) · **Finding prefix:** `CAM` · **Version:** 1.0 · **Bundle:** `dist/ip-cameras.md`
+**Applies to:** Wired and Wi-Fi IP cameras, doorbells, and bundled DVR/NVR recorders from any vendor (verify each model's current firmware and support status) · **Finding prefix:** `CAM` · **Version:** 1.1 · **Bundle:** `dist/ip-cameras.md`
 
 ### Detection
 
@@ -1643,7 +1643,7 @@ Defaults can be changed, so confirm with the user before relying on a match.
 
 **Use for:** Security and privacy assessment, hardening, remediation, and incident response for cloud-first consumer video doorbells, cameras, and alarm-and-camera kits (Ring, Google Nest, Arlo, Eufy, Wyze, SimpliSafe and similar). Use when reviewing who can see a household's cameras, the vendor account's sign-in security, shared users and logged-in devices, end-to-end encryption and local-storage options, police and neighborhood sharing settings, third-party integrations and local stream bridges, network placement, or physical tamper and theft, or when a doorbell or camera account may have been taken over.
 
-**Applies to:** Cloud-managed consumer doorbells, cameras, and alarm kits and their vendor apps (verify the live app version; menus and features change often) · **Finding prefix:** `DBL` · **Version:** 1.0 · **Bundle:** `dist/video-doorbells.md`
+**Applies to:** Cloud-managed consumer doorbells, cameras, and alarm kits and their vendor apps (verify the live app version; menus and features change often) · **Finding prefix:** `DBL` · **Version:** 1.1 · **Bundle:** `dist/video-doorbells.md`
 
 ### Detection
 
@@ -1668,7 +1668,7 @@ network evidence is often thin. Confirm with the user before relying on a match.
 
 **Use for:** Security assessment, hardening, remediation, and incident response for Proxmox Virtual Environment (single hosts and clusters), including the server hardware's BMC (iDRAC, iLO, IPMI). Use when auditing a Proxmox VE host or cluster, reviewing its package repositories, web UI and SSH exposure, realms, two-factor authentication, users, roles, ACLs, API tokens, firewall, backup jobs and Proxmox Backup Server, storage, passthrough, containers, or cluster network, or when a Proxmox VE host or any of its guests may have been compromised.
 
-**Applies to:** Proxmox VE 9.x on Debian 13; 8.x is end of life since 2026-08 (verify the live version) · **Finding prefix:** `PVE` · **Version:** 1.0 · **Bundle:** `dist/proxmox-ve.md`
+**Applies to:** Proxmox VE 9.x on Debian 13; 8.x is end of life since 2026-08 (verify the live version) · **Finding prefix:** `PVE` · **Version:** 1.1 · **Bundle:** `dist/proxmox-ve.md`
 
 ### Detection
 
@@ -1693,7 +1693,7 @@ Defaults can be changed, so confirm with the user before relying on a match.
 
 **Use for:** Security assessment, hardening, remediation, and incident response for VMware ESXi hosts (standalone or managed by a small vCenter Server), including the free vSphere Hypervisor edition and the server hardware's BMC. Use when auditing an ESXi host, reviewing its patch level and Broadcom entitlement, Host Client, SSH and ESXi Shell, lockdown mode, local and Active Directory accounts, OpenSLP and other services, firewall, management network, VIB acceptance level, datastores, or backups, or when an ESXi host may have been hit by ransomware or otherwise compromised.
 
-**Applies to:** VMware ESXi 8.x and ESX 9.x, standalone or with vCenter Server; 7.x and older are past end of general support (verify the live build and Broadcom lifecycle page) · **Finding prefix:** `ESX` · **Version:** 1.0 · **Bundle:** `dist/vmware-esxi.md`
+**Applies to:** VMware ESXi 8.x and ESX 9.x, standalone or with vCenter Server; 7.x and older are past end of general support (verify the live build and Broadcom lifecycle page) · **Finding prefix:** `ESX` · **Version:** 1.1 · **Bundle:** `dist/vmware-esxi.md`
 
 ### Detection
 
@@ -1747,7 +1747,7 @@ Defaults can be changed, so confirm with the user before relying on a match.
 
 **Use for:** Security assessment, hardening, remediation, and incident response for web servers and reverse proxies: Apache httpd, nginx, Caddy, Traefik, HAProxy, and Nginx Proxy Manager. Use when auditing a web server or reverse proxy, reviewing its TLS and certificates, security headers, status pages and admin dashboards, forwarded-header trust, virtual-host routing to internal apps, authentication in front of those apps, logging, or file permissions, or when a web server or proxy may have been compromised.
 
-**Applies to:** Apache httpd 2.4.x, nginx (stable and mainline), Caddy 2.x, Traefik 3.x, HAProxy (supported branches), Nginx Proxy Manager 2.x (verify the live version of each) · **Finding prefix:** `WEB` · **Version:** 1.0 · **Bundle:** `dist/web-servers.md`
+**Applies to:** Apache httpd 2.4.x, nginx (stable and mainline), Caddy 2.x, Traefik 3.x, HAProxy (supported branches), Nginx Proxy Manager 2.x (verify the live version of each) · **Finding prefix:** `WEB` · **Version:** 1.1 · **Bundle:** `dist/web-servers.md`
 
 ### Detection
 
@@ -1799,7 +1799,7 @@ Defaults can be changed, so confirm with the user before relying on a match.
 
 **Use for:** Security assessment, hardening, remediation, and incident response for Nextcloud Server and Nextcloud All-in-One (AIO). Use when auditing a Nextcloud instance, reviewing its security and setup warnings, trusted domains and proxies, brute-force protection, two-factor enforcement, installed apps, public share links, federated sharing, server-side encryption, background jobs, updates, or the AIO mastercontainer and its admin interface, or when a Nextcloud instance may have been compromised.
 
-**Applies to:** Nextcloud Server (supported major versions; verify on the vendor's maintenance schedule) and Nextcloud All-in-One; also the community Docker image, snap, and NAS/appliance packages · **Finding prefix:** `NXC` · **Version:** 1.0 · **Bundle:** `dist/nextcloud.md`
+**Applies to:** Nextcloud Server (supported major versions; verify on the vendor's maintenance schedule) and Nextcloud All-in-One; also the community Docker image, snap, and NAS/appliance packages · **Finding prefix:** `NXC` · **Version:** 1.1 · **Bundle:** `dist/nextcloud.md`
 
 ### Detection
 
@@ -1845,7 +1845,7 @@ Defaults can be changed, so confirm with the user before relying on a match.
 
 **Use for:** Security assessment, hardening, remediation, and incident response for small self-hosted web apps and dashboards that have no dedicated skill: start pages and dashboards (Homepage, Heimdall, Homarr), network scanners (WatchYourLAN, NetAlertX), monitoring tools (Glances, Uptime Kuma, Grafana), push-notification servers (ntfy, Gotify), homelab app platforms (CasaOS), file and 3D-print libraries, wikis, and similar. Use when auditing one of these apps, deciding whether it is safe to expose, reviewing its authentication, topic and token access, secrets, container privileges, maintenance status, updates, and backups, or when one may have been compromised.
 
-**Applies to:** Small self-hosted web apps without a dedicated skill, usually run as containers, including ntfy, Gotify, and CasaOS (verify the live version of each app) · **Finding prefix:** `APP` · **Version:** 1.1 · **Bundle:** `dist/self-hosted-web-apps.md`
+**Applies to:** Small self-hosted web apps without a dedicated skill, usually run as containers, including ntfy, Gotify, and CasaOS (verify the live version of each app) · **Finding prefix:** `APP` · **Version:** 1.2 · **Bundle:** `dist/self-hosted-web-apps.md`
 
 ### Detection
 

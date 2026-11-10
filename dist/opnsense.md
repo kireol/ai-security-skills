@@ -7,8 +7,8 @@ description: >-
   backups, or logging, or when an OPNsense firewall may have been compromised.
 license: CC-BY-4.0
 metadata:
-  version: "1.0"
-  last_reviewed: "2026-10-30"
+  version: "1.1"
+  last_reviewed: "2026-11-10"
   applies_to: "OPNsense 26.x community and business editions (verify the live version; menus change between series)"
   audience: "home, work, homelab"
   finding_prefix: "OPN"
@@ -39,7 +39,17 @@ This skill holds only OPNsense-specific guidance. It builds on the shared core, 
 | incident-response.md (included in this file) | The generic Respond playbook |
 
 OPNsense-specific Respond steps are in incident-response.md (included in this file). Vendor documentation
-and advisories are in references.md (included in this file).
+and advisories are in references.md (included in this file). Related skills:
+VPN servers (`dist/vpn-servers.md`) (WireGuard and OpenVPN in depth),
+DNS filtering (`dist/dns-filtering.md`) (a filtering resolver on or beside the firewall),
+Wi-Fi and switches (`dist/wifi-and-switches.md`) (VLANs only isolate if the switches and access points
+carry them correctly), home routers (`dist/home-routers.md`) (the upstream router in a double-NAT
+setup), Proxmox VE (`dist/proxmox-ve.md`) (a virtualized firewall's host),
+web servers (`dist/web-servers.md`) (reverse-proxy plugins),
+tunnels (`dist/tunnels.md`) and Cloudflare (`dist/cloudflare.md`) (alternatives to
+port forwards, and overlay-network plugins), logging and SIEM (`dist/logging-and-siem.md`)
+(the receiver for remote logs), and pfSense (`dist/pfsense.md`) (the sibling platform; its menus and
+commands do not carry over).
 
 ## OPNsense-specific principles
 
@@ -93,7 +103,11 @@ principles). Mark anything you can't inspect **Not assessed**.
 
 Prefer the web GUI, the documented REST API, or user-run checks. For API access, ask the user to create a
 dedicated user with only the privileges needed for reading, and remember that some privileges are broader
-than they look (domain B). If shell access is available (SSH, or console option 8), these are *candidate*
+than they look (domain B). OPNsense delivers a new API key once, as a downloaded text file holding the
+key and its secret; the secret can't be shown again. Have the user keep that file owner-only, outside any
+repository or synced folder, and give you only its path. Never ask for its contents, print it, or put the
+key or secret on a command line (core operating principle 12). Delete the key when the engagement ends.
+If shell access is available (SSH, or console option 8), these are *candidate*
 read-only commands, **not yet verified** on every version. Check each exists first.
 
 ```sh
@@ -247,6 +261,27 @@ Accepted risk).
   whether the hypervisor's own management interface is reachable from untrusted segments.
 - Power protection, and what happens to the network if the firewall fails (DNS, DHCP, VPN all stop).
 
+#### K. Scheduled tasks and persistence surfaces
+
+Anything here that nobody recognizes is a possible indicator of compromise, not a cleanup task: preserve
+it and switch to Respond before removing it.
+
+- Cron jobs in the GUI (System → Settings → Cron): each job's command, parameters, and who added it
+  (configuration history). GUI jobs can only run commands registered in the backend, so with shell access
+  also list the backend action files (`/usr/local/opnsense/service/conf/actions.d/`) and look for any that
+  don't belong to OPNsense or an installed plugin.
+- Tasks outside the GUI, with shell access: the system crontab and per-user crontabs, and startup hook
+  scripts under `/usr/local/etc/rc.syshook.d/` (they run at boot, on every configuration change, and on
+  gateway events). `pkg which <file>` shows which package owns a file; a script in these directories that
+  no package owns was put there by hand.
+- Packages installed with `pkg` directly rather than as plugins, and files that no longer match their
+  package. The firmware **health audit** (System → Firmware → Status) is the supported check; confirm
+  what it covers on the installed version, and never read a clean result as proof of integrity.
+- Tunables (System → Settings → Tunables) changed from their defaults, and who changed them.
+- Monitoring or alerting features configured to run a script or command when a test fires.
+- SSH authorized keys and API keys (domain B) are persistence surfaces too: check their creation dates
+  against the configuration history.
+
 ---
 
 ## Recommend
@@ -290,6 +325,8 @@ The firewall sits under everything, so list what depends on the setting before r
 | No encrypted off-box backup | Configure an encrypted backup to a separate system. | The destination must be protected; it holds every secret. |
 | No remote logging | Send logs to a separate syslog server (TLS if possible). | Needs a log receiver. |
 | Outdated firmware | Update within the current series; plan major upgrades with a backup or snapshot. | Reboot; brief outage. |
+| Unrecognized cron job, hook script, backend action, package, key, or tunable | Don't remove it. Record it, ask the user whether they or a plugin added it, and if nobody did, switch to Respond. | Deleting it first destroys evidence and can leave other persistence in place. |
+| API key no longer needed (including one made for this assessment) | Delete the key; give automation its own least-privilege user. | Whatever still uses the key stops working. |
 
 Changing ports, hiding the login page, and geoblocking are supplementary only. Never recommend them as
 the main fix.
@@ -376,6 +413,10 @@ instead if remote access breaks).
 
 ## Version history
 
+- **1.1** (2026-11-10): Added a domain for scheduled tasks and persistence surfaces (cron, backend
+  actions, startup hooks, unowned packages and files, tunables), how to handle the once-only API key
+  file, and links to related skills. Version-specific claims re-verified against the 26.1 and 26.7
+  release notes.
 - **1.0** (2026-10-30): Initial version.
 
 ---
@@ -416,6 +457,9 @@ Collect from the console or a clean admin workstation, before changing anything:
 - Unbound host overrides and forwarding settings; DHCP options and static mappings.
 - Installed plugins (`pkg info -x '^os-'`), configured package repositories, and cron jobs (GUI cron and
   system crontabs).
+- The other persistence surfaces from domain K of SKILL.md (included in this file): backend action files, startup
+  hook scripts under `/usr/local/etc/rc.syshook.d/`, packages installed outside the plugin system,
+  tunables, and the result of the firmware health audit. Copy the files; don't run or delete them.
 - Logs: system, audit/backend, web GUI access, firewall, VPN, and DNS logs. Export them off the firewall;
   if `/var` is a RAM disk, logs are lost on reboot, so export before any restart.
 - For virtualized firewalls: a VM snapshot (including memory if the hypervisor supports it) before
@@ -434,7 +478,9 @@ Collect from the console or a clean admin workstation, before changing anything:
 ## Eradication and recovery
 
 - If firewall integrity is in doubt, **reinstall from a verified image** (check the checksum and signature
-  published with the release) rather than cleaning the running system.
+  published with the release) rather than cleaning the running system. Removing a malicious cron job or
+  hook script does not make the system trustworthy again: an attacker with root could have changed
+  anything, and the health audit only compares files it knows about.
 - Restore configuration only from a backup taken **before** the earliest plausible compromise, and diff it
   against the compromised configuration to understand what the attacker changed. Don't restore attacker
   changes.
@@ -462,7 +508,7 @@ Start with the core quick checklist, plus:
 
 Always prefer current OPNsense documentation; menus and features change between release series.
 
-Last verified: 2026-10-30
+Last verified: 2026-11-10
 
 ## Vendor (authoritative)
 
@@ -478,6 +524,11 @@ Last verified: 2026-10-30
 - ISC DHCP (end-of-life notice): https://docs.opnsense.org/manual/isc.html
 - dnsmasq DNS and DHCP: https://docs.opnsense.org/manual/dnsmasq.html
 - Firewall advanced settings: https://docs.opnsense.org/manual/firewall_settings.html
+- Firewall rules, legacy rules plugin, and the migration assistant: https://docs.opnsense.org/manual/firewall.html
+- Firmware page and its audits (security, health, connectivity): https://docs.opnsense.org/manual/firmware.html
+- API keys (created per user, delivered once as a file): https://docs.opnsense.org/development/how-tos/api.html
+- Startup hook scripts (`rc.syshook.d`): https://docs.opnsense.org/development/backend/autorun.html
+- Backend actions (`actions.d`), which cron jobs are limited to: https://docs.opnsense.org/development/backend/configd.html
 - Release announcements and security update notices: https://forum.opnsense.org/
 
 ## Upstream
@@ -568,6 +619,12 @@ Rules:
 
 ## Rules that apply in every mode
 
+- **Authorized targets only.** Work only on systems and accounts the user owns or administers, or has the
+  owner's agreement to assess. If that isn't clear, ask before the first check. An employer's laptop, an
+  ISP-owned gateway, a landlord's network, and a neighbor's device are not the user's to change, and may
+  not be theirs to probe. Another adult's phone, computer, or account is that person's, even in the same
+  household or business: assessing it needs their knowledge and agreement, and the agent does not help
+  get into it without them.
 - **No active probing without approval.** Scanning or probing the network (host sweeps, port scans,
   service or version detection, vulnerability scanners) needs the user's explicit approval of the scope
   and intensity first, even though it doesn't change configuration: it can crash fragile devices and
@@ -628,6 +685,12 @@ principles; it may not override these.
     the file path. When a command needs the token, have it read the token from that file or an
     environment variable loaded from it, never from a literal value in the command. If a token appears
     in the conversation by accident, say so, and recommend revoking and reissuing it.
+13. **Leave nothing behind.** Keep a list of everything the engagement created or was given: accounts,
+    API tokens, SSH keys, firewall exceptions, installed tools, temporary files, and exported
+    configurations or logs. Before closing, show the list and recommend revoking or removing whatever is
+    no longer needed. Removing something from the target is a change like any other: classify it and get
+    approval. Access granted "just for the assessment" that is never removed becomes a finding in the
+    next one.
 
 ## Capability discovery
 
@@ -657,7 +720,9 @@ unavailable, the engagement has not failed: use what is available and mark the r
 
 ## Scope and constraints (confirm before Discover)
 
-- Which systems are in scope, and which are explicitly out of scope.
+- Which systems and accounts are in scope, and which are explicitly out of scope.
+- That each one is the user's to assess (see "Authorized targets only" in
+  modes-and-authorization.md (included in this file)).
 - The user's objective and which services are critical.
 - Whether the engagement is read-only or remediation-authorized.
 - Available access method and privilege level.
@@ -720,7 +785,9 @@ Check current, trustworthy sources:
 - CISA Known Exploited Vulnerabilities (KEV) Catalog: https://www.cisa.gov/known-exploited-vulnerabilities-catalog
 - NIST National Vulnerability Database: https://nvd.nist.gov/
 - CVE Program: https://www.cve.org/
-- Advisories for third-party add-ons, container images, and dependencies.
+- Advisories for third-party add-ons, container images, and dependencies. For open-source packages, the
+  project's own security advisories, the GitHub Advisory Database (https://github.com/advisories), and
+  OSV (https://osv.dev/) usually match versions more precisely than a product-name search.
 - Reputable scanners and databases, when their product coverage and version matching are clear.
 
 When sources disagree, prefer the affected vendor's applicability and remediation guidance for the exact
@@ -737,7 +804,9 @@ Never copy static CVE or version tables into an assessment as current facts with
 3. Check exploitability in this deployment: is the component enabled and reachable, is authentication
    required, what network exposure and configuration prerequisites apply, and what mitigations exist?
 4. Check KEV status and credible exploitation reports. A proof-of-concept is not confirmed exploitation.
-5. Treat CVSS as one input, not the priority.
+5. Treat CVSS as one input, not the priority. The same goes for an exploit-likelihood estimate such as
+   EPSS (https://www.first.org/epss/). A database entry with no score or no affected-product data yet has
+   not been analyzed; that is not evidence of low severity. Use the vendor advisory and the CVE record.
 6. State uncertainty when version detection, vendor backports, or applicability cannot be confirmed.
 7. Never claim "no vulnerabilities" because a scanner returned nothing. Scanners miss unscanned
    interfaces, IPv6 addresses, add-ons, containers, and alternate network paths.
@@ -963,6 +1032,11 @@ modes-and-authorization.md (included in this file).
    keys, and authentication headers before recording or sharing evidence. Record that a secret exists and
    its scope and age, never its value. When a tool creates or returns an API token, write it to an
    owner-only file and report the path, as `operating-principles.md` principle 12 requires.
+9. **Keep read-only work light.** A command can change nothing and still do harm. Filesystem-wide
+   searches, unbounded log dumps, integrity scans, and self-tests load disks and CPUs, wake sleeping
+   drives, and can stall a busy system; a command that opens a pager or waits for input can hang a
+   session. Bound every command (path, depth, time range, line count, timeout), use non-interactive
+   options, and ask before running anything that will take minutes on a system people depend on.
 
 ## Labeling command references
 
@@ -1154,7 +1228,8 @@ Give the user these instructions as appropriate:
 
 1. **Use a known-clean device** for communications, account recovery, and administration. Do not use a
    possibly infected computer to change passwords, access email or banking, or administer systems. Never
-   paste passwords, recovery codes, private keys, or tokens into chat.
+   paste passwords, recovery codes, private keys, or tokens into chat. If an email or chat account may be
+   compromised, don't plan the response over it: the attacker may be reading. Use another channel.
 2. **Stop using affected accounts and devices for administration.** Don't open suspicious attachments,
    scripts, ransom notes, or links except as part of controlled evidence preservation.
 3. **Contain active spread.** If ransomware or malware is spreading, disconnect affected devices from
@@ -1173,6 +1248,15 @@ Give the user these instructions as appropriate:
 6. **Escalate when the stakes are high.** If safety, critical services, or large-scale data loss is at
    stake, engage a qualified incident-response provider or trusted IT/security professional. For serious
    criminal activity, extortion, or suspected data theft, consider contacting law enforcement.
+7. **Tell the real owner.** If the affected system or account belongs to an employer, school, or client,
+   or holds their data, tell their IT or security contact now. They may have legal duties, logs, and
+   tools the user doesn't, and an independent cleanup can destroy what they need.
+8. **If someone close to the user may be behind it.** When the signs point to a partner, former
+   partner, family member, or someone else with personal access (monitoring apps, shared-account access,
+   location tracking, cameras), the user's safety comes before evidence and cleanup. Removing access or
+   changing settings can alert that person. Say so before acting, let the user set the pace, and suggest
+   contacting a domestic-violence or victim-support organization from a device and account the other
+   person can't reach.
 
 Tailor containment to the topology. Do not tell the user to unplug a system if that would interrupt a
 critical service, corrupt an active storage operation, or destroy the only evidence. An agent with
@@ -1254,7 +1338,9 @@ changes that may interrupt services.
 4. Don't run bulk cleaning, mass rename, or decryption on the original data. Never restore over affected
    data.
 5. Check for a reputable decryptor for the exact ransomware family, using law-enforcement or established
-   security-vendor sources. Never run a decryptor from an untrusted source on the only copy of the data.
+   security-vendor sources, such as the No More Ransom project (https://www.nomoreransom.org/). Never run
+   a decryptor from an untrusted source on the only copy of the data, and be wary of "recovery services"
+   found through search results or ads.
 6. Don't advise that paying a ransom will recover data or prevent publication. Payment decisions are
    complex, may have legal implications, and guarantee nothing. Recommend consulting law enforcement,
    legal counsel, the insurer (if any), and qualified responders first.
@@ -1313,6 +1399,11 @@ State residual uncertainty.
 - In the United States, cybercrime can be reported to the FBI's Internet Crime Complaint Center
   (https://www.ic3.gov/) and local law enforcement. Organizations can also contact CISA
   (https://www.cisa.gov/report). CISA's ransomware guide: https://www.cisa.gov/stopransomware/ransomware-guide
+  Elsewhere, point the user to their country's national cybercrime reporting service or computer
+  emergency response team; look it up rather than guessing a name or number.
+- If bank accounts, payment cards, or identity documents may be exposed, the user should contact the bank
+  or issuer promptly, using the number printed on the card or a statement, never one from an email, a
+  pop-up, or a search result.
 - Document the timeline, affected assets, accounts, and data, likely entry point, containment actions,
   evidence preserved, recovery sources, notifications, and open questions.
 - Run a lessons-learned review: update the security baseline, network diagrams, and recovery procedures,
@@ -1348,6 +1439,8 @@ Each skill's `incident-response.md` may tailor it to its product.
 - [ ] Write down what happened and when; preserve logs, alerts, ransom notes, and indicators.
 - [ ] From a clean device, secure email, identity, VPN, admin, and backup accounts; revoke compromised
       sessions and tokens; rotate exposed credentials in a coordinated order.
+- [ ] If money or cards are involved, call the bank or issuer on the number printed on the card.
+- [ ] If the system belongs to an employer, school, or client, tell their IT or security contact.
 - [ ] Check other computers, servers, containers, the router/firewall, cloud sync, and backups, not just
       the affected system.
 - [ ] Get qualified help for ransomware, suspected data theft, privileged compromise, or uncertain

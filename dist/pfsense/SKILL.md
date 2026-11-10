@@ -8,8 +8,8 @@ description: >-
   logging, or when a pfSense firewall may have been compromised.
 license: CC-BY-4.0
 metadata:
-  version: "1.0"
-  last_reviewed: "2026-10-30"
+  version: "1.1"
+  last_reviewed: "2026-11-10"
   applies_to: "pfSense CE 2.8.x-2.9.x and pfSense Plus 26.x (verify the live version; menus change between releases)"
   audience: "home, work, homelab"
   finding_prefix: "PFS"
@@ -40,7 +40,16 @@ This skill holds only pfSense-specific guidance. It builds on the shared core, w
 | [incident-response.md](core/incident-response.md) | The generic Respond playbook |
 
 pfSense-specific Respond steps are in [incident-response.md](incident-response.md). Vendor documentation
-and advisories are in [references.md](references.md).
+and advisories are in [references.md](references.md). Related skills:
+[VPN servers](../vpn-servers/SKILL.md) (WireGuard and OpenVPN in depth),
+[tunnels](../tunnels/SKILL.md) (Tailscale and other overlay packages),
+[DNS filtering](../dns-filtering/SKILL.md) (a filtering resolver beside the firewall),
+[Wi-Fi and switches](../wifi-and-switches/SKILL.md) (VLANs only isolate if the switches and access points
+carry them correctly), [home routers](../home-routers/SKILL.md) (the upstream router in a double-NAT
+setup), [Proxmox VE](../proxmox-ve/SKILL.md) (a virtualized firewall's host),
+[web servers](../web-servers/SKILL.md) (HAProxy and other reverse-proxy packages),
+[logging and SIEM](../logging-and-siem/SKILL.md) (the receiver for remote logs), and
+[OPNsense](../opnsense/SKILL.md) (the sibling platform; its menus and commands do not carry over).
 
 ## pfSense-specific principles
 
@@ -472,4 +481,5 @@ shows the change.
 
 ## Version history
 
+- **1.1** (2026-11-10): Second review. Added links to related skills; no other changes were needed.
 - **1.0** (2026-10-30): Initial version.

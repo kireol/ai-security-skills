@@ -8,8 +8,8 @@ description: >-
   logging, or file permissions, or when a web server or proxy may have been compromised.
 license: CC-BY-4.0
 metadata:
-  version: "1.0"
-  last_reviewed: "2026-10-30"
+  version: "1.1"
+  last_reviewed: "2026-11-10"
   applies_to: "Apache httpd 2.4.x, nginx (stable and mainline), Caddy 2.x, Traefik 3.x, HAProxy (supported branches), Nginx Proxy Manager 2.x (verify the live version of each)"
   audience: "home, work, homelab, web"
   finding_prefix: "WEB"
@@ -40,12 +40,19 @@ applies:
 | [reporting-protocol.md](../../../core/reporting-protocol.md) | Optional live progress reporting to a dashboard |
 | [incident-response.md](../../../core/incident-response.md) | The generic Respond playbook |
 
-Web-server-specific Respond steps are in [incident-response.md](incident-response.md). Vendor
-documentation and advisories are in [references.md](references.md).
+Web-server-specific Respond steps are in [incident-response.md](incident-response.md). Vendor documentation
+and advisories are in [references.md](references.md). Related skills:
+[Docker](../../containers/docker/SKILL.md) (label-driven proxies and the container socket),
+[Cloudflare](../../edge/cloudflare/SKILL.md), [tunnels](../../edge/tunnels/SKILL.md) (what sits in front),
+[identity providers](../../identity/identity-providers/SKILL.md) (forward authentication),
+[logging and SIEM](../../monitoring/logging-and-siem/SKILL.md) (CrowdSec and Fail2ban),
+[domain registrars](../../cloud/domain-registrars/SKILL.md) (DNS and the API tokens used for certificates),
+[Linux](../../operating-systems/linux/SKILL.md) (the host), and
+[self-hosted web apps](../../web-apps/self-hosted-web-apps/SKILL.md) (the apps behind the proxy).
 
 The apps *behind* the server (WordPress and other CMSs, wikis, dashboards) are out of scope here, except
 for what the server can do about them (routing, authentication in front, rate limits, headers). For
-small self-hosted apps, use the `self-hosted-web-apps` skill. A dedicated skill for CMS-style web
+small self-hosted apps, use the [self-hosted web apps](../../web-apps/self-hosted-web-apps/SKILL.md) skill. A dedicated skill for CMS-style web
 applications such as WordPress is planned; until then, assess those apps only at the server level and
 record the app itself as **Not assessed**.
 
@@ -320,6 +327,14 @@ change.
 - Stream/TCP proxies (NPM streams, HAProxy TCP mode, nginx `stream`, Traefik TCP routers) forwarding
   databases, SSH, or other non-HTTP services to the internet.
 - Path-based routing that exposes an app's admin path (for example `/admin`) along with its public pages.
+- **Open or steerable proxying:** a proxy target built from something the client controls (a request
+  header, a query parameter, a captured part of the path or host name), or a forward-proxy feature left
+  on. Either lets anyone on the internet make the server connect to hosts on the internal network. Read
+  every proxy target for variables that come from the request.
+- Proxy and back end disagreeing about where a request ends (request smuggling): this is fixed by
+  updates and by not mixing protocol versions and parsers carelessly, not by configuration review. When
+  checking advisories, look for this class on both the proxy and each back end, and note chains of
+  several proxies in front of one app.
 - WebSocket and upgrade handling, request body size limits (`client_max_body_size`, `LimitRequestBody`),
   and timeouts: oversized limits enable resource exhaustion; note values that look unbounded.
 
@@ -540,4 +555,6 @@ remove the port forward at minimum).
 
 ## Version history
 
+- **1.1** (2026-11-10): Added open or client-steerable proxy targets and request-smuggling advisories as
+  checks, and links to related skills.
 - **1.0** (2026-10-30): Initial version.

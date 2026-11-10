@@ -10,8 +10,8 @@ description: >-
   execution, or had its stored keys stolen.
 license: CC-BY-4.0
 metadata:
-  version: "1.0"
-  last_reviewed: "2026-10-31"
+  version: "1.1"
+  last_reviewed: "2026-11-10"
   applies_to: "Flowise 3.x, Dify self-hosted (Community Edition, Docker Compose), Langflow 1.x, and similar builders (verify each live version; defaults have changed between releases)"
   audience: "home, work, homelab, web"
   finding_prefix: "AIB"
@@ -184,6 +184,11 @@ Accepted risk).
   been critical and code-execution related). An instance more than a few releases behind with code
   execution features is a likely finding.
 - How updates happen: pinned tags, `latest`, auto-updaters, and database migrations that block rollback.
+- File-handling features are the other recurring advisory class in these products, after code
+  execution: upload and attachment endpoints, document loaders that take a path or URL, and storage-path
+  settings have allowed reading or writing files on the server, sometimes before login. When checking
+  advisories, search for file read, file write, upload, and path traversal as well as code execution,
+  and note which of these endpoints are reachable without authentication on the installed version.
 - Supporting services in the stack (database, Redis, vector DB, sandbox, proxy, plugin daemon) and their
   own versions.
 
@@ -428,4 +433,6 @@ chat app works for the owner over VPN.
 
 ## Version history
 
+- **1.1** (2026-11-10): Added file-handling endpoints (upload, attachments, path-based loaders) as an
+  advisory class to check alongside code execution.
 - **1.0** (2026-10-31): Initial version.

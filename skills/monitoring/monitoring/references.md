@@ -3,7 +3,7 @@
 Always prefer current vendor documentation for the installed version. Defaults, option names, and menu
 paths change between releases. Re-verify links and contents when updating this skill.
 
-Last verified: 2026-10-31
+Last verified: 2026-11-10 (all links resolve; one moved Zabbix page replaced)
 
 ## Vendor (authoritative)
 
@@ -29,7 +29,7 @@ Last verified: 2026-10-31
 
 - Life cycle and release policy (LTS and standard support dates): https://www.zabbix.com/life_cycle_and_release_policy
 - Security advisories: https://www.zabbix.com/security_advisories
-- Frontend login (default credentials, login blocking): https://www.zabbix.com/documentation/current/en/manual/quickstart/login
+- Security best practices (default accounts, access control, hardening): https://www.zabbix.com/documentation/current/en/manual/security/best_practices
 - Encryption (PSK and certificates): https://www.zabbix.com/documentation/current/en/manual/encryption
 - Restricting agent checks (`AllowKey`, `DenyKey`, `system.run`): https://www.zabbix.com/documentation/current/en/manual/config/items/restrict_checks
 

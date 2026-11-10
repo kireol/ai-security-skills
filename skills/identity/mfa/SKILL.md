@@ -11,8 +11,8 @@ description: >-
   bypassed, phished, lost, or approved by mistake.
 license: CC-BY-4.0
 metadata:
-  version: "1.0"
-  last_reviewed: "2026-10-31"
+  version: "1.1"
+  last_reviewed: "2026-11-10"
   applies_to: "FIDO2/WebAuthn security keys (YubiKey 5 and Security Key series, and other certified keys), platform and synced passkeys (Apple, Google, Microsoft, password managers), TOTP authenticator apps, Duo Security (Free, Essentials, Advantage, Premier), and account recovery codes; feature names, firmware capabilities, and edition features change, so verify on the live device, app, or admin panel"
   audience: "home, work, homelab"
   finding_prefix: "MFA"
@@ -83,6 +83,13 @@ in [cloudflare](../../edge/cloudflare/SKILL.md).
 - **Hardware key firmware can't be updated.** YubiKey firmware is fixed at manufacture; a key affected by
   a firmware advisory is fixed only by replacing it. Check advisories against the key's firmware version,
   and weigh them (some need physical possession and specialist equipment).
+- **MFA protects the sign-in, not the session.** After a successful sign-in the service hands the
+  browser or app a session token, and whoever holds that token is signed in without the password or the
+  factor. Two common attacks go after it: a phishing page that relays the real sign-in and keeps the
+  token (codes, push, and SMS all pass straight through the relay; security keys and passkeys refuse,
+  because they are bound to the real site), and malware on the device that copies the browser's
+  sessions. So "MFA is on" does not mean an account can't be taken over, and after a suspected
+  compromise the sessions must be signed out, not just the password changed.
 - **People approve prompts they didn't start.** Push fatigue (repeated prompts until someone taps
   Approve) and phone calls pretending to be support defeat push-based MFA. Number matching, verified
   push, and teaching "never approve a prompt you didn't start; report it" are part of the control.
@@ -196,6 +203,9 @@ Accepted risk).
 
 #### C. Hardware security keys
 
+- Where each key was bought: the maker's own store or an authorized reseller, in sealed packaging. A key
+  from a marketplace listing, a giveaway, or an unknown sender may be counterfeit or tampered with. Use
+  the maker's own verification page if it offers one, and don't register a key of unknown origin.
 - **Backup key:** at least two keys registered on every account that uses one, with the backup stored
   safely apart from the daily key. Registration has to be done per account; a backup key that was never
   added to an account doesn't help.
@@ -442,4 +452,6 @@ log.
 
 ## Version history
 
+- **1.1** (2026-11-10): Added the principle that MFA protects the sign-in, not the session (relay phishing
+  and session-stealing malware), and a provenance check for hardware keys.
 - **1.0** (2026-10-31): Initial version.

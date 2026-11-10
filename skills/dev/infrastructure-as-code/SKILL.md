@@ -10,8 +10,8 @@ description: >-
   node may have been exposed or compromised.
 license: CC-BY-4.0
 metadata:
-  version: "1.0"
-  last_reviewed: "2026-10-31"
+  version: "1.1"
+  last_reviewed: "2026-11-10"
   applies_to: "ansible-core and Ansible community packages; Terraform 1.x; OpenTofu 1.x (verify each installed version; state encryption, ephemeral values, and backend options vary by version)"
   audience: "home, work, homelab"
   finding_prefix: "IAC"
@@ -286,6 +286,12 @@ Accepted risk).
   plan jobs need credentials limited to read where possible.
 - Separation between plan (read-mostly) and apply (write) credentials, and manual approval before apply.
 - Drift detection jobs and their credentials.
+- Unattended apply: jobs or wrappers that pass an auto-approve flag, apply on every merge without a
+  reviewed plan, or apply a plan other than the one that was reviewed. The plan that was approved should
+  be the saved plan that gets applied.
+- Guards on resources that must never be destroyed by a typo or a bad merge (databases, storage holding
+  backups, DNS zones, state buckets): lifecycle settings that refuse destruction in the code, and
+  deletion protection or locks on the provider side, so that one doesn't depend on the other.
 - Managed services: team permissions, who can edit variables, and whether sensitive variables are marked
   write-only in the service.
 
@@ -424,4 +430,5 @@ rolled back.
 
 ## Version history
 
+- **1.1** (2026-11-10): Added unattended-apply paths and destruction guards on critical resources.
 - **1.0** (2026-10-31): Initial version.

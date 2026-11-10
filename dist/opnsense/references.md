@@ -4,7 +4,7 @@
 
 Always prefer current OPNsense documentation; menus and features change between release series.
 
-Last verified: 2026-10-30
+Last verified: 2026-11-10
 
 ## Vendor (authoritative)
 
@@ -20,6 +20,11 @@ Last verified: 2026-10-30
 - ISC DHCP (end-of-life notice): https://docs.opnsense.org/manual/isc.html
 - dnsmasq DNS and DHCP: https://docs.opnsense.org/manual/dnsmasq.html
 - Firewall advanced settings: https://docs.opnsense.org/manual/firewall_settings.html
+- Firewall rules, legacy rules plugin, and the migration assistant: https://docs.opnsense.org/manual/firewall.html
+- Firmware page and its audits (security, health, connectivity): https://docs.opnsense.org/manual/firmware.html
+- API keys (created per user, delivered once as a file): https://docs.opnsense.org/development/how-tos/api.html
+- Startup hook scripts (`rc.syshook.d`): https://docs.opnsense.org/development/backend/autorun.html
+- Backend actions (`actions.d`), which cron jobs are limited to: https://docs.opnsense.org/development/backend/configd.html
 - Release announcements and security update notices: https://forum.opnsense.org/
 
 ## Upstream

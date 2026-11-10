@@ -9,8 +9,8 @@ description: >-
   host may have been hit by ransomware or otherwise compromised.
 license: CC-BY-4.0
 metadata:
-  version: "1.0"
-  last_reviewed: "2026-10-31"
+  version: "1.1"
+  last_reviewed: "2026-11-10"
   applies_to: "VMware ESXi 8.x and ESX 9.x, standalone or with vCenter Server; 7.x and older are past end of general support (verify the live build and Broadcom lifecycle page)"
   audience: "home, work, homelab"
   finding_prefix: "ESX"
@@ -185,6 +185,10 @@ Accepted risk).
   build-number list, and VMware Security Advisories (VMSAs) on the Broadcom support portal (core triage:
   validate before rating). Check CISA KEV for ESXi and vCenter entries; several have been exploited by
   ransomware groups.
+- Guest-to-host escape advisories deserve their own look: a flaw of this class lets someone with admin
+  rights inside one VM run code on the host, and so reach every other VM. Rate one as P1 when any guest
+  is internet-facing, runs untrusted workloads, or belongs to someone else, even if the host's own
+  management interface is well isolated. Check whether the fix is in ESXi, in VMware Tools, or both.
 - Lifecycle: ESXi 7.0 reached end of general support in 2025-10; a host on 7.x or older is an end-of-life
   finding. Confirm the current dates for 8.x and 9.x on Broadcom's product lifecycle page.
 - **Patch access:** does the user have a Broadcom Support Portal account and an entitlement that lets them
@@ -478,4 +482,6 @@ refused from the user VLAN; Host Client works from the admin workstation; the ba
 
 ## Version history
 
+- **1.1** (2026-11-10): Added guidance on rating guest-to-host escape advisories, which bypass
+  management-network isolation.
 - **1.0** (2026-10-31): Initial version.

@@ -11,8 +11,8 @@ description: >-
   router may have been compromised or had its DNS settings changed.
 license: CC-BY-4.0
 metadata:
-  version: "1.0"
-  last_reviewed: "2026-10-30"
+  version: "1.1"
+  last_reviewed: "2026-11-10"
   applies_to: "Consumer routers, ISP gateways, modems, and OpenWrt/DD-WRT routers, any vendor (verify the live firmware, ISP restrictions, and support status; menu names vary by vendor, ISP, and firmware)"
   audience: "home, homelab, work"
   finding_prefix: "RTR"
@@ -204,6 +204,9 @@ Accepted risk).
   variants of the TheMoon malware, and said routers dated 2010 or earlier likely no longer receive
   updates. CISA's BOD 26-02 (February 2026) orders US federal civilian agencies to remove end-of-support
   edge devices, including routers; it binds only those agencies, but its reasoning applies to any network.
+- A second-hand, refurbished, or previously ISP-supplied unit: was it factory reset and reflashed from
+  the vendor's own site before first use, and is it still bound to a previous owner's vendor cloud
+  account? Until both are settled, its firmware and settings are of unknown origin.
 - An end-of-life router that is the sole gateway is at least **P1** if any internet-facing service is on
   (remote management, VPN server, cloud/file access, port forwards), and a replacement finding otherwise.
 
@@ -217,6 +220,10 @@ Accepted risk).
 - Admin session protection: HTTPS on the admin UI where offered, login lockout or rate limiting, session
   timeout.
 - Which networks can reach the admin UI: the guest network and IoT devices should not.
+- Remote-shell settings nobody remembers enabling: SSH or Telnet turned on, moved to an unusual port,
+  open to the WAN, or holding an authorized key the user didn't add. Router botnet campaigns have used
+  exactly these vendor-supported settings as their back door, because they are stored in the
+  configuration and survive firmware updates. An unexplained one is a P0 indicator.
 - Other admin protocols on the LAN: Telnet, SSH, SNMP, TR-064 (LAN-side ISP-configuration protocol on some
   gateways), vendor discovery or HNAP-style APIs. Each one that isn't needed is surface.
 
@@ -479,4 +486,7 @@ change).
 
 ## Version history
 
+- **1.1** (2026-11-10): Added checks for unexplained remote-shell settings that survive firmware updates
+  (a known botnet back door) and for second-hand or previously owned units; the incident file now says a
+  firmware update alone is not a cleanup.
 - **1.0** (2026-10-30): Initial version.

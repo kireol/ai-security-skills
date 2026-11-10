@@ -9,8 +9,8 @@ description: >-
   My, or when a Mac may have been compromised.
 license: CC-BY-4.0
 metadata:
-  version: "1.0"
-  last_reviewed: "2026-10-30"
+  version: "1.1"
+  last_reviewed: "2026-11-10"
   applies_to: "macOS on Apple silicon and Intel Macs, current major release and the two before it (verify the live version; System Settings names and locations change between releases)"
   audience: "home, work, homelab"
   finding_prefix: "MAC"
@@ -41,7 +41,13 @@ This skill holds only macOS-specific guidance. It builds on the shared core, whi
 | [incident-response.md](../../../core/incident-response.md) | The generic Respond playbook |
 
 macOS-specific Respond steps are in [incident-response.md](incident-response.md). Vendor documentation and
-advisories are in [references.md](references.md).
+advisories are in [references.md](references.md). Related skills: [phones](../../mobile/phones/SKILL.md) (an
+iPhone or iPad on the same Apple Account), [password managers](../../identity/password-managers/SKILL.md),
+[MFA](../../identity/mfa/SKILL.md), [cloud storage](../../cloud/cloud-storage/SKILL.md) (iCloud),
+[backup tools](../../storage/backup-tools/SKILL.md), [Docker](../../containers/docker/SKILL.md) (Docker
+Desktop), [remote desktop and RMM](../../remote-access/remote-desktop-and-rmm/SKILL.md) (remote-access tools
+installed on the Mac), and [AI coding agents](../../ai/ai-coding-agents/SKILL.md) (agent tools on a
+workstation).
 
 ## macOS-specific principles
 
@@ -370,6 +376,17 @@ things the sandbox and file permissions would otherwise prevent:
 
 - Installed apps: sources (App Store, identified developer, unsigned), apps no one uses, remote-access and
   "cleaner" utilities, and abandoned software that no longer receives updates.
+- **How Mac malware actually arrives.** Most current Mac malware is credential-stealing software that
+  the user is talked into running, so ask about these directly. A "yes" to any is a P0 indicator:
+  - Pasting a command into Terminal because a web page, "verification" step, install guide, or chat
+    message said to. Gatekeeper and notarization never see a pasted command.
+  - Being told how to get around a Gatekeeper warning for a download (right-click and Open, a Privacy &
+    Security override, or dragging something into Terminal).
+  - Typing the Mac's login password into a dialog that appeared right after opening a download or
+    running a command. Stealers ask for it with a look-alike system prompt so they can unlock the login
+    keychain.
+  - Installing cracked or "free" versions of paid apps, or a meeting, wallet, or AI app found through an
+    ad or a link from a stranger rather than the maker's own site.
 - **Homebrew:** installed, owner of the Homebrew prefix (`/opt/homebrew` on Apple silicon, `/usr/local`
   on Intel), outdated formulae and casks (`brew outdated`, read-only), third-party taps (`brew tap`), and
   `brew services list` (services started by Homebrew, which run as LaunchAgents or, with sudo,
@@ -612,4 +629,7 @@ back to LaunchAgents from the saved plists.
 
 ## Version history
 
+- **1.1** (2026-11-10): Added how Mac malware arrives now (pasted Terminal commands, Gatekeeper-override
+  instructions, fake password prompts, cracked or ad-delivered apps) as direct Discover questions, and
+  credential-stealer signs and keychain exposure to the incident file. Added links to related skills.
 - **1.0** (2026-10-30): Initial version.

@@ -11,8 +11,8 @@ description: >-
   (RDP/VNC), or rolling-release updates; or when a Linux host may have been compromised.
 license: CC-BY-4.0
 metadata:
-  version: "1.1"
-  last_reviewed: "2026-10-31"
+  version: "1.2"
+  last_reviewed: "2026-11-10"
   applies_to: "systemd-based Linux distributions: Debian 12-13, Ubuntu LTS 22.04-26.04 (server and desktop), RHEL-family 8-10, Fedora Workstation and Atomic desktops, Linux Mint 21-22 and LMDE, Arch and other rolling distributions, Raspberry Pi OS, and similar (verify the live release and its support status)"
   audience: "home, work, homelab, web"
   finding_prefix: "LNX"
@@ -45,8 +45,18 @@ This skill holds only Linux-specific guidance. It builds on the shared core, whi
 | [reporting-protocol.md](core/reporting-protocol.md) | Optional live progress reporting to a dashboard |
 | [incident-response.md](core/incident-response.md) | The generic Respond playbook |
 
-Linux-specific Respond steps are in [incident-response.md](incident-response.md). Distribution
-documentation and advisories are in [references.md](references.md).
+Linux-specific Respond steps are in [incident-response.md](incident-response.md). Distribution documentation
+and advisories are in [references.md](references.md). Related skills:
+[Docker](../docker/SKILL.md), [web servers](../web-servers/SKILL.md),
+[VPN servers](../vpn-servers/SKILL.md), [backup tools](../backup-tools/SKILL.md),
+[ZFS and Ceph](../zfs-and-ceph/SKILL.md) (software on the host),
+[Proxmox VE](../proxmox-ve/SKILL.md) (a Debian-based hypervisor with its own skill),
+[GPU hosts](../gpu-hosts/SKILL.md),
+[out-of-band management](../out-of-band-management/SKILL.md) (the server's BMC),
+[logging and SIEM](../logging-and-siem/SKILL.md),
+[monitoring](../monitoring/SKILL.md) (where its logs and metrics go),
+[printers](../printers/SKILL.md) (network printers behind CUPS), and
+[AI coding agents](../ai-coding-agents/SKILL.md) (agent tools on a workstation).
 
 ## Linux-specific principles
 
@@ -314,6 +324,10 @@ Accepted risk).
 - Login policy: password quality (`pam_pwquality`), lockout (`pam_faillock`), and whether direct root
   login is possible on the console and over SSH.
 - Dormant accounts: last login (`lastlog` or `lastlog2`, availability varies by release).
+- polkit rules: local rule files (commonly under `/etc/polkit-1/rules.d/`, with packaged ones under
+  `/usr/share/polkit-1/rules.d/`; verify the paths for the distribution) that let a user or group
+  perform privileged actions without authenticating. They grant root-level operations outside sudo, so
+  a sudoers review alone misses them. Any rule no package or administrator can account for is a finding.
 
 #### D. SSH server and keys
 
@@ -882,6 +896,9 @@ the console.
 
 ## Version history
 
+- **1.2** (2026-11-10): Added polkit rules as a privilege path outside sudo, and web-shell checks on hosts
+  that serve web applications to the incident file. Fixed two dead reference links and added links to
+  related skills.
 - **1.1** (2026-10-31): Extended to Linux desktops and laptops (Ubuntu Desktop, Fedora Workstation and
   Atomic desktops, Linux Mint, Arch and other rolling distributions): new domains P (full-disk
   encryption, TPM unlock, Secure Boot and MOK, firmware), Q (screen lock, auto-login, shared-computer

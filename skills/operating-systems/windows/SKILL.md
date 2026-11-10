@@ -11,8 +11,8 @@ description: >-
   (including tech-support scams and ransomware).
 license: CC-BY-4.0
 metadata:
-  version: "1.1"
-  last_reviewed: "2026-10-31"
+  version: "1.2"
+  last_reviewed: "2026-11-10"
   applies_to: "Windows 11, Windows 10 22H2 with ESU, small Windows Server 2016-2025 installs, and small Active Directory domains (one forest, one domain, a few domain controllers); verify the live build and edition"
   audience: "home, work, homelab"
   finding_prefix: "WIN"
@@ -42,8 +42,17 @@ This skill holds only Windows-specific guidance. It builds on the shared core, w
 | [reporting-protocol.md](../../../core/reporting-protocol.md) | Optional live progress reporting to a dashboard |
 | [incident-response.md](../../../core/incident-response.md) | The generic Respond playbook |
 
-Windows-specific Respond steps are in [incident-response.md](incident-response.md). Vendor documentation
-and advisories are in [references.md](references.md).
+Windows-specific Respond steps are in [incident-response.md](incident-response.md). Vendor documentation and
+advisories are in [references.md](references.md). Related skills:
+[productivity suites](../../cloud/productivity-suites/SKILL.md) (Microsoft 365 and Entra ID),
+[cloud storage](../../cloud/cloud-storage/SKILL.md) (OneDrive),
+[remote desktop and RMM](../../remote-access/remote-desktop-and-rmm/SKILL.md) (remote-access tools installed
+on the PC), [password managers](../../identity/password-managers/SKILL.md),
+[MFA](../../identity/mfa/SKILL.md), [backup tools](../../storage/backup-tools/SKILL.md),
+[Docker](../../containers/docker/SKILL.md) (Docker Desktop), [printers](../../peripherals/printers/SKILL.md)
+(network printers behind the spooler), [logging and SIEM](../../monitoring/logging-and-siem/SKILL.md) (where
+its event logs go), and [AI coding agents](../../ai/ai-coding-agents/SKILL.md) (agent tools on a
+workstation).
 
 ## Windows-specific principles
 
@@ -421,6 +430,13 @@ Accepted risk).
   has been turned off, and whether the user routinely clicks through "Run anyway".
 - Reputation-based protection and PUA blocking in Edge.
 - Developer mode on (allows sideloading and lowers some protections): only if the user develops software.
+- Office macros: whether macros in files from the internet are blocked (the default in current Microsoft
+  365 apps; verify on the installed version), and the Trusted Locations and Trusted Publishers lists,
+  which bypass that block. A network share or the Downloads folder as a Trusted Location is a finding.
+- Whether anyone on this PC has ever followed instructions from a web page, email, or caller to paste a
+  command into the Run box, PowerShell, or a terminal ("press Windows+R, then Ctrl+V" on a fake
+  verification or error page). The command runs with the user's own rights, SmartScreen never sees a
+  file, and it usually installs credential-stealing malware. A "yes" is a P0 indicator: go to Respond.
 - Memory integrity (HVCI) and other Core isolation settings; the Microsoft vulnerable driver blocklist.
 - On small-office machines: App Control for Business or AppLocker policies, if any exist.
 
@@ -534,6 +550,15 @@ Accepted risk).
   → Startup apps. Microsoft Sysinternals Autoruns gives the most complete view; it's a vendor tool, but
   explain and get approval before downloading it (core tool-use contract).
 - WMI event subscriptions in `root\subscription` (rare on clean home PCs).
+- Quieter locations that Autoruns also lists: Image File Execution Options "debugger" entries (they
+  swap one program for another when it starts), accessibility tools on the sign-in screen that have been
+  replaced or redirected (Sticky Keys or Ease of Access opening a system command prompt before anyone
+  signs in), AppInit DLLs, and COM registrations in the user's own hive. Any of these on a home PC needs
+  an explanation.
+- Windows Subsystem for Linux: `wsl --list --verbose` shows installed distributions. Each is a Linux
+  system with its own services, cron jobs, SSH keys, and packages that Windows tools don't inspect.
+  If one is in use, assess it with the [Linux](../linux/SKILL.md) skill; if nobody installed it, that
+  is a finding.
 - Browser extensions in each browser profile: unknown or broad-permission extensions are a common
   credential-theft path.
 - Installed programs: unknown, unused, "cleaner"/"optimizer" tools, cracked software, and anything
@@ -600,6 +625,12 @@ Accepted risk).
 - Booting from USB allowed in firmware, firmware password set on high-risk laptops (optional).
 - Thunderbolt/DMA protection (Kernel DMA Protection in System Information).
 - Find my device enabled.
+- Recall, on PCs that offer it (Copilot+ hardware): on or off, and which apps and sites are excluded. It
+  keeps a searchable history of what was on screen, so anyone who can sign in as the user can search
+  months of activity. Verify current behavior and protections on the installed build.
+- WDigest plain-text credential caching (`UseLogonCredential` under the WDigest security provider key):
+  it is off by default on supported Windows; a value of 1 means sign-in passwords are kept in memory in
+  clear text, and on a PC nobody configured that way it is a sign of tampering.
 - Disposal: devices being sold or recycled are reset with "clean the drive" or securely erased (advice
   only; never automate).
 
@@ -915,6 +946,9 @@ fails).
 
 ## Version history
 
+- **1.2** (2026-11-10): Added quieter persistence locations (Image File Execution Options, sign-in screen
+  accessibility tools, AppInit, COM), WSL distributions, Office macro trust settings, the paste-a-command
+  lure, Recall, and WDigest credential caching. Added links to related skills.
 - **1.0** (2026-10-30): Initial version.
 - **1.1** (2026-10-31): Added small-office and homelab Active Directory domain controller coverage:
   deployment variants for DCs and virtualized DCs, DC detection ports and announcements, read-only DC

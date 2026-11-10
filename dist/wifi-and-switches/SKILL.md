@@ -9,8 +9,8 @@ description: >-
   protocols, VLANs, ports, and config backups, or when a mesh system or switch may have been compromised.
 license: CC-BY-4.0
 metadata:
-  version: "1.0"
-  last_reviewed: "2026-10-30"
+  version: "1.1"
+  last_reviewed: "2026-11-10"
   applies_to: "App- or controller-managed Wi-Fi mesh systems and managed/smart Ethernet switches, any vendor (verify the live firmware, app version, and support status; menus change often)"
   audience: "home, work, homelab"
   finding_prefix: "WIFI"
@@ -44,7 +44,11 @@ applies:
 | [incident-response.md](core/incident-response.md) | The generic Respond playbook |
 
 Mesh- and switch-specific Respond steps are in [incident-response.md](incident-response.md). Vendor
-documentation and standards guidance are in [references.md](references.md).
+documentation and standards guidance are in [references.md](references.md). Related skills:
+[home routers](../home-routers/SKILL.md), [OPNsense](../opnsense/SKILL.md), [pfSense](../pfsense/SKILL.md),
+[MikroTik RouterOS](../mikrotik-routeros/SKILL.md) (the gateway that routes and filters between VLANs),
+[smart home devices](../smart-home-devices/SKILL.md), and
+[IP cameras](../ip-cameras/SKILL.md) (what belongs on an isolated segment).
 
 If a separate firewall (for example OPNsense) sits in front of or behind the mesh, assess it with its own
 skill too. This skill covers the mesh's own routing features only to decide whether they should be on.
@@ -193,7 +197,12 @@ For each SSID and band:
 - 6 GHz (Wi-Fi 6E/7): the Wi-Fi Alliance requires WPA3 or Enhanced Open there, with PMF; WPA2 and
   transition mode aren't allowed on 6 GHz. If a product offers 6 GHz only with WPA3, that is expected.
 - Passphrase: length and whether it is a vendor-printed default from the label (ask the user; don't read
-  it out). Who has it, and when it was last changed (former tenants, contractors, guests).
+  it out). Who has it, and when it was last changed (former tenants, contractors, guests). On WPA2
+  (and WPA3 transition mode, for WPA2 clients), anyone in radio range can capture what they need to
+  guess the passphrase offline at their own pace, with no further contact with the network, so a short
+  or common passphrase is a finding in itself; WPA3-only (SAE) networks resist offline guessing.
+- Per-device or per-group passphrases, where the system offers them: one shared passphrase means one
+  leaked device or departed guest forces a change on everything; separate ones can be revoked singly.
 - **WPS:** on or off, and whether the PIN method (as opposed to push-button) is available. The WPS PIN
   design flaw (CERT VU#723755) lets an attacker in radio range recover the PIN and then the passphrase;
   CERT also noted some devices kept WPS on after the UI showed it disabled.
@@ -436,4 +445,6 @@ works online.
 
 ## Version history
 
+- **1.1** (2026-11-10): Explained why a weak WPA2 passphrase is a finding in itself (offline guessing from
+  a passive capture) and added per-device passphrases as an option to record.
 - **1.0** (2026-10-30): Initial version.

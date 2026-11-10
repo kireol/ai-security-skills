@@ -11,8 +11,8 @@ description: >-
   have leaked or an account may have been compromised.
 license: CC-BY-4.0
 metadata:
-  version: "1.0"
-  last_reviewed: "2026-10-31"
+  version: "1.1"
+  last_reviewed: "2026-11-10"
   applies_to: "AWS (standalone accounts and small AWS Organizations), Microsoft Azure subscriptions with Microsoft Entra ID, Google Cloud projects with or without an organization, DigitalOcean teams, Linode/Akamai Cloud accounts (verify the live consoles and CLI versions; features and defaults change often)"
   audience: "home, work, homelab, web"
   finding_prefix: "CLD"
@@ -336,6 +336,11 @@ Accepted risk).
   policies, Azure Policy allowed locations, Google Cloud resource location organization policy).
 - Recent invoices and the current month's spend by service and region: anything unexplained is a P0
   indicator until explained.
+- Abuse is not only mining. Stolen keys are also used to run hosted AI models on the owner's bill and to
+  send spam or phishing through the provider's email service. Look for model-invocation or AI-service
+  spend, newly enabled models, and quota-increase requests the owner didn't make; and for email-sending
+  activity, new verified sender identities, and requests to raise sending limits. Each is a P0
+  indicator when unexplained, and both leave the account owner responsible for what was sent or spent.
 
 #### H. Logging, threat detection, and notifications
 
@@ -484,4 +489,6 @@ exists with a confirmed alert recipient.
 
 ## Version history
 
+- **1.1** (2026-11-10): Abuse detection now covers stolen keys used for hosted AI models and for bulk
+  email, not only mining.
 - **1.0** (2026-10-31): Initial version.

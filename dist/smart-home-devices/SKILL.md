@@ -11,8 +11,8 @@ description: >-
   smart home device or account may have been compromised.
 license: CC-BY-4.0
 metadata:
-  version: "1.0"
-  last_reviewed: "2026-10-30"
+  version: "1.1"
+  last_reviewed: "2026-11-10"
   applies_to: "Consumer smart home devices, hubs, and bridges from any vendor, plus ESPHome, Tasmota, and Shelly Gen1/Gen2+ firmware (verify each device's current firmware, app, and support status)"
   audience: "home, homelab"
   finding_prefix: "SHD"
@@ -212,6 +212,9 @@ Accepted risk).
 
 #### A. Inventory and identification
 
+- Devices with a camera or microphone used around children (baby monitors, smart toys, kids' watches
+  and tablets): list them first. Assess cameras with [IP cameras](../ip-cameras/SKILL.md),
+  and treat an unsupported or cloud-only one with a shared or default login as a priority finding.
 - Reconcile three lists: router/firewall clients (IP, MAC, OUI, SSID/VLAN), hub and app device lists, and
   what the user remembers. Every network client should map to a known device and owner; every hub should
   map to its end devices.
@@ -559,4 +562,6 @@ settings; the wall button works throughout.
 
 ## Version history
 
+- **1.1** (2026-11-10): Put cameras and microphones used around children first in the inventory, and fixed
+  two dead reference links.
 - **1.0** (2026-10-30): Initial version.

@@ -88,6 +88,10 @@ and recording the time and the command used. Redact secrets.
   recently modified files in system directories (`find /etc /usr /bin /sbin -xdev -newer <reference-file>`
   or with `-mtime`), and hashes of suspicious files (`sha256sum`). Don't upload unknown binaries to public
   scanning services without the user's agreement; hashes are usually enough to look up.
+- **Web shells**, on hosts that serve web applications: script files created or changed recently in web
+  roots, upload folders, and application plugin or theme directories, and files there owned by the web
+  server user that the application did not ship. Compare against the application's own file list or a
+  fresh copy of the same version. Copy what you find; don't open it through the web server.
 - **Configuration:** the firewall ruleset, `sshd -T`, repository lists and keys, and installed package
   list (`dpkg -l` or `rpm -qa`).
 

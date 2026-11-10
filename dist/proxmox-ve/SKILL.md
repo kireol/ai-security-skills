@@ -9,8 +9,8 @@ description: >-
   compromised.
 license: CC-BY-4.0
 metadata:
-  version: "1.0"
-  last_reviewed: "2026-10-30"
+  version: "1.1"
+  last_reviewed: "2026-11-10"
   applies_to: "Proxmox VE 9.x on Debian 13; 8.x is end of life since 2026-08 (verify the live version)"
   audience: "home, work, homelab"
   finding_prefix: "PVE"
@@ -43,7 +43,16 @@ This skill holds only Proxmox VE-specific guidance. It builds on the shared core
 | [incident-response.md](core/incident-response.md) | The generic Respond playbook |
 
 Proxmox VE-specific Respond steps are in [incident-response.md](incident-response.md). Vendor documentation
-and advisories are in [references.md](references.md).
+and advisories are in [references.md](references.md). Related skills:
+[ZFS and Ceph](../zfs-and-ceph/SKILL.md) (its storage),
+[Linux](../linux/SKILL.md) (the Debian base and Linux guests),
+[Docker](../docker/SKILL.md) (Docker inside guests),
+[backup tools](../backup-tools/SKILL.md), [OPNsense](../opnsense/SKILL.md),
+[pfSense](../pfsense/SKILL.md) (virtualized firewalls), [GPU hosts](../gpu-hosts/SKILL.md)
+(GPU passthrough), [out-of-band management](../out-of-band-management/SKILL.md) (the server's
+BMC), [UPS](../ups/SKILL.md) (safe shutdown),
+[identity providers](../identity-providers/SKILL.md) (single sign-on realms), and
+[logging and SIEM](../logging-and-siem/SKILL.md).
 
 ## Proxmox VE-specific principles
 
@@ -490,4 +499,5 @@ backups are listed on the new storage; the test restore boots.
 
 ## Version history
 
+- **1.1** (2026-11-10): Added links to related skills.
 - **1.0** (2026-10-30): Initial version.

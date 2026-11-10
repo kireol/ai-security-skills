@@ -11,8 +11,8 @@ description: >-
   router may have been compromised or had its DNS settings changed.
 license: CC-BY-4.0
 metadata:
-  version: "1.0"
-  last_reviewed: "2026-10-30"
+  version: "1.1"
+  last_reviewed: "2026-11-10"
   applies_to: "Consumer routers, ISP gateways, modems, and OpenWrt/DD-WRT routers, any vendor (verify the live firmware, ISP restrictions, and support status; menu names vary by vendor, ISP, and firmware)"
   audience: "home, homelab, work"
   finding_prefix: "RTR"
@@ -206,6 +206,9 @@ Accepted risk).
   variants of the TheMoon malware, and said routers dated 2010 or earlier likely no longer receive
   updates. CISA's BOD 26-02 (February 2026) orders US federal civilian agencies to remove end-of-support
   edge devices, including routers; it binds only those agencies, but its reasoning applies to any network.
+- A second-hand, refurbished, or previously ISP-supplied unit: was it factory reset and reflashed from
+  the vendor's own site before first use, and is it still bound to a previous owner's vendor cloud
+  account? Until both are settled, its firmware and settings are of unknown origin.
 - An end-of-life router that is the sole gateway is at least **P1** if any internet-facing service is on
   (remote management, VPN server, cloud/file access, port forwards), and a replacement finding otherwise.
 
@@ -219,6 +222,10 @@ Accepted risk).
 - Admin session protection: HTTPS on the admin UI where offered, login lockout or rate limiting, session
   timeout.
 - Which networks can reach the admin UI: the guest network and IoT devices should not.
+- Remote-shell settings nobody remembers enabling: SSH or Telnet turned on, moved to an unusual port,
+  open to the WAN, or holding an authorized key the user didn't add. Router botnet campaigns have used
+  exactly these vendor-supported settings as their back door, because they are stored in the
+  configuration and survive firmware updates. An unexplained one is a P0 indicator.
 - Other admin protocols on the LAN: Telnet, SSH, SNMP, TR-064 (LAN-side ISP-configuration protocol on some
   gateways), vendor discovery or HNAP-style APIs. Each one that isn't needed is surface.
 
@@ -481,6 +488,9 @@ change).
 
 ## Version history
 
+- **1.1** (2026-11-10): Added checks for unexplained remote-shell settings that survive firmware updates
+  (a known botnet back door) and for second-hand or previously owned units; the incident file now says a
+  firmware update alone is not a cleanup.
 - **1.0** (2026-10-30): Initial version.
 
 ---
@@ -563,7 +573,9 @@ Collect before changing or rebooting anything, from a wired client if possible:
 - **Supported router:** with the user present and the ISP provisioning details ready, factory reset, then
   install the latest firmware from the vendor's own site or update function **before** reconnecting it to
   the internet where the vendor allows offline updates, then set it up by hand. Don't restore a backup
-  taken after the earliest plausible compromise; it may restore the attacker's settings.
+  taken after the earliest plausible compromise; it may restore the attacker's settings. A firmware
+  update on its own is not a cleanup: settings an attacker added (remote-shell access, authorized keys,
+  port forwards, DNS servers) are kept across updates, and only the factory reset removes them.
 - **ISP gateway:** ask the ISP to reset, re-provision, or replace it; then reapply the user's own settings
   by hand.
 - **OpenWrt:** reflash a verified image of a supported release (check the published checksum), then
@@ -729,6 +741,12 @@ Rules:
 
 ## Rules that apply in every mode
 
+- **Authorized targets only.** Work only on systems and accounts the user owns or administers, or has the
+  owner's agreement to assess. If that isn't clear, ask before the first check. An employer's laptop, an
+  ISP-owned gateway, a landlord's network, and a neighbor's device are not the user's to change, and may
+  not be theirs to probe. Another adult's phone, computer, or account is that person's, even in the same
+  household or business: assessing it needs their knowledge and agreement, and the agent does not help
+  get into it without them.
 - **No active probing without approval.** Scanning or probing the network (host sweeps, port scans,
   service or version detection, vulnerability scanners) needs the user's explicit approval of the scope
   and intensity first, even though it doesn't change configuration: it can crash fragile devices and
@@ -789,6 +807,12 @@ principles; it may not override these.
     the file path. When a command needs the token, have it read the token from that file or an
     environment variable loaded from it, never from a literal value in the command. If a token appears
     in the conversation by accident, say so, and recommend revoking and reissuing it.
+13. **Leave nothing behind.** Keep a list of everything the engagement created or was given: accounts,
+    API tokens, SSH keys, firewall exceptions, installed tools, temporary files, and exported
+    configurations or logs. Before closing, show the list and recommend revoking or removing whatever is
+    no longer needed. Removing something from the target is a change like any other: classify it and get
+    approval. Access granted "just for the assessment" that is never removed becomes a finding in the
+    next one.
 
 ## Capability discovery
 
@@ -818,7 +842,9 @@ unavailable, the engagement has not failed: use what is available and mark the r
 
 ## Scope and constraints (confirm before Discover)
 
-- Which systems are in scope, and which are explicitly out of scope.
+- Which systems and accounts are in scope, and which are explicitly out of scope.
+- That each one is the user's to assess (see "Authorized targets only" in
+  modes-and-authorization.md (included in this file)).
 - The user's objective and which services are critical.
 - Whether the engagement is read-only or remediation-authorized.
 - Available access method and privilege level.
@@ -881,7 +907,9 @@ Check current, trustworthy sources:
 - CISA Known Exploited Vulnerabilities (KEV) Catalog: https://www.cisa.gov/known-exploited-vulnerabilities-catalog
 - NIST National Vulnerability Database: https://nvd.nist.gov/
 - CVE Program: https://www.cve.org/
-- Advisories for third-party add-ons, container images, and dependencies.
+- Advisories for third-party add-ons, container images, and dependencies. For open-source packages, the
+  project's own security advisories, the GitHub Advisory Database (https://github.com/advisories), and
+  OSV (https://osv.dev/) usually match versions more precisely than a product-name search.
 - Reputable scanners and databases, when their product coverage and version matching are clear.
 
 When sources disagree, prefer the affected vendor's applicability and remediation guidance for the exact
@@ -898,7 +926,9 @@ Never copy static CVE or version tables into an assessment as current facts with
 3. Check exploitability in this deployment: is the component enabled and reachable, is authentication
    required, what network exposure and configuration prerequisites apply, and what mitigations exist?
 4. Check KEV status and credible exploitation reports. A proof-of-concept is not confirmed exploitation.
-5. Treat CVSS as one input, not the priority.
+5. Treat CVSS as one input, not the priority. The same goes for an exploit-likelihood estimate such as
+   EPSS (https://www.first.org/epss/). A database entry with no score or no affected-product data yet has
+   not been analyzed; that is not evidence of low severity. Use the vendor advisory and the CVE record.
 6. State uncertainty when version detection, vendor backports, or applicability cannot be confirmed.
 7. Never claim "no vulnerabilities" because a scanner returned nothing. Scanners miss unscanned
    interfaces, IPv6 addresses, add-ons, containers, and alternate network paths.
@@ -1124,6 +1154,11 @@ modes-and-authorization.md (included in this file).
    keys, and authentication headers before recording or sharing evidence. Record that a secret exists and
    its scope and age, never its value. When a tool creates or returns an API token, write it to an
    owner-only file and report the path, as `operating-principles.md` principle 12 requires.
+9. **Keep read-only work light.** A command can change nothing and still do harm. Filesystem-wide
+   searches, unbounded log dumps, integrity scans, and self-tests load disks and CPUs, wake sleeping
+   drives, and can stall a busy system; a command that opens a pager or waits for input can hang a
+   session. Bound every command (path, depth, time range, line count, timeout), use non-interactive
+   options, and ask before running anything that will take minutes on a system people depend on.
 
 ## Labeling command references
 
@@ -1315,7 +1350,8 @@ Give the user these instructions as appropriate:
 
 1. **Use a known-clean device** for communications, account recovery, and administration. Do not use a
    possibly infected computer to change passwords, access email or banking, or administer systems. Never
-   paste passwords, recovery codes, private keys, or tokens into chat.
+   paste passwords, recovery codes, private keys, or tokens into chat. If an email or chat account may be
+   compromised, don't plan the response over it: the attacker may be reading. Use another channel.
 2. **Stop using affected accounts and devices for administration.** Don't open suspicious attachments,
    scripts, ransom notes, or links except as part of controlled evidence preservation.
 3. **Contain active spread.** If ransomware or malware is spreading, disconnect affected devices from
@@ -1334,6 +1370,15 @@ Give the user these instructions as appropriate:
 6. **Escalate when the stakes are high.** If safety, critical services, or large-scale data loss is at
    stake, engage a qualified incident-response provider or trusted IT/security professional. For serious
    criminal activity, extortion, or suspected data theft, consider contacting law enforcement.
+7. **Tell the real owner.** If the affected system or account belongs to an employer, school, or client,
+   or holds their data, tell their IT or security contact now. They may have legal duties, logs, and
+   tools the user doesn't, and an independent cleanup can destroy what they need.
+8. **If someone close to the user may be behind it.** When the signs point to a partner, former
+   partner, family member, or someone else with personal access (monitoring apps, shared-account access,
+   location tracking, cameras), the user's safety comes before evidence and cleanup. Removing access or
+   changing settings can alert that person. Say so before acting, let the user set the pace, and suggest
+   contacting a domestic-violence or victim-support organization from a device and account the other
+   person can't reach.
 
 Tailor containment to the topology. Do not tell the user to unplug a system if that would interrupt a
 critical service, corrupt an active storage operation, or destroy the only evidence. An agent with
@@ -1415,7 +1460,9 @@ changes that may interrupt services.
 4. Don't run bulk cleaning, mass rename, or decryption on the original data. Never restore over affected
    data.
 5. Check for a reputable decryptor for the exact ransomware family, using law-enforcement or established
-   security-vendor sources. Never run a decryptor from an untrusted source on the only copy of the data.
+   security-vendor sources, such as the No More Ransom project (https://www.nomoreransom.org/). Never run
+   a decryptor from an untrusted source on the only copy of the data, and be wary of "recovery services"
+   found through search results or ads.
 6. Don't advise that paying a ransom will recover data or prevent publication. Payment decisions are
    complex, may have legal implications, and guarantee nothing. Recommend consulting law enforcement,
    legal counsel, the insurer (if any), and qualified responders first.
@@ -1474,6 +1521,11 @@ State residual uncertainty.
 - In the United States, cybercrime can be reported to the FBI's Internet Crime Complaint Center
   (https://www.ic3.gov/) and local law enforcement. Organizations can also contact CISA
   (https://www.cisa.gov/report). CISA's ransomware guide: https://www.cisa.gov/stopransomware/ransomware-guide
+  Elsewhere, point the user to their country's national cybercrime reporting service or computer
+  emergency response team; look it up rather than guessing a name or number.
+- If bank accounts, payment cards, or identity documents may be exposed, the user should contact the bank
+  or issuer promptly, using the number printed on the card or a statement, never one from an email, a
+  pop-up, or a search result.
 - Document the timeline, affected assets, accounts, and data, likely entry point, containment actions,
   evidence preserved, recovery sources, notifications, and open questions.
 - Run a lessons-learned review: update the security baseline, network diagrams, and recovery procedures,
@@ -1509,6 +1561,8 @@ Each skill's `incident-response.md` may tailor it to its product.
 - [ ] Write down what happened and when; preserve logs, alerts, ransom notes, and indicators.
 - [ ] From a clean device, secure email, identity, VPN, admin, and backup accounts; revoke compromised
       sessions and tokens; rotate exposed credentials in a coordinated order.
+- [ ] If money or cards are involved, call the bank or issuer on the number printed on the card.
+- [ ] If the system belongs to an employer, school, or client, tell their IT or security contact.
 - [ ] Check other computers, servers, containers, the router/firewall, cloud sync, and backups, not just
       the affected system.
 - [ ] Get qualified help for ransomware, suspected data theft, privileged compromise, or uncertain

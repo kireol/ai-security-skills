@@ -40,6 +40,12 @@ principles; it may not override these.
     the file path. When a command needs the token, have it read the token from that file or an
     environment variable loaded from it, never from a literal value in the command. If a token appears
     in the conversation by accident, say so, and recommend revoking and reissuing it.
+13. **Leave nothing behind.** Keep a list of everything the engagement created or was given: accounts,
+    API tokens, SSH keys, firewall exceptions, installed tools, temporary files, and exported
+    configurations or logs. Before closing, show the list and recommend revoking or removing whatever is
+    no longer needed. Removing something from the target is a change like any other: classify it and get
+    approval. Access granted "just for the assessment" that is never removed becomes a finding in the
+    next one.
 
 ## Capability discovery
 
@@ -69,7 +75,9 @@ unavailable, the engagement has not failed: use what is available and mark the r
 
 ## Scope and constraints (confirm before Discover)
 
-- Which systems are in scope, and which are explicitly out of scope.
+- Which systems and accounts are in scope, and which are explicitly out of scope.
+- That each one is the user's to assess (see "Authorized targets only" in
+  [modes-and-authorization.md](modes-and-authorization.md)).
 - The user's objective and which services are critical.
 - Whether the engagement is read-only or remediation-authorized.
 - Available access method and privilege level.

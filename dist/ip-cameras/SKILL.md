@@ -9,8 +9,8 @@ description: >-
   settings, or when a camera may have been compromised or joined a botnet.
 license: CC-BY-4.0
 metadata:
-  version: "1.0"
-  last_reviewed: "2026-10-30"
+  version: "1.1"
+  last_reviewed: "2026-11-10"
   applies_to: "Wired and Wi-Fi IP cameras, doorbells, and bundled DVR/NVR recorders from any vendor (verify each model's current firmware and support status)"
   audience: "home, homelab, work"
   finding_prefix: "CAM"
@@ -161,6 +161,11 @@ Accepted risk).
 
 #### B. Accounts and authentication
 
+- Cameras and recorders that were never set up. Many models ship "inactive" or "uninitialized" and take
+  whatever admin password the first person to reach them sets, from the web page or the vendor's
+  discovery tool. A spare, newly added, or factory-reset camera left on the network in that state can
+  be claimed by any device on the same segment. Ask about spares and recent resets, and check the
+  vendor tool's status column; don't activate one yourself.
 - Admin password: ask how it was set. Unique per camera? Changed from any default or setup-sticker value?
   Stored in a password manager? Never test it.
 - Additional users on the camera: who they are, their rights, and whether any are left over from an
@@ -465,4 +470,6 @@ egress attempts; the NVR still records the camera.
 
 ## Version history
 
+- **1.1** (2026-11-10): Added unactivated cameras (claimable by the first device that sets a password) and
+  replaced a dead vendor advisory link.
 - **1.0** (2026-10-30): Initial version.

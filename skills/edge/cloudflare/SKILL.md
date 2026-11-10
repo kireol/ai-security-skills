@@ -8,8 +8,8 @@ description: >-
   self-hosted apps, or when a Cloudflare account, API token, or tunnel may have been compromised.
 license: CC-BY-4.0
 metadata:
-  version: "1.0"
-  last_reviewed: "2026-10-30"
+  version: "1.1"
+  last_reviewed: "2026-11-10"
   applies_to: "Cloudflare dashboard, DNS, Zero Trust (Cloudflare One) Access and Tunnel, cloudflared releases within Cloudflare's one-year support window (verify the live dashboard; menu names change often)"
   audience: "home, work, homelab, web"
   finding_prefix: "CF"
@@ -40,7 +40,12 @@ This skill holds only Cloudflare-specific guidance. It builds on the shared core
 | [incident-response.md](../../../core/incident-response.md) | The generic Respond playbook |
 
 Cloudflare-specific Respond steps are in [incident-response.md](incident-response.md). Vendor documentation
-and advisories are in [references.md](references.md).
+and advisories are in [references.md](references.md). Related skills: [tunnels](../tunnels/SKILL.md) (other
+tunnel and overlay products), [domain registrars](../../cloud/domain-registrars/SKILL.md) (the registrar
+account and DNS), [web servers](../../web/web-servers/SKILL.md) (the origin server),
+[identity providers](../../identity/identity-providers/SKILL.md) (the identity provider behind Access),
+[MFA](../../identity/mfa/SKILL.md), and [self-hosted web apps](../../web-apps/self-hosted-web-apps/SKILL.md)
+(the apps being published).
 
 ## Cloudflare-specific principles
 
@@ -478,4 +483,5 @@ breaks).
 
 ## Version history
 
+- **1.1** (2026-11-10): Added links to related skills.
 - **1.0** (2026-10-30): Initial version.

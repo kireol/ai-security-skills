@@ -31,7 +31,8 @@ Give the user these instructions as appropriate:
 
 1. **Use a known-clean device** for communications, account recovery, and administration. Do not use a
    possibly infected computer to change passwords, access email or banking, or administer systems. Never
-   paste passwords, recovery codes, private keys, or tokens into chat.
+   paste passwords, recovery codes, private keys, or tokens into chat. If an email or chat account may be
+   compromised, don't plan the response over it: the attacker may be reading. Use another channel.
 2. **Stop using affected accounts and devices for administration.** Don't open suspicious attachments,
    scripts, ransom notes, or links except as part of controlled evidence preservation.
 3. **Contain active spread.** If ransomware or malware is spreading, disconnect affected devices from
@@ -50,6 +51,15 @@ Give the user these instructions as appropriate:
 6. **Escalate when the stakes are high.** If safety, critical services, or large-scale data loss is at
    stake, engage a qualified incident-response provider or trusted IT/security professional. For serious
    criminal activity, extortion, or suspected data theft, consider contacting law enforcement.
+7. **Tell the real owner.** If the affected system or account belongs to an employer, school, or client,
+   or holds their data, tell their IT or security contact now. They may have legal duties, logs, and
+   tools the user doesn't, and an independent cleanup can destroy what they need.
+8. **If someone close to the user may be behind it.** When the signs point to a partner, former
+   partner, family member, or someone else with personal access (monitoring apps, shared-account access,
+   location tracking, cameras), the user's safety comes before evidence and cleanup. Removing access or
+   changing settings can alert that person. Say so before acting, let the user set the pace, and suggest
+   contacting a domestic-violence or victim-support organization from a device and account the other
+   person can't reach.
 
 Tailor containment to the topology. Do not tell the user to unplug a system if that would interrupt a
 critical service, corrupt an active storage operation, or destroy the only evidence. An agent with
@@ -131,7 +141,9 @@ changes that may interrupt services.
 4. Don't run bulk cleaning, mass rename, or decryption on the original data. Never restore over affected
    data.
 5. Check for a reputable decryptor for the exact ransomware family, using law-enforcement or established
-   security-vendor sources. Never run a decryptor from an untrusted source on the only copy of the data.
+   security-vendor sources, such as the No More Ransom project (https://www.nomoreransom.org/). Never run
+   a decryptor from an untrusted source on the only copy of the data, and be wary of "recovery services"
+   found through search results or ads.
 6. Don't advise that paying a ransom will recover data or prevent publication. Payment decisions are
    complex, may have legal implications, and guarantee nothing. Recommend consulting law enforcement,
    legal counsel, the insurer (if any), and qualified responders first.
@@ -190,6 +202,11 @@ State residual uncertainty.
 - In the United States, cybercrime can be reported to the FBI's Internet Crime Complaint Center
   (https://www.ic3.gov/) and local law enforcement. Organizations can also contact CISA
   (https://www.cisa.gov/report). CISA's ransomware guide: https://www.cisa.gov/stopransomware/ransomware-guide
+  Elsewhere, point the user to their country's national cybercrime reporting service or computer
+  emergency response team; look it up rather than guessing a name or number.
+- If bank accounts, payment cards, or identity documents may be exposed, the user should contact the bank
+  or issuer promptly, using the number printed on the card or a statement, never one from an email, a
+  pop-up, or a search result.
 - Document the timeline, affected assets, accounts, and data, likely entry point, containment actions,
   evidence preserved, recovery sources, notifications, and open questions.
 - Run a lessons-learned review: update the security baseline, network diagrams, and recovery procedures,
@@ -225,6 +242,8 @@ Each skill's `incident-response.md` may tailor it to its product.
 - [ ] Write down what happened and when; preserve logs, alerts, ransom notes, and indicators.
 - [ ] From a clean device, secure email, identity, VPN, admin, and backup accounts; revoke compromised
       sessions and tokens; rotate exposed credentials in a coordinated order.
+- [ ] If money or cards are involved, call the bank or issuer on the number printed on the card.
+- [ ] If the system belongs to an employer, school, or client, tell their IT or security contact.
 - [ ] Check other computers, servers, containers, the router/firewall, cloud sync, and backups, not just
       the affected system.
 - [ ] Get qualified help for ransomware, suspected data theft, privileged compromise, or uncertain

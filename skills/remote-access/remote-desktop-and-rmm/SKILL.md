@@ -9,8 +9,8 @@ description: >-
   keys, or when a remote-access tool may have been abused or installed by an attacker.
 license: CC-BY-4.0
 metadata:
-  version: "1.0"
-  last_reviewed: "2026-10-31"
+  version: "1.1"
+  last_reviewed: "2026-11-10"
   applies_to: "Apache Guacamole 1.5 and later, RustDesk client and server (OSS and Pro), MeshCentral, Tactical RMM (verify the live version of each)"
   audience: "home, work, homelab"
   finding_prefix: "RMM"
@@ -170,6 +170,11 @@ Accepted risk). Assess each tool separately; then domain I across all endpoints.
   and `guacadmin` was disabled or removed. Never test by logging in. Check for the TOTP extension (or
   SSO with MFA) and, on 1.6 and later, whether TOTP is disabled for any user or group; check the
   brute-force ban extension or a proxy rate limit.
+- **Guacamole behind single sign-on:** if the header-authentication extension is installed, Guacamole
+  trusts a username sent in an HTTP header by the reverse proxy. Anyone who can reach Guacamole's own
+  port directly, around the proxy, can send that header and become any user, including an administrator.
+  Check that the application port is reachable only from the proxy, and that the proxy strips the header
+  from incoming requests before setting it.
 - **MeshCentral:** if a server has no accounts, the first account created becomes the site administrator.
   Check that setup is complete, that `newAccounts` (self-registration) is disabled in each domain unless
   wanted, which users are site administrators, and whether two-factor authentication is required
@@ -408,4 +413,6 @@ other steps are rolled back).
 
 ## Version history
 
+- **1.1** (2026-11-10): Added the Guacamole header-authentication bypass: with that extension, direct
+  access to the application port lets a client claim any username.
 - **1.0** (2026-10-31): Initial version.

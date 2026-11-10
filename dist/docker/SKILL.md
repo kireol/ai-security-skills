@@ -8,8 +8,8 @@ description: >-
   networks, volumes, or logging, or when a container or container host may have been compromised.
 license: CC-BY-4.0
 metadata:
-  version: "1.0"
-  last_reviewed: "2026-10-30"
+  version: "1.1"
+  last_reviewed: "2026-11-10"
   applies_to: "Docker Engine 28.x-29.x, Docker Desktop 4.x, Podman 4.x-5.x, Docker Compose v2 (verify the installed versions; defaults change between releases)"
   audience: "home, work, homelab, web"
   finding_prefix: "DKR"
@@ -42,7 +42,18 @@ This skill holds only container-specific guidance. It builds on the shared core,
 | [incident-response.md](core/incident-response.md) | The generic Respond playbook |
 
 Container-specific Respond steps are in [incident-response.md](incident-response.md). Vendor documentation
-and advisories are in [references.md](references.md).
+and advisories are in [references.md](references.md). Related skills:
+[Linux](../linux/SKILL.md) (the host), [web servers](../web-servers/SKILL.md)
+(reverse proxies in front of containers),
+[self-hosted web apps](../self-hosted-web-apps/SKILL.md) (apps in containers that have no skill
+of their own), [Synology DSM](../synology-dsm/SKILL.md) (Container Manager),
+[QNAP](../qnap-qts/SKILL.md) (Container Station), [Unraid](../unraid/SKILL.md),
+[TrueNAS](../truenas/SKILL.md) (NAS container features),
+[Proxmox VE](../proxmox-ve/SKILL.md) (Docker inside VMs or LXC containers),
+[GPU hosts](../gpu-hosts/SKILL.md) (GPU containers), [tunnels](../tunnels/SKILL.md),
+[Cloudflare](../cloudflare/SKILL.md) (publishing a container without a port forward),
+[backup tools](../backup-tools/SKILL.md) (volume backups), and
+[code hosting and CI](../code-hosting-and-ci/SKILL.md) (registries and image builds).
 
 This is the shared container skill. Product skills that embed a container manager (for example the
 Synology DSM skill's Container Manager domain) cover their own UI, packages, and storage; use this skill
@@ -568,4 +579,5 @@ dashboard works over its new path; all containers are back up.
 
 ## Version history
 
+- **1.1** (2026-11-10): Added links to related skills.
 - **1.0** (2026-10-30): Initial version.

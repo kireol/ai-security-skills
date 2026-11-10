@@ -17,6 +17,8 @@ other PCs with the same admin password). Plan to scope beyond the machine from t
     bank while they watched.
   - *Ransomware*: ransom notes, files with new extensions, shadow copies deleted, Defender disabled,
     sometimes BitLocker enabled by the attacker with a key the owner doesn't have.
+  - *Pasted command*: a web page, message, or caller had the user paste a command into the Run box or
+    PowerShell. Treat as an infostealer infection even if nothing visible happened.
   - *Infostealer*: a cracked game or fake installer, followed by account takeovers elsewhere (email,
     social media, crypto wallets) even though the PC "seems fine".
   - *Exposed RDP*: successful external logons (event 4624 logon type 10) after many failures.

@@ -16,11 +16,19 @@ applies. This file adds only suite-specific steps for a compromised mailbox, adm
      `Revoke-MgUserSignInSession`. Google: reset the user's sign-in cookies in the Admin console. A
      password reset alone doesn't end existing sessions everywhere.
   3. Review and remove MFA methods the user didn't register (attackers add their own phone or
-     authenticator), then require re-registration.
+     authenticator), then require re-registration. Also check for devices registered or joined to the
+     directory during the attacker's window (a registered device can keep issuing tokens after a
+     password reset) and remove those the user doesn't recognize.
   4. Block sign-in temporarily if the account is actively abused and the user can live without it.
 - **Stop mail leaving.** Disable malicious inbox rules and mailbox forwarding *after* exporting them (see
   evidence below). Set the tenant external forwarding policy to Off. Check for transport or routing rules
   the attacker may have added with an admin account.
+- **Revoking sessions is not instant everywhere.** An access token already issued keeps working until
+  it expires (commonly about an hour) unless the service supports continuous access evaluation. Assume
+  the attacker can still act for that window, and watch the audit log through it.
+- **If the user approved a prompt they didn't start** (a device code or a sign-in request), or entered
+  credentials on a look-alike page, treat the session as stolen even though MFA "worked": do steps 1 to
+  3 anyway.
 - **Revoke malicious app grants.** Microsoft: remove the OAuth2 permission grant and disable the
   enterprise application (record its app ID first). Google: block the app in API controls and remove the
   user's token. App access survives a password reset unless revoked.

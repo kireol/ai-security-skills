@@ -16,7 +16,7 @@ Last verified: 2026-10-31
   https://security-tracker.debian.org/tracker/
 - Debian LTS (releases, dates, supported architectures) and LTS advisories (DLA):
   https://wiki.debian.org/LTS and https://www.debian.org/lts/security/
-- Securing Debian manual: https://www.debian.org/doc/manuals/securing-debian-manual/
+- Debian wiki, Hardening (the older Securing Debian manual is no longer published): https://wiki.debian.org/Hardening
 - Automatic updates (unattended-upgrades): https://wiki.debian.org/UnattendedUpgrades
 - AppArmor on Debian: https://wiki.debian.org/AppArmor/HowToUse
 - Release notes (per release; e.g. bookworm's notes on rsyslog no longer installed by default and journal
@@ -43,7 +43,7 @@ Last verified: 2026-10-31
   https://docs.redhat.com/en/documentation/red_hat_enterprise_linux/9/html/using_selinux/
 - Automating updates with dnf-automatic:
   https://docs.redhat.com/en/documentation/red_hat_enterprise_linux/9/html/managing_software_with_the_dnf_tool/assembly_automating-software-updates-in-rhel-9_managing-software-with-the-dnf-tool
-- Rocky Linux release and support information: https://wiki.rockylinux.org/rocky/version/
+- Rocky Linux release and support information: https://docs.rockylinux.org/releases/
 - AlmaLinux release information: https://wiki.almalinux.org/release-notes/
 - Fedora release life cycle: https://docs.fedoraproject.org/en-US/releases/lifecycle/
 

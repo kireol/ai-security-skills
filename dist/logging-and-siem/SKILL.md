@@ -10,8 +10,8 @@ description: >-
   tampered with.
 license: CC-BY-4.0
 metadata:
-  version: "1.0"
-  last_reviewed: "2026-10-31"
+  version: "1.1"
+  last_reviewed: "2026-11-10"
   applies_to: "Wazuh 4.x and later, Graylog, Elasticsearch/Kibana 8.x and later, OpenSearch 2.x/3.x, CrowdSec Security Engine, Fail2ban (verify the live version of each)"
   audience: "home, work, homelab"
   finding_prefix: "SIEM"
@@ -273,6 +273,11 @@ Accepted risk).
   path inside a container is a common miss).
 - **Allowlists:** the owner's management addresses and VPN range allowlisted so a forged attack can't lock
   them out; but not so broad that whole segments are exempt.
+- **Whose address gets banned.** Behind a reverse proxy, tunnel, or CDN, the service's log shows the
+  proxy's address unless the proxy passes the client's and the service is set to trust it. Banning on
+  those logs blocks the proxy, which means everyone, on the first failed login; and if the service
+  trusts a forwarded address from anyone, an attacker can get any address banned. Check one real log
+  line from an outside client before trusting any ban rule.
 - Bouncer placement: a bouncer on the firewall or reverse proxy blocks at the edge; a host-only bouncer
   protects only that host.
 
@@ -449,4 +454,6 @@ even if enabling security is rolled back).
 
 ## Version history
 
+- **1.1** (2026-11-10): Added a check that ban tools see the real client address behind a proxy, not the
+  proxy's.
 - **1.0** (2026-10-31): Initial version.

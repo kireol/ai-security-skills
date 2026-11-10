@@ -7,8 +7,8 @@ description: >-
   backups, or logging, or when an OPNsense firewall may have been compromised.
 license: CC-BY-4.0
 metadata:
-  version: "1.0"
-  last_reviewed: "2026-10-30"
+  version: "1.1"
+  last_reviewed: "2026-11-10"
   applies_to: "OPNsense 26.x community and business editions (verify the live version; menus change between series)"
   audience: "home, work, homelab"
   finding_prefix: "OPN"
@@ -39,7 +39,17 @@ This skill holds only OPNsense-specific guidance. It builds on the shared core, 
 | [incident-response.md](core/incident-response.md) | The generic Respond playbook |
 
 OPNsense-specific Respond steps are in [incident-response.md](incident-response.md). Vendor documentation
-and advisories are in [references.md](references.md).
+and advisories are in [references.md](references.md). Related skills:
+[VPN servers](../vpn-servers/SKILL.md) (WireGuard and OpenVPN in depth),
+[DNS filtering](../dns-filtering/SKILL.md) (a filtering resolver on or beside the firewall),
+[Wi-Fi and switches](../wifi-and-switches/SKILL.md) (VLANs only isolate if the switches and access points
+carry them correctly), [home routers](../home-routers/SKILL.md) (the upstream router in a double-NAT
+setup), [Proxmox VE](../proxmox-ve/SKILL.md) (a virtualized firewall's host),
+[web servers](../web-servers/SKILL.md) (reverse-proxy plugins),
+[tunnels](../tunnels/SKILL.md) and [Cloudflare](../cloudflare/SKILL.md) (alternatives to
+port forwards, and overlay-network plugins), [logging and SIEM](../logging-and-siem/SKILL.md)
+(the receiver for remote logs), and [pfSense](../pfsense/SKILL.md) (the sibling platform; its menus and
+commands do not carry over).
 
 ## OPNsense-specific principles
 
@@ -93,7 +103,11 @@ principles). Mark anything you can't inspect **Not assessed**.
 
 Prefer the web GUI, the documented REST API, or user-run checks. For API access, ask the user to create a
 dedicated user with only the privileges needed for reading, and remember that some privileges are broader
-than they look (domain B). If shell access is available (SSH, or console option 8), these are *candidate*
+than they look (domain B). OPNsense delivers a new API key once, as a downloaded text file holding the
+key and its secret; the secret can't be shown again. Have the user keep that file owner-only, outside any
+repository or synced folder, and give you only its path. Never ask for its contents, print it, or put the
+key or secret on a command line (core operating principle 12). Delete the key when the engagement ends.
+If shell access is available (SSH, or console option 8), these are *candidate*
 read-only commands, **not yet verified** on every version. Check each exists first.
 
 ```sh
@@ -247,6 +261,27 @@ Accepted risk).
   whether the hypervisor's own management interface is reachable from untrusted segments.
 - Power protection, and what happens to the network if the firewall fails (DNS, DHCP, VPN all stop).
 
+#### K. Scheduled tasks and persistence surfaces
+
+Anything here that nobody recognizes is a possible indicator of compromise, not a cleanup task: preserve
+it and switch to Respond before removing it.
+
+- Cron jobs in the GUI (System → Settings → Cron): each job's command, parameters, and who added it
+  (configuration history). GUI jobs can only run commands registered in the backend, so with shell access
+  also list the backend action files (`/usr/local/opnsense/service/conf/actions.d/`) and look for any that
+  don't belong to OPNsense or an installed plugin.
+- Tasks outside the GUI, with shell access: the system crontab and per-user crontabs, and startup hook
+  scripts under `/usr/local/etc/rc.syshook.d/` (they run at boot, on every configuration change, and on
+  gateway events). `pkg which <file>` shows which package owns a file; a script in these directories that
+  no package owns was put there by hand.
+- Packages installed with `pkg` directly rather than as plugins, and files that no longer match their
+  package. The firmware **health audit** (System → Firmware → Status) is the supported check; confirm
+  what it covers on the installed version, and never read a clean result as proof of integrity.
+- Tunables (System → Settings → Tunables) changed from their defaults, and who changed them.
+- Monitoring or alerting features configured to run a script or command when a test fires.
+- SSH authorized keys and API keys (domain B) are persistence surfaces too: check their creation dates
+  against the configuration history.
+
 ---
 
 ## Recommend
@@ -290,6 +325,8 @@ The firewall sits under everything, so list what depends on the setting before r
 | No encrypted off-box backup | Configure an encrypted backup to a separate system. | The destination must be protected; it holds every secret. |
 | No remote logging | Send logs to a separate syslog server (TLS if possible). | Needs a log receiver. |
 | Outdated firmware | Update within the current series; plan major upgrades with a backup or snapshot. | Reboot; brief outage. |
+| Unrecognized cron job, hook script, backend action, package, key, or tunable | Don't remove it. Record it, ask the user whether they or a plugin added it, and if nobody did, switch to Respond. | Deleting it first destroys evidence and can leave other persistence in place. |
+| API key no longer needed (including one made for this assessment) | Delete the key; give automation its own least-privilege user. | Whatever still uses the key stops working. |
 
 Changing ports, hiding the login page, and geoblocking are supplementary only. Never recommend them as
 the main fix.
@@ -376,4 +413,8 @@ instead if remote access breaks).
 
 ## Version history
 
+- **1.1** (2026-11-10): Added a domain for scheduled tasks and persistence surfaces (cron, backend
+  actions, startup hooks, unowned packages and files, tunables), how to handle the once-only API key
+  file, and links to related skills. Version-specific claims re-verified against the 26.1 and 26.7
+  release notes.
 - **1.0** (2026-10-30): Initial version.

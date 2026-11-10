@@ -9,8 +9,8 @@ description: >-
   TV or streaming box may have been compromised or recruited into a botnet.
 license: CC-BY-4.0
 metadata:
-  version: "1.0"
-  last_reviewed: "2026-10-30"
+  version: "1.1"
+  last_reviewed: "2026-11-10"
   applies_to: "Current and recent smart TV and streaming-device platforms (verify the live OS version; menus change between releases and brands)"
   audience: "home, work"
   finding_prefix: "TV"
@@ -44,7 +44,13 @@ always applies:
 | [incident-response.md](core/incident-response.md) | The generic Respond playbook |
 
 Smart-TV-specific Respond steps are in [incident-response.md](incident-response.md). Vendor documentation,
-regulator findings, and advisories are in [references.md](references.md).
+regulator findings, and advisories are in [references.md](references.md). Related skills:
+[home routers](../home-routers/SKILL.md) (the router or),
+[Wi-Fi and switches](../wifi-and-switches/SKILL.md) (mesh system that puts TVs on a guest or IoT
+network), [DNS filtering](../dns-filtering/SKILL.md) (blocking tracking domains),
+[media servers](../media-servers/SKILL.md) (the server behind the TV's media apps),
+[phones](../phones/SKILL.md) (the vendor app and account), and
+[game consoles](../game-consoles/SKILL.md) (the sibling skill for consoles).
 
 ## Smart-TV-specific principles
 
@@ -407,4 +413,5 @@ installed-apps list for sideloaded apps; later, move the device to the media seg
 
 ## Version history
 
+- **1.1** (2026-11-10): Added links to related skills.
 - **1.0** (2026-10-30): Initial version.

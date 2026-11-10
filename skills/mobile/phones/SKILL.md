@@ -16,8 +16,8 @@ description: >-
   Shared iPad), or when a phone, a tablet, or its accounts may have been compromised, lost, or stolen.
 license: CC-BY-4.0
 metadata:
-  version: "1.1"
-  last_reviewed: "2026-10-31"
+  version: "1.2"
+  last_reviewed: "2026-11-10"
   applies_to: "iPhone on iOS, iPad on iPadOS, and Android phones and tablets (Pixel, Pixel Tablet, Samsung Galaxy and Galaxy Tab, and other Google-certified devices) on versions still receiving security updates; feature names and menu paths change between releases, makers, and between phones and tablets, so verify on the live device"
   audience: "home, work"
   finding_prefix: "PHN"
@@ -56,7 +56,14 @@ This skill holds only phone-specific guidance. It builds on the shared core, whi
 | [incident-response.md](../../../core/incident-response.md) | The generic Respond playbook |
 
 Phone-specific Respond steps are in [incident-response.md](incident-response.md). Vendor documentation,
-government guidance, and survivor-safety resources are in [references.md](references.md).
+government guidance, and survivor-safety resources are in [references.md](references.md). Related skills:
+[MFA](../../identity/mfa/SKILL.md) (the phone as an authenticator),
+[password managers](../../identity/password-managers/SKILL.md),
+[productivity suites](../../cloud/productivity-suites/SKILL.md) (the Google or Microsoft account behind the
+phone), [cloud storage](../../cloud/cloud-storage/SKILL.md) (iCloud and Google backups),
+[macOS](../../operating-systems/macos/SKILL.md) (a Mac on the same Apple Account), and
+[smart home devices](../../home-automation/smart-home-devices/SKILL.md) (the devices the phone's apps
+control).
 
 ## Phone-specific principles
 
@@ -379,6 +386,12 @@ Accepted risk).
 - **Signs of a past or ongoing swap:** sudden "No service" or "SOS only" while others have signal, carrier
   messages about a SIM or eSIM change the user didn't make (a **P0 indicator**, see Respond).
 - **Other numbers:** a VoIP or secondary number used for recovery (its account needs strong 2FA too).
+- **Call forwarding and voicemail:** these redirect calls without moving the SIM, so SIM-swap
+  protections don't cover them. Check the phone's call-forwarding setting and the carrier account for
+  forwarding the user didn't set up (a caller posing as support may have talked them into dialing a
+  forwarding code), and whether the voicemail PIN is still the carrier default or easy to guess.
+  Services that "call you with a code" will read it to whoever answers the forwarded call or into
+  voicemail. Unexplained forwarding is a P0 indicator.
 
 #### G. App permissions and privileged access
 
@@ -770,6 +783,8 @@ authenticator as second steps and no SMS-only recovery; the user can still sign 
 
 ## Version history
 
+- **1.2** (2026-11-10): Added call forwarding and voicemail as ways to intercept verification calls
+  without a SIM swap. Added links to related skills.
 - **1.0** (2026-10-30): Initial version.
 - **1.1** (2026-10-31): Extended to tablets (iPad on iPadOS and Android tablets): tablet deployment
   variants (family and child iPads, organization Shared iPad, Android tablets with multiple users, guest,
