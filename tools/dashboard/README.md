@@ -97,6 +97,57 @@ folder's token), `outdated` (from another copy, or started before this copy's co
 `outdated` it also prints who can view it and the project folder it runs from. The launchers reuse only
 a `current` dashboard; for anything else they say what's on the port and stop.
 
+## Home-page widget (Homepage and similar)
+
+`GET /api/summary` returns counts for the newest run, for a dashboard such as
+[Homepage](https://gethomepage.dev/) to show on its tiles:
+
+```json
+{"last_run": "2026-02-01T10:00:00Z", "last_run_finished": "2026-02-01T11:00:00Z",
+ "last_run_status": "completed", "needs_fixing": 3, "serious": 2, "warnings": 1,
+ "informational": 1, "runs": 2, "generated": "2026-02-02T08:00:00Z"}
+```
+
+`needs_fixing` is open P0–P3 (`serious` is open P0–P2, `warnings` open P3, `informational` open P4),
+across the run and its per-system assessments. `last_run_status` is `running`, `completed`, or `none`.
+It holds no hostnames, titles, or other finding text.
+
+It accepts a separate **read-only token** from `<data>/summary-token` (mode 600, created on first run; set
+`AISS_DASHBOARD_SUMMARY_TOKEN` to override it). That token opens only this endpoint, so a widget that leaks
+it can't read findings or write anything. The main token works too, but don't give it to a widget.
+
+The widget's host must reach the dashboard over the network, so run it in LAN mode (`--lan`, or `--host
+0.0.0.0 --allow-host <name-or-ip>` if the widget uses a name or address `--lan` doesn't list), and keep it
+running: the widget shows an error while the dashboard is stopped. A Homepage `services.yaml` entry using
+Homepage's [custom API widget](https://gethomepage.dev/widgets/services/customapi/):
+
+```yaml
+- Security:
+    - AI security assessment:
+        href: http://192.0.2.10:8770/
+        description: Open findings from the newest run
+        widget:
+          type: customapi
+          url: http://192.0.2.10:8770/api/summary
+          refreshInterval: 300000
+          headers:
+            Authorization: Bearer {{HOMEPAGE_FILE_AISS_SUMMARY_TOKEN}}
+          mappings:
+            - field: needs_fixing
+              label: To fix
+              format: number
+            - field: serious
+              label: Serious
+              format: number
+            - field: last_run
+              label: Last run
+              format: relativeDate
+```
+
+Replace `192.0.2.10` with the dashboard computer's address. Copy `summary-token` to the Homepage host
+(owner-only), mount it into the container, and point `HOMEPAGE_FILE_AISS_SUMMARY_TOKEN` at it, so the
+token isn't written into `services.yaml`. Check the widget page for the current field formats.
+
 ## Security
 
 The dashboard is a map of your weaknesses. It is built to stay private:
@@ -110,6 +161,8 @@ The dashboard is a map of your weaknesses. It is built to stay private:
   `127.0.0.1` link on your own computer. For other names or addresses, use `--host 0.0.0.0 --allow-host
   <name-or-ip>`. Never expose it to the internet or put it behind a public tunnel.
 - **Token required** for reading state, posting events, and saving kick-off answers.
+- **Read-only summary token.** `GET /api/summary` (counts and run times, no finding text) also accepts
+  `<data>/summary-token`, which opens nothing else, for home-page widgets.
 - **One narrow write.** The page itself can write only kick-off answers (`POST /api/kickoff`): validated
   like any event, screened for secrets, for a run that's still open, appended to that run's
   `events-dashboard.jsonl` (mode 600). It can't change findings or anything else the agent reported.

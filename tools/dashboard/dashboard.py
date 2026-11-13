@@ -4,6 +4,7 @@
 Standard library only; Python 3.9+.
 
   dashboard.py serve [--lan | --host 127.0.0.1] [--port 8770] [--data DIR] [--reports DIR] [--open]
+  GET /api/summary   counts for home-page widgets (Homepage); read-only token in <data>/summary-token
   dashboard.py validate FILE.jsonl ...
   dashboard.py report RUN_DIR      write report.md and report.html for a run and print the totals
   dashboard.py probe [--port 8770] [--data DIR]   what is on the port (used by the launchers; see cmd_probe)
@@ -433,6 +434,33 @@ def aggregate(events, rejected=()):
                                for k, q, c, h, d in KICKOFF_FIELDS]}
 
 
+def summary(state):
+    """Counts only, for home-page widgets such as Homepage: the newest run's open findings and when it ran.
+    Holds no hostnames, titles, or other finding text, so a read-only token can safely serve it."""
+    by_id = {a["id"]: a for a in state["assessments"]}
+    runs = [a for a in state["assessments"] if not a["parent"]]
+    latest = max(runs, key=lambda a: a["started"] or a["updated"] or "", default=None)
+    counts = latest["rollup_counts"] if latest else {p: 0 for p in PRIORITY}
+    serious = sum(counts[p] for p in ("P0", "P1", "P2"))
+    if latest is None:
+        status, finished = "none", None
+    else:
+        status = "completed" if latest["completed"] else "running"
+        tree = [latest] + [by_id[c] for c in latest["children"] if c in by_id]
+        finished = max((a["updated"] for a in tree if a["updated"]), default=None) if latest["completed"] else None
+    return {
+        "last_run": latest and (latest["started"] or latest["updated"]),
+        "last_run_finished": finished,
+        "last_run_status": status,
+        "needs_fixing": serious + counts["P3"],
+        "serious": serious,
+        "warnings": counts["P3"],
+        "informational": counts["P4"],
+        "runs": len(runs),
+        "generated": state["generated"],
+    }
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = SERVER_NAME
     sys_version = ""
@@ -472,10 +500,12 @@ class Handler(BaseHTTPRequestHandler):
         self._json(HTTPStatus.MISDIRECTED_REQUEST, {"error": "unexpected Host header"})
         return False
 
-    def _authorized(self):
+    def _authorized(self, read_only=False):
         auth = self.headers.get("Authorization", "")
         token = auth[7:] if auth.startswith("Bearer ") else ""
-        if token and hmac.compare_digest(token.encode(), self.server.token.encode()):
+        accepted = [self.server.token] + ([self.server.summary_token] if read_only and self.server.summary_token else [])
+        # Compare against every accepted token so the timing doesn't say which one matched.
+        if token and sum(hmac.compare_digest(token.encode(), t.encode()) for t in accepted):
             return True
         self._json(HTTPStatus.UNAUTHORIZED, {"error": "missing or invalid token"})
         return False
@@ -495,6 +525,9 @@ class Handler(BaseHTTPRequestHandler):
                 state["server"] = dict(self.server.identity)
                 state["kickoff_prefill"] = read_prefill(self.server.data_dir)
                 self._json(HTTPStatus.OK, state)
+        elif path == "/api/summary":
+            if self._authorized(read_only=True):
+                self._json(HTTPStatus.OK, summary(aggregate(*self.server.store.load())))
         else:
             self._json(HTTPStatus.NOT_FOUND, {"error": "not found"})
 
@@ -575,11 +608,11 @@ class Handler(BaseHTTPRequestHandler):
         self._json(HTTPStatus.ACCEPTED, {"accepted": len(accepted)})
 
 
-def load_token(data_dir):
-    env = os.environ.get("AISS_DASHBOARD_TOKEN")
+def load_token(data_dir, name="token", env_var="AISS_DASHBOARD_TOKEN"):
+    env = os.environ.get(env_var)
     if env:
         return env
-    path = Path(data_dir) / "token"
+    path = Path(data_dir) / name
     if path.exists():
         return path.read_text(encoding="utf-8").strip()
     token = secrets.token_urlsafe(32)
@@ -607,11 +640,13 @@ def lan_names():
     return [n for n in dict.fromkeys(names) if n and not n.startswith("127.")]
 
 
-def make_server(host, port, data_dir, token, extra_hosts=(), reports_dir=None):
+def make_server(host, port, data_dir, token, extra_hosts=(), reports_dir=None, summary_token=None):
     server = ThreadingHTTPServer((host, port), Handler)
     server.daemon_threads = True
     server.store = EventStore(data_dir, reports_dir)
     server.token = token
+    # Read-only token for GET /api/summary only (counts, no finding text), for home-page widgets.
+    server.summary_token = summary_token if summary_token and summary_token != token else None
     server.allowed_hosts = {"localhost", "127.0.0.1", "[::1]", host.lower()} | {h.lower() for h in extra_hosts}
     server.access = "local" if host in ("127.0.0.1", "localhost", "::1") else "lan"
     server.identity = {"root": PROJECT_ROOT, "code": CODE_FINGERPRINT}
@@ -633,8 +668,9 @@ def cmd_serve(args):
     data_dir.mkdir(parents=True, exist_ok=True)
     os.chmod(data_dir, 0o700)
     token = load_token(data_dir)
+    summary_token = load_token(data_dir, "summary-token", "AISS_DASHBOARD_SUMMARY_TOKEN")
     reports_dir = Path(args.reports).expanduser()
-    server = make_server(args.host, args.port, data_dir, token, args.allow_host, reports_dir)
+    server = make_server(args.host, args.port, data_dir, token, args.allow_host, reports_dir, summary_token)
     shown = "127.0.0.1" if args.host in ("0.0.0.0", "::") else args.host
     url = f"http://{shown}:{server.server_address[1]}/#token={token}"
     print(f"Dashboard:   {url}")
@@ -643,6 +679,8 @@ def cmd_serve(args):
     print(f"Run folders: {reports_dir}/<run-id>/events.jsonl")
     print(f"Events dir:  {server.store.events_dir}")
     print(f"HTTP ingest: POST http://{shown}:{server.server_address[1]}/api/events (Bearer token)")
+    print(f"Summary:     GET  http://{shown}:{server.server_address[1]}/api/summary "
+          f"(read-only Bearer token in {data_dir / 'summary-token'})")
     if server.access == "lan":
         print("LAN mode: the page and token travel unencrypted on your network. Use it only on a network you "
               "trust, and stop the dashboard when you're done.")

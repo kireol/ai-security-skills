@@ -94,7 +94,7 @@ the content check. Never commit it, and never copy its contents into a tracked f
 - `core/reporting-protocol.md` defines the live-event format; `tools/dashboard/dashboard.py` implements it
   (stdlib only, Python 3.9+, so it runs on stock macOS Python). Change both together, and keep its
   security properties: localhost by default (`--lan` is opt-in), kick-off answers as the page's only
-  write, token auth, Host-header check, strict CSP, `textContent`-only rendering of event text, and secret
+  write, token auth (the summary token opens only `GET /api/summary`), Host-header check, strict CSP, `textContent`-only rendering of event text, and secret
   screening. Test fixtures that look like secrets must be assembled at
   runtime so `check-content.sh` stays strict.
 - Keep skills tool-agnostic (Claude Code, Codex, local LLMs, MCP clients, humans). Scope MCP-server-specific

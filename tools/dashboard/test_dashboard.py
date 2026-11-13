@@ -219,6 +219,85 @@ class ServerTests(unittest.TestCase):
 
 
 
+class SummaryTests(unittest.TestCase):
+    """GET /api/summary: counts for home-page widgets, behind a separate read-only token."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.data = Path(self.tmp.name)
+        self.read_only = "ro-" + "x" * 8  # assembled at runtime so the content check stays strict
+        self.server = dashboard.make_server("127.0.0.1", 0, self.data, "test-token", summary_token=self.read_only)
+        self.port = self.server.server_address[1]
+        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+
+    def tearDown(self):
+        self.server.shutdown()
+        self.server.server_close()
+        self.tmp.cleanup()
+
+    def request(self, method, path, token, body=None):
+        conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
+        headers = {"Host": f"127.0.0.1:{self.port}", "Authorization": f"Bearer {token}"}
+        if body is not None:
+            headers["Content-Type"] = "application/json"
+            body = json.dumps(body).encode()
+        conn.request(method, path, body=body, headers=headers)
+        response = conn.getresponse()
+        payload = response.read()
+        conn.close()
+        return response.status, payload
+
+    def write(self, *events):
+        with open(self.data / "events" / "run.jsonl", "a") as fh:
+            for e in events:
+                fh.write(json.dumps(e) + "\n")
+
+    def test_empty(self):
+        status, body = self.request("GET", "/api/summary", self.read_only)
+        self.assertEqual(status, 200)
+        result = json.loads(body)
+        self.assertEqual((result["last_run_status"], result["last_run"], result["needs_fixing"]), ("none", None, 0))
+
+    def test_counts_newest_run_with_children(self):
+        def finding(aid, fid, priority, state="open", time="2026-02-01T10:05:00Z"):
+            return event("finding.upserted", aid=aid, time=time, id=fid, title="Secret-free title", priority=priority,
+                         confidence="confirmed", state=state)
+        self.write(
+            event("assessment.started", aid="old", time="2026-01-01T10:00:00Z", skill="synology-dsm", target="example NAS"),
+            finding("old", "NAS-001", "P0", time="2026-01-01T10:01:00Z"),
+            event("assessment.started", aid="new", time="2026-02-01T10:00:00Z", skill="full-assessment", target="example home"),
+            event("assessment.started", aid="new-nas", time="2026-02-01T10:01:00Z", skill="synology-dsm", target="example NAS", parent="new"),
+            finding("new-nas", "NAS-001", "P1"), finding("new-nas", "NAS-002", "P3"),
+            finding("new-nas", "NAS-003", "P4"), finding("new-nas", "NAS-004", "P2", state="resolved"),
+            finding("new", "FA-001", "P2"),
+            event("assessment.completed", aid="new", time="2026-02-01T11:00:00Z"),
+        )
+        result = json.loads(self.request("GET", "/api/summary", self.read_only)[1])
+        self.assertEqual(result["last_run"], "2026-02-01T10:00:00Z")
+        self.assertEqual(result["last_run_finished"], "2026-02-01T11:00:00Z")
+        self.assertEqual(result["last_run_status"], "completed")
+        self.assertEqual((result["serious"], result["warnings"], result["informational"]), (2, 1, 1))
+        self.assertEqual((result["needs_fixing"], result["runs"]), (3, 2))
+        self.assertNotIn(b"Secret-free title", self.request("GET", "/api/summary", self.read_only)[1])
+
+    def test_read_only_token_reaches_nothing_else(self):
+        self.assertEqual(self.request("GET", "/api/summary", "test-token")[0], 200)
+        self.assertEqual(self.request("GET", "/api/summary", "wrong")[0], 401)
+        self.assertEqual(self.request("GET", "/api/state", self.read_only)[0], 401)
+        self.assertEqual(self.request("POST", "/api/events", self.read_only, event("mode.changed", mode="discover"))[0], 401)
+        self.assertEqual(self.request("POST", "/api/kickoff", self.read_only, {"assessment_id": "x", "answers": {}})[0], 401)
+
+    def test_summary_token_file_is_separate_and_private(self):
+        with mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("AISS_DASHBOARD_SUMMARY_TOKEN", None)
+            os.environ.pop("AISS_DASHBOARD_TOKEN", None)
+            main = dashboard.load_token(self.data)
+            ro = dashboard.load_token(self.data, "summary-token", "AISS_DASHBOARD_SUMMARY_TOKEN")
+        self.assertNotEqual(main, ro)
+        if os.name == "posix":
+            self.assertEqual((self.data / "summary-token").stat().st_mode & 0o777, 0o600)
+
+
 class ProbeTests(unittest.TestCase):
     """What the launchers see on the dashboard port."""
 
